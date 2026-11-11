@@ -2447,6 +2447,7 @@ body {
       </div>
       <div class="header-status-pills" id="header-status-pills">
         <span class="header-pill" id="header-season-pill">🌱 Season: <strong>Auto-Detecting</strong></span>
+        <span class="header-pill" id="header-cloud-pill" style="cursor:pointer;" onclick="switchTab('settings')" title="Firebase Cloud Database Sync">☁️ Cloud: <strong>Connecting...</strong></span>
       </div>
     </div>
   </header>
@@ -2728,6 +2729,35 @@ body {
             <label for="setting-birth-place">Place of Birth (City / Country)</label>
             <input type="text" id="setting-birth-place" placeholder="e.g. Madrid, London, New York" onchange="saveSettings()">
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cloud Sync & Shared Multi-Device Memory -->
+    <div class="card">
+      <div class="settings-section">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <h3>☁️ Multi-Device Cloud Sync (Common Memory)</h3>
+          <span id="cloud-status-badge" class="badge" style="background:#e0f2fe; color:#0369a1; font-size:0.75rem; border:1px solid #bae6fd;">☁️ Connecting...</span>
+        </div>
+        <p class="settings-note" style="margin-bottom:12px;">
+          All changes made on your PC (wardrobe items, photos, personal palette, body shapes, dislike filters, and settings) synchronize automatically with your phone and second PC via Firebase Firestore.
+        </p>
+
+        <div class="form-row">
+          <div class="form-group" style="flex:2;">
+            <label for="setting-sync-vault">Private Sync Vault Key / Passphrase</label>
+            <input type="text" id="setting-sync-vault" placeholder="e.g. marcelo-atelier-wardrobe" style="font-family:monospace; font-weight:600;">
+            <p class="settings-note">Enter this same vault key on your iPhone or other PC to share the exact same wardrobe and memory.</p>
+          </div>
+          <div class="form-group" style="flex:1; display:flex; align-items:flex-end; gap:6px;">
+            <button type="button" class="btn btn-primary btn-sm" onclick="applySyncVaultKey()" style="height:38px; width:100%;">🔗 Connect Vault</button>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="syncPushToCloud(true)">⬆️ Push to Cloud Now</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="syncPullFromCloud(true)">⬇️ Pull from Cloud Now</button>
         </div>
       </div>
     </div>
@@ -3026,6 +3056,10 @@ body {
 <!-- Toast Container -->
 <div class="toast-container" id="toast-container"></div>
 
+<!-- Firebase SDK (Compat v10) for Static HTML PWA Multi-Device Sync -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
 <script>
 /* ================================================================
    DATA & STATE
@@ -3230,6 +3264,7 @@ function persistDislikes() {
     localStorage.setItem('wtw_disliked_subtypes', JSON.stringify(userProfile.dislikedSubTypes || []));
     localStorage.setItem('wtw_disliked_names', JSON.stringify(userProfile.dislikedItemNames || []));
   } catch (e) {}
+  if (typeof scheduleCloudPush === 'function') scheduleCloudPush();
 }
 
 function persistCustomTaxonomy() {
@@ -3238,6 +3273,7 @@ function persistCustomTaxonomy() {
     localStorage.setItem('wtw_custom_subtypes', JSON.stringify(userProfile.customSubTypes || {}));
     localStorage.setItem('wtw_custom_formalities', JSON.stringify(userProfile.customFormalities || []));
   } catch (e) {}
+  if (typeof scheduleCloudPush === 'function') scheduleCloudPush();
 }
 
 function toggleDislikedSubType(subType) {
@@ -3685,6 +3721,7 @@ function savePersonaProfile() {
   userProfile.personaStatement = stmt;
   localStorage.setItem('wtw_persona_statement', stmt);
   localStorage.setItem('wtw_persona_statement_auto', 'false');
+  if (typeof scheduleCloudPush === 'function') scheduleCloudPush();
   toast('Style vision saved!');
   renderOutfit();
   renderShopRecommendations();
@@ -3796,6 +3833,277 @@ function loadData() {
   }
 }
 
+/* ================================================================
+   FIREBASE MULTI-DEVICE CLOUD SYNC ENGINE
+   ================================================================ */
+
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyA4lHGoKXfeczsAQ79mw9FhyLnxPzBm1_Q",
+  authDomain: "whatowear-app.firebaseapp.com",
+  projectId: "whatowear-app",
+  storageBucket: "whatowear-app.firebasestorage.app",
+  messagingSenderId: "780191952642",
+  appId: "1:780191952642:web:2b892e7e0b4ad97f815c1b",
+  measurementId: "G-X8J8T7D6X8"
+};
+
+let db = null;
+let syncVaultKey = localStorage.getItem('wtw_sync_vault') || 'marcelo-atelier-wardrobe';
+let isApplyingRemoteCloudData = false;
+let cloudSyncDebounceTimer = null;
+let cloudUnsubscribeListener = null;
+
+function setCloudStatusUI(status, label) {
+  const badge = document.getElementById('cloud-status-badge');
+  const pill = document.getElementById('header-cloud-pill');
+  const colors = {
+    connected: { bg: '#ecfdf5', text: '#047857', border: '#a7f3d0', icon: '🟢', label: 'Cloud Synced' },
+    syncing:   { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe', icon: '🔄', label: 'Syncing...' },
+    error:     { bg: '#fff1f2', text: '#be123c', border: '#fecdd3', icon: '⚠️', label: 'Offline / Reconnecting' },
+    offline:   { bg: '#f3f4f6', text: '#4b5563', border: '#e5e7eb', icon: '⚪', label: 'Local Only' }
+  };
+  const c = colors[status] || colors.connected;
+  const text = label || c.label;
+
+  if (badge) {
+    badge.style.background = c.bg;
+    badge.style.color = c.text;
+    badge.style.borderColor = c.border;
+    badge.textContent = `${c.icon} ${text}`;
+  }
+  if (pill) {
+    pill.innerHTML = `☁️ Cloud: <strong>${c.icon} ${text}</strong>`;
+  }
+}
+
+function initFirebaseSync() {
+  const vaultInput = document.getElementById('setting-sync-vault');
+  if (vaultInput) vaultInput.value = syncVaultKey;
+
+  if (typeof firebase === 'undefined') {
+    setCloudStatusUI('offline', 'Firebase SDK Offline');
+    return;
+  }
+
+  try {
+    if (!firebase.apps.length) {
+      firebase.initializeApp(FIREBASE_CONFIG);
+    }
+    db = firebase.firestore();
+    setCloudStatusUI('connected', 'Cloud Synced');
+    setupCloudRealtimeListener();
+  } catch (err) {
+    console.error('Firebase init error:', err);
+    setCloudStatusUI('error', 'Sync Init Error');
+  }
+}
+
+function setupCloudRealtimeListener() {
+  if (!db || !syncVaultKey) return;
+  if (cloudUnsubscribeListener) {
+    cloudUnsubscribeListener();
+    cloudUnsubscribeListener = null;
+  }
+
+  const docRef = db.collection('wardrobes').doc(syncVaultKey);
+  cloudUnsubscribeListener = docRef.onSnapshot((doc) => {
+    if (!doc.exists) {
+      // First time on this vault key: upload current local data to seed the vault
+      console.log('Vault doc does not exist yet. Seeding local state to Firestore...');
+      syncPushToCloud(false);
+      return;
+    }
+    const data = doc.data();
+    if (!data) return;
+
+    // Check if the update was generated locally
+    const localUpdatedAt = parseInt(localStorage.getItem('wtw_cloud_updated_at') || '0', 10);
+    if (data.updatedAt && data.updatedAt <= localUpdatedAt) {
+      return; // Already up to date
+    }
+
+    applyRemoteCloudData(data);
+  }, (err) => {
+    console.error('Firestore listener error:', err);
+    setCloudStatusUI('error', 'Sync Listener Error');
+  });
+}
+
+function applyRemoteCloudData(data) {
+  if (!data) return;
+  isApplyingRemoteCloudData = true;
+  setCloudStatusUI('syncing', 'Applying Cloud Update...');
+
+  try {
+    if (Array.isArray(data.wardrobe)) {
+      wardrobe = data.wardrobe;
+      idbSet('wtw_wardrobe', wardrobe);
+      try { localStorage.setItem('wtw_wardrobe', JSON.stringify(wardrobe)); } catch {}
+    }
+
+    if (data.userProfile && typeof data.userProfile === 'object') {
+      userProfile = { ...userProfile, ...data.userProfile };
+      try {
+        localStorage.setItem('wtw_style_gender', userProfile.styleGender || 'male');
+        localStorage.setItem('wtw_user_selfies', JSON.stringify(userProfile.selfies || []));
+        localStorage.setItem('wtw_face_shape', userProfile.faceShape || 'oval');
+        localStorage.setItem('wtw_body_shape', userProfile.bodyShape || 'rectangle');
+        localStorage.setItem('wtw_user_palette', userProfile.palette || 'autumn');
+        localStorage.setItem('wtw_persona_archetype', userProfile.personaArchetype || 'quiet-luxury');
+        localStorage.setItem('wtw_persona_impressions', JSON.stringify(userProfile.personaImpressions || []));
+        localStorage.setItem('wtw_persona_statement', userProfile.personaStatement || '');
+        localStorage.setItem('wtw_inspo_photos', JSON.stringify(userProfile.inspoPhotos || []));
+        localStorage.setItem('wtw_inspo_palette', JSON.stringify(userProfile.inspoPalette || []));
+        localStorage.setItem('wtw_disliked_subtypes', JSON.stringify(userProfile.dislikedSubTypes || []));
+        localStorage.setItem('wtw_disliked_names', JSON.stringify(userProfile.dislikedItemNames || []));
+        localStorage.setItem('wtw_custom_categories', JSON.stringify(userProfile.customCategories || {}));
+        localStorage.setItem('wtw_custom_subtypes', JSON.stringify(userProfile.customSubTypes || {}));
+        localStorage.setItem('wtw_custom_formalities', JSON.stringify(userProfile.customFormalities || []));
+      } catch {}
+
+      idbSet('wtw_user_selfies', userProfile.selfies || []);
+      idbSet('wtw_inspo_photos', userProfile.inspoPhotos || []);
+    }
+
+    if (data.settings && typeof data.settings === 'object') {
+      if (data.settings.city) localStorage.setItem('wtw_city', data.settings.city);
+      if (data.settings.apiKey) localStorage.setItem('wtw_apikey', data.settings.apiKey);
+      if (data.settings.dob) localStorage.setItem('wtw_dob', data.settings.dob);
+      if (data.settings.birthTime) localStorage.setItem('wtw_birth_time', data.settings.birthTime);
+      if (data.settings.birthPlace) localStorage.setItem('wtw_birth_place', data.settings.birthPlace);
+
+      const cityInput = document.getElementById('setting-city');
+      const apiKeyInput = document.getElementById('setting-apikey');
+      const dobInput = document.getElementById('setting-dob');
+      const birthTimeInput = document.getElementById('setting-birth-time');
+      const birthPlaceInput = document.getElementById('setting-birth-place');
+      if (cityInput) cityInput.value = data.settings.city || '';
+      if (apiKeyInput) apiKeyInput.value = data.settings.apiKey || '';
+      if (dobInput) dobInput.value = data.settings.dob || '';
+      if (birthTimeInput) birthTimeInput.value = data.settings.birthTime || '';
+      if (birthPlaceInput) birthPlaceInput.value = data.settings.birthPlace || '';
+    }
+
+    if (data.updatedAt) {
+      localStorage.setItem('wtw_cloud_updated_at', String(data.updatedAt));
+    }
+
+    // Refresh UI
+    updateGenderUI();
+    renderFilters();
+    renderWardrobe();
+    renderWardrobeIllusionSection();
+    renderUserProfileUI();
+    renderPersonaUI();
+    renderOutfit();
+    renderShopRecommendations();
+    renderDislikedStylesUI();
+
+    setCloudStatusUI('connected', 'Cloud Synced');
+    toast('☁️ Cloud updates synced across all your devices!');
+  } catch (err) {
+    console.error('Error applying remote cloud data:', err);
+    setCloudStatusUI('error', 'Update Error');
+  } finally {
+    setTimeout(() => { isApplyingRemoteCloudData = false; }, 300);
+  }
+}
+
+function syncPushToCloud(manualNotice = false) {
+  if (isApplyingRemoteCloudData) return;
+  if (!db || !syncVaultKey) {
+    if (manualNotice) toast('⚠️ Cloud connection not initialized');
+    return;
+  }
+
+  setCloudStatusUI('syncing', 'Uploading to Cloud...');
+  const now = Date.now();
+
+  const payload = {
+    updatedAt: now,
+    vaultKey: syncVaultKey,
+    wardrobe: wardrobe || [],
+    userProfile: {
+      styleGender: userProfile.styleGender || 'male',
+      selfies: userProfile.selfies || [],
+      selfie: userProfile.selfie || null,
+      faceShape: userProfile.faceShape || 'oval',
+      bodyShape: userProfile.bodyShape || 'rectangle',
+      palette: userProfile.palette || 'autumn',
+      personaArchetype: userProfile.personaArchetype || 'quiet-luxury',
+      personaImpressions: userProfile.personaImpressions || [],
+      personaStatement: userProfile.personaStatement || '',
+      inspoPhotos: userProfile.inspoPhotos || [],
+      inspoPalette: userProfile.inspoPalette || [],
+      inspoAnalysis: userProfile.inspoAnalysis || null,
+      dislikedSubTypes: userProfile.dislikedSubTypes || [],
+      dislikedItemNames: userProfile.dislikedItemNames || [],
+      customCategories: userProfile.customCategories || {},
+      customSubTypes: userProfile.customSubTypes || {},
+      customFormalities: userProfile.customFormalities || []
+    },
+    settings: getSettings()
+  };
+
+  db.collection('wardrobes').doc(syncVaultKey).set(payload, { merge: true })
+    .then(() => {
+      localStorage.setItem('wtw_cloud_updated_at', String(now));
+      setCloudStatusUI('connected', 'Cloud Synced');
+      if (manualNotice) toast('✅ Wardrobe & Settings uploaded to Cloud Vault!');
+    })
+    .catch((err) => {
+      console.error('Firestore push error:', err);
+      setCloudStatusUI('error', 'Upload Failed');
+      if (manualNotice) toast('⚠️ Could not save to cloud: ' + (err.message || err));
+    });
+}
+
+function scheduleCloudPush() {
+  if (isApplyingRemoteCloudData) return;
+  clearTimeout(cloudSyncDebounceTimer);
+  cloudSyncDebounceTimer = setTimeout(() => {
+    syncPushToCloud(false);
+  }, 1200);
+}
+
+function syncPullFromCloud(manualNotice = false) {
+  if (!db || !syncVaultKey) {
+    if (manualNotice) toast('⚠️ Cloud connection not ready');
+    return;
+  }
+  setCloudStatusUI('syncing', 'Downloading from Cloud...');
+  db.collection('wardrobes').doc(syncVaultKey).get()
+    .then((doc) => {
+      if (doc.exists) {
+        applyRemoteCloudData(doc.data());
+        if (manualNotice) toast('✅ Latest data pulled from cloud!');
+      } else {
+        setCloudStatusUI('connected', 'Cloud Synced');
+        if (manualNotice) toast('No cloud vault found with this key. Pushing current data now...');
+        syncPushToCloud(true);
+      }
+    })
+    .catch((err) => {
+      console.error('Firestore pull error:', err);
+      setCloudStatusUI('error', 'Download Failed');
+      if (manualNotice) toast('⚠️ Cloud download failed: ' + (err.message || err));
+    });
+}
+
+function applySyncVaultKey() {
+  const input = document.getElementById('setting-sync-vault');
+  const val = (input ? input.value : '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+  if (!val) {
+    toast('Please enter a valid vault key');
+    return;
+  }
+  syncVaultKey = val;
+  localStorage.setItem('wtw_sync_vault', syncVaultKey);
+  toast(`🔗 Switched to Vault: "${syncVaultKey}"`);
+  setupCloudRealtimeListener();
+  syncPullFromCloud(false);
+}
+
 function saveData() {
   idbSet('wtw_wardrobe', wardrobe);
   try {
@@ -3803,6 +4111,7 @@ function saveData() {
   } catch (e) {
     // IndexedDB stores the full unlimited wardrobe even if localStorage reaches its 5MB cap
   }
+  scheduleCloudPush();
 }
 
 function getSettings() {
@@ -3829,6 +4138,7 @@ function saveSettings() {
   localStorage.setItem('wtw_birth_place', birthPlace);
 
   toast('Settings saved!');
+  scheduleCloudPush();
   applyPlanetaryPreselectedMood();
   renderAstralSection();
   renderMoodSection();
@@ -3844,6 +4154,7 @@ function saveProfileSettings() {
   userProfile.bodyShape = bodyShape;
   localStorage.setItem('wtw_face_shape', faceShape);
   localStorage.setItem('wtw_body_shape', bodyShape);
+  if (typeof scheduleCloudPush === 'function') scheduleCloudPush();
   toast('Silhouette profile updated!');
   renderOutfit();
   renderShopRecommendations();
@@ -8014,6 +8325,7 @@ function persistUserSelfies() {
   } catch {
     // Unlimited photos are persisted in IndexedDB even when localStorage reaches 5MB
   }
+  if (typeof scheduleCloudPush === 'function') scheduleCloudPush();
 }
 
 function addUserSelfieFromSrc(src) {
@@ -8905,6 +9217,7 @@ function persistInspo() {
   } catch (e) {
     // Unlimited reference photos are backed by IndexedDB even if localStorage reaches 5MB
   }
+  if (typeof scheduleCloudPush === 'function') scheduleCloudPush();
 }
 
 function addInspoPhotoFromSrc(src) {
@@ -10228,6 +10541,7 @@ function init() {
   renderUserProfileUI();
   renderTripBanner();
   hydrateUnlimitedPhotosFromIdb();
+  initFirebaseSync();
   fetchWeather();
 }
 

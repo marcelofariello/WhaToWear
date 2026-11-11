@@ -6,8 +6,13 @@ A modern, weather- and hemisphere-season-aware, computer-vision-assisted, and pe
 
 ## 🌟 Key Features
 
-### 🆕 High-Precision Vision ID, Custom Categories/Types/Formalities & Location Season Styling
-1. **🏛️ Contemporary Editorial Design & `WTW` Monogram Crest**:
+### 🆕 Multi-Device Cloud Sync ("Common Memory" via Firebase), Custom Categories/Types/Formalities & Location Season Styling
+1. **☁️ Multi-Device Cloud Sync (Common Memory across iPhone & PCs)**:
+   - Built-in real-time synchronization backed by **Firebase Firestore**.
+   - Changes made on your PC (wardrobe items, captured photos, personal palette, body shapes, custom categories, and vision statements) automatically sync in real-time with your phone and second PC.
+   - Protected by a private **Vault Key / Passphrase** (default `marcelo-atelier-wardrobe`) configured in *Profile & Settings*.
+   - Features a live **`🟢 Cloud Synced`** status badge in the header and in settings.
+2. **🏛️ Contemporary Editorial Design & `WTW` Monogram Crest**:
    - Features a bespoke **`WTW`** monogram emblem in deep botanical emerald (`#0f241d`) and brushed champagne gold (`#c89b6e`), paired with editorial typography (*Cormorant Garamond* + *Plus Jakarta Sans*), glassmorphic navigation, and live status pills in the header (**Install on iPhone** has been removed from the main page header and lives exclusively in *Profile & Settings*).
 2. **📸 Clean Photo Upload & Authentic Gallery Presentation**:
    - Preserves original clothing photos with full fidelity and crisp aspect-ratio rendering across wardrobe cards, outfit previews, and lightboxes.
