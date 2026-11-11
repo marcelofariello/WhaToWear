@@ -1,10 +1,25 @@
-# ✨ WhaToWear — Intelligent Wardrobe, Astral & Persona Stylist
+# ✨ WTW · WhaToWear — Atelier Wardrobe, Season, Astral & Persona Stylist
 
-A smart, weather-aware, astrology-powered, and personal-style-driven daily wardrobe stylist that helps you decide what to wear every day.
+A modern, weather- and hemisphere-season-aware, computer-vision-assisted, and personal-style-driven daily wardrobe stylist that helps you decide what to wear every day.
 
 ---
 
 ## 🌟 Key Features
+
+### 🆕 Studio Background Removal, High-Precision Vision ID, Custom Categories/Types/Formalities & Location Season Styling
+1. **🏛️ Contemporary Editorial Design & `WTW` Monogram Crest**:
+   - Features a bespoke **`WTW`** monogram emblem in deep botanical emerald (`#0f241d`) and brushed champagne gold (`#c89b6e`), paired with editorial typography (*Cormorant Garamond* + *Plus Jakarta Sans*), glassmorphic navigation, and live status pills in the header (**Install on iPhone** has been removed from the main page header and lives exclusively in *Profile & Settings*).
+2. **✨ Automatic Studio Background Removal & Uniform Standardization**:
+   - Every uploaded or camera-captured clothing photo automatically runs through an edge-connected flood-fill + multi-cluster background segmentation pipeline that removes distracting backgrounds, suppresses cast shadows, feathers garment edges, and centers the piece onto a uniform `420×420` studio canvas (`#fcfbf9` → `#eae4d8` radial gallery backdrop with soft ground shadow) so your entire closet shares a cohesive boutique look.
+   - Includes a 1-click **🖼️ Use Original Photo / ✨ Use Studio Cutout** toggle in both the single-item modal and the Mass Validation modal.
+3. **🎯 High-Precision Computer-Vision Item Identification**:
+   - Analyzes foreground-only garment pixels (ignoring background and glare) across a 56-shade fashion color palette and a normalized `32×32` silhouette grid (aspect ratio, twin-leg split for Jeans/Chinos/Trousers/Shorts, lateral sleeve-wing spread & drop ratio for Short-Sleeve vs. Long-Sleeve vs. Sleeveless tops, collar/placket contrast for Shirts & Outerwear, horizontal contour for Footwear, and ring/strap geometry for Belts & Accessories).
+4. **👚 150+ Precise Garment Types + Custom Categories, Types & 9+ Formalities**:
+   - Includes over **150 specific garment types** across Masculine and Feminine styles.
+   - In **Add / Edit Clothing Item**, you can create your own **Custom Category** (`＋ Add Category`), **Custom Garment Type** (`＋ Add Type`), and **Custom Formality** (`＋ Add Formality`).
+   - Expanded built-in formalities across **9 dress code tiers**: *Athleisure / Active*, *Lounge / Relaxed*, *Casual*, *Elevated Casual*, *Smart Casual*, *Business Casual*, *Business Formal*, *Cocktail / Evening*, and *Black Tie / Gala*.
+5. **🌱☀️🍂❄️ Location-Aware Season of the Year Engine (On Top of Temperature)**:
+   - Detects the astronomical/meteorological season (**Spring**, **Summer**, **Autumn**, **Winter**) in your city's hemisphere (**Northern Hemisphere** vs. **Southern Hemisphere** via live latitude and city/country lookup) and combines pieces according to both **daily temperature** and **seasonal fabric, color weight, and season suitability** (*All-Season*, *Spring & Summer*, *Autumn & Winter*, *Spring*, *Summer*, *Autumn*, *Winter*).
 
 ### ✈️ Trip Mode (new)
 1. **Plan**: choose Holiday or Work per stop, destination, number of days and start date. Add as many locations as you like in one trip (stops run back to back).
