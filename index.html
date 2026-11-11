@@ -2447,7 +2447,6 @@ body {
       </div>
       <div class="header-status-pills" id="header-status-pills">
         <span class="header-pill" id="header-season-pill">🌱 Season: <strong>Auto-Detecting</strong></span>
-        <span class="header-pill">✨ <strong>Studio Cutout AI</strong> Active</span>
       </div>
     </div>
   </header>
@@ -2822,11 +2821,10 @@ body {
     <h2 id="modal-title">Add Clothing Item</h2>
     <input type="hidden" id="edit-id">
 
-    <!-- Photo Upload Section with Studio Background Removal & Vision Identification -->
+    <!-- Photo Upload Section with Vision Identification -->
     <div class="form-group">
       <label class="label-with-action">
-        <span>Item Photo (Auto Studio Background Removal &amp; Garment ID)</span>
-        <span class="badge badge-category" style="font-size:0.66rem;">✨ Studio BG Cutout ON</span>
+        <span>Item Photo (Auto Color &amp; Garment ID)</span>
       </label>
       <div class="photo-dropzone" id="photo-dropzone" onclick="document.getElementById('item-photo-input').click()">
         <input type="file" id="item-photo-input" accept="image/*" multiple style="display:none" onchange="handlePhotoUpload(event)">
@@ -2834,10 +2832,10 @@ body {
         <div id="photo-placeholder" class="photo-placeholder-text">
           <span>📸</span>
           <strong>Drag &amp; drop photo here (PC) or tap to capture</strong>
-          <div style="font-size:0.76rem; color:var(--text-light); margin-top:3px;">Automatically removes background onto a uniform studio card &amp; identifies garment type, color, sleeve/pant length &amp; season</div>
+          <div style="font-size:0.76rem; color:var(--text-light); margin-top:3px;">Automatically identifies garment type, color, sleeve/pant length &amp; season</div>
         </div>
         <div id="photo-preview-container" class="photo-preview-wrap" style="display:none;">
-          <img id="photo-preview" src="" alt="Clothing Preview" style="background:#f7f5f0; border:1px solid var(--border); padding:4px;">
+          <img id="photo-preview" src="" alt="Clothing Preview">
         </div>
       </div>
       <div class="photo-action-row" onclick="event.stopPropagation()">
@@ -2846,9 +2844,8 @@ body {
         <button type="button" class="photo-action-btn" onclick="openSavedImagesModal('item')">🗂️ Saved Images</button>
       </div>
       <div id="photo-controls" class="photo-badge-bar" style="display:none; flex-wrap:wrap; gap:6px;">
-        <span id="detected-color-badge" class="auto-badge">✨ Studio Cutout &amp; Garment Identified</span>
+        <span id="detected-color-badge" class="auto-badge">✨ Garment &amp; Color Identified</span>
         <div style="display:flex; gap:6px; align-items:center;">
-          <button type="button" id="toggle-bg-cutout-btn" class="btn btn-secondary btn-sm" onclick="toggleItemStudioCutout(event)" style="padding:3px 9px; font-size:0.72rem; display:none;">✨ Using Studio Cutout</button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="removePhoto(event)" style="padding:3px 9px; font-size:0.72rem;">✕ Remove</button>
         </div>
       </div>
@@ -5682,7 +5679,7 @@ function renderOutfitItem(item, label, stepBadge) {
   const visualHtml = photoSrc
     ? `<div class="item-visual-wrap" onclick="openPhotoLightbox(getItemDisplayPhotoSrc(wardrobe.find(w=>w.id==='${safeId}') || {name:'${safeName}',subType:'${safeSub}',category:'${item.category}',color:'${item.color}'}), '${safeName}')" title="Tap to view large item photo">
          <img class="item-photo" src="${photoSrc}" alt="${escapeHtml(item.name)}">
-         <span class="photo-source-tag">${hasRealPhoto ? '✨ Studio' : '🧥 Preview'}</span>
+         <span class="photo-source-tag">${hasRealPhoto ? '📷 Photo' : '🧥 Preview'}</span>
          <span class="mini-dot" style="background:${item.color}" title="Item Color: ${item.color}"></span>
        </div>`
     : `<div class="item-color" style="background:${item.color}"></div>`;
@@ -5761,7 +5758,7 @@ function renderBeltOutfitRow(beltRec, stepBadge) {
     const visualHtml = `
       <div class="item-visual-wrap" onclick="openPhotoLightbox(getItemDisplayPhotoSrc(wardrobe.find(w=>w.id==='${safeBeltId}') || {name:'${safeBeltName}',subType:'Belt',category:'accessories',color:'${belt.color}'}), '${safeBeltName}')" title="Tap to view belt photo">
         <img class="item-photo" src="${photoSrc}" alt="${escapeHtml(belt.name)}">
-        <span class="photo-source-tag">${hasRealPhoto ? '✨ Studio' : '🪢 Belt'}</span>
+        <span class="photo-source-tag">${hasRealPhoto ? '📷 Photo' : '🪢 Belt'}</span>
         <span class="mini-dot" style="background:${belt.color}"></span>
       </div>`;
 
@@ -6085,8 +6082,8 @@ function renderWardrobe() {
     const itemSeason = item.season || inferItemSeasonSuitability(item);
     const seasonBadge = itemSeason && itemSeason !== 'all-season' ? getSeasonBadgeLabel(itemSeason) : '';
     const visualContent = item.image
-      ? `<div class="card-photo-wrap" onclick="openPhotoLightbox(wardrobe.find(w=>w.id==='${item.id}')?.image, '${escapeHtml(item.name).replace(/'/g, "\\'")}')" style="cursor:zoom-in; background:radial-gradient(circle at 50% 42%, #faf8f4 0%, #ede8df 100%);" title="Tap to view studio photo">
-           <img src="${item.image}" alt="${escapeHtml(item.name)}" style="object-fit:contain; padding:4px;">
+      ? `<div class="card-photo-wrap" onclick="openPhotoLightbox(wardrobe.find(w=>w.id==='${item.id}')?.image, '${escapeHtml(item.name).replace(/'/g, "\\'")}')" style="cursor:zoom-in;" title="Tap to view photo">
+           <img src="${item.image}" alt="${escapeHtml(item.name)}">
            <span class="card-color-dot" style="background:${item.color}" title="Color"></span>
          </div>`
       : `<div class="card-color" style="background:${item.color}"></div>
@@ -6115,8 +6112,6 @@ function renderWardrobe() {
 
 let currentItemPhoto = null;
 let currentItemOriginalPhoto = null;
-let currentItemStudioPhoto = null;
-let currentItemUsingStudio = true;
 
 const COLOR_NAME_PALETTE = [
   { name: 'Black', r: 24, g: 24, b: 27 },
@@ -6196,11 +6191,11 @@ function getClosestColorName(r, g, b) {
 }
 
 /* ================================================================
-   STUDIO BACKGROUND REMOVAL & UNIFORM STANDARDIZATION ENGINE
+   IMAGE PREPARATION & HIGH-PRECISION COMPUTER-VISION IDENTIFIER
    ================================================================ */
 
-function removeBackgroundAndStandardizePhoto(img) {
-  const maxWorkDim = 380;
+function preparePhotoForAnalysis(img) {
+  const maxWorkDim = 480;
   let w = img.naturalWidth || img.width || 320;
   let h = img.naturalHeight || img.height || 320;
   if (w > maxWorkDim || h > maxWorkDim) {
@@ -6219,354 +6214,21 @@ function removeBackgroundAndStandardizePhoto(img) {
   const ctx = workCanvas.getContext('2d');
   ctx.drawImage(img, 0, 0, w, h);
 
-  let originalDataUrl = '';
+  let dataUrl = '';
   try {
-    originalDataUrl = workCanvas.toDataURL('image/jpeg', 0.85);
+    dataUrl = workCanvas.toDataURL('image/jpeg', 0.88);
   } catch {
-    return {
-      studioDataUrl: img.src,
-      originalDataUrl: img.src,
-      ctx,
-      width: w,
-      height: h,
-      fgMask: null,
-      bbox: { minX: 0, minY: 0, maxX: w - 1, maxY: h - 1 },
-      bgRemoved: false
-    };
+    dataUrl = img.src;
   }
-
-  let imgDataObj;
-  try {
-    imgDataObj = ctx.getImageData(0, 0, w, h);
-  } catch {
-    return {
-      studioDataUrl: originalDataUrl,
-      originalDataUrl,
-      ctx,
-      width: w,
-      height: h,
-      fgMask: null,
-      bbox: { minX: 0, minY: 0, maxX: w - 1, maxY: h - 1 },
-      bgRemoved: false
-    };
-  }
-
-  const data = imgDataObj.data;
-  const totalPixels = w * h;
-
-  // 1. Sample border strip pixels (top, bottom, left, right margins) to model background color clusters
-  const borderSamples = [];
-  const margin = Math.max(2, Math.floor(Math.min(w, h) * 0.04));
-  const step = Math.max(1, Math.floor(Math.min(w, h) / 45));
-
-  for (let x = 0; x < w; x += step) {
-    for (let dy = 0; dy < margin; dy++) {
-      let idxTop = (dy * w + x) * 4;
-      if (data[idxTop + 3] > 128) borderSamples.push([data[idxTop], data[idxTop + 1], data[idxTop + 2]]);
-      let idxBot = ((h - 1 - dy) * w + x) * 4;
-      if (data[idxBot + 3] > 128) borderSamples.push([data[idxBot], data[idxBot + 1], data[idxBot + 2]]);
-    }
-  }
-  for (let y = margin; y < h - margin; y += step) {
-    for (let dx = 0; dx < margin; dx++) {
-      let idxLeft = (y * w + dx) * 4;
-      if (data[idxLeft + 3] > 128) borderSamples.push([data[idxLeft], data[idxLeft + 1], data[idxLeft + 2]]);
-      let idxRight = (y * w + (w - 1 - dx)) * 4;
-      if (data[idxRight + 3] > 128) borderSamples.push([data[idxRight], data[idxRight + 1], data[idxRight + 2]]);
-    }
-  }
-
-  // Group border samples into up to 3 background clusters (handles gradients, floor/wall transitions, shadows)
-  const bgClusters = [];
-  for (let i = 0; i < borderSamples.length; i++) {
-    const [r, g, b] = borderSamples[i];
-    let matchedCluster = null;
-    for (let c = 0; c < bgClusters.length; c++) {
-      const cl = bgClusters[c];
-      const dist = Math.hypot(r - cl.r, g - cl.g, b - cl.b);
-      if (dist < 38) {
-        matchedCluster = cl;
-        break;
-      }
-    }
-    if (matchedCluster) {
-      matchedCluster.count++;
-      matchedCluster.rSum += r;
-      matchedCluster.gSum += g;
-      matchedCluster.bSum += b;
-      matchedCluster.r = matchedCluster.rSum / matchedCluster.count;
-      matchedCluster.g = matchedCluster.gSum / matchedCluster.count;
-      matchedCluster.b = matchedCluster.bSum / matchedCluster.count;
-    } else if (bgClusters.length < 5) {
-      bgClusters.push({ r, g, b, rSum: r, gSum: g, bSum: b, count: 1 });
-    }
-  }
-  bgClusters.sort((a, b) => b.count - a.count);
-  const topBgClusters = bgClusters.slice(0, 3);
-
-  // Compute center region contrast vs border clusters so we adjust tolerance safely
-  let centerContrastSum = 0, centerSamples = 0;
-  for (let y = Math.floor(h * 0.3); y < Math.floor(h * 0.7); y += step) {
-    for (let x = Math.floor(w * 0.3); x < Math.floor(w * 0.7); x += step) {
-      const idx = (y * w + x) * 4;
-      const r = data[idx], g = data[idx + 1], b = data[idx + 2];
-      let minBgDist = Infinity;
-      for (const cl of topBgClusters) {
-        const d = Math.hypot(r - cl.r, g - cl.g, b - cl.b);
-        if (d < minBgDist) minBgDist = d;
-      }
-      centerContrastSum += minBgDist;
-      centerSamples++;
-    }
-  }
-  const avgCenterContrast = centerSamples > 0 ? centerContrastSum / centerSamples : 55;
-  // Adaptive tolerance: tighter when garment color is close to background (e.g. white shirt on white wall)
-  const baseTolerance = avgCenterContrast < 32 ? 22 : avgCenterContrast < 55 ? 34 : 46;
-
-  const isBgPixelColor = (r, g, b, tolMultiplier = 1.0) => {
-    const tol = baseTolerance * tolMultiplier;
-    for (let i = 0; i < topBgClusters.length; i++) {
-      const cl = topBgClusters[i];
-      const dr = r - cl.r, dg = g - cl.g, db = b - cl.b;
-      const rgbDist = Math.hypot(dr, dg, db);
-      if (rgbDist <= tol) return true;
-      // Also handle soft cast shadows on neutral/light backgrounds (same chromaticity, slightly lower brightness)
-      const clLum = 0.299 * cl.r + 0.587 * cl.g + 0.114 * cl.b;
-      const pxLum = 0.299 * r + 0.587 * g + 0.114 * b;
-      const clSat = Math.max(cl.r, cl.g, cl.b) - Math.min(cl.r, cl.g, cl.b);
-      const pxSat = Math.max(r, g, b) - Math.min(r, g, b);
-      if (clLum > 165 && clSat < 28 && pxSat < 30 && pxLum > clLum * 0.74 && pxLum <= clLum + 18 && rgbDist <= tol * 1.45) {
-        return true;
-      }
-    }
-    return false;
-  };
-
-  // 2. Edge-connected BFS Flood Fill to mark background (bgMask = 1 means background, 0 means foreground)
-  const bgMask = new Uint8Array(totalPixels);
-  const queue = new Int32Array(totalPixels);
-  let qHead = 0, qTail = 0;
-
-  const tryEnqueue = (x, y, tolMult) => {
-    if (x < 0 || x >= w || y < 0 || y >= h) return;
-    const pIdx = y * w + x;
-    if (bgMask[pIdx]) return;
-    const dIdx = pIdx * 4;
-    if (data[dIdx + 3] < 40 || isBgPixelColor(data[dIdx], data[dIdx + 1], data[dIdx + 2], tolMult)) {
-      bgMask[pIdx] = 1;
-      queue[qTail++] = pIdx;
-    }
-  };
-
-  for (let x = 0; x < w; x++) {
-    tryEnqueue(x, 0, 1.15);
-    tryEnqueue(x, h - 1, 1.15);
-  }
-  for (let y = 1; y < h - 1; y++) {
-    tryEnqueue(0, y, 1.15);
-    tryEnqueue(w - 1, y, 1.15);
-  }
-
-  while (qHead < qTail) {
-    const curr = queue[qHead++];
-    const cx = curr % w;
-    const cy = (curr - cx) / w;
-    const cIdx = curr * 4;
-    const cr = data[cIdx], cg = data[cIdx + 1], cb = data[cIdx + 2];
-
-    const neighbors = [
-      [cx - 1, cy],
-      [cx + 1, cy],
-      [cx, cy - 1],
-      [cx, cy + 1]
-    ];
-    for (let n = 0; n < 4; n++) {
-      const nx = neighbors[n][0], ny = neighbors[n][1];
-      if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
-      const nPos = ny * w + nx;
-      if (bgMask[nPos]) continue;
-      const nIdx = nPos * 4;
-      const nr = data[nIdx], ng = data[nIdx + 1], nb = data[nIdx + 2];
-      const stepDist = Math.hypot(nr - cr, ng - cg, nb - cb);
-      if (data[nIdx + 3] < 40 || (stepDist <= 22 && isBgPixelColor(nr, ng, nb, 1.05)) || isBgPixelColor(nr, ng, nb, 0.85)) {
-        bgMask[nPos] = 1;
-        queue[qTail++] = nPos;
-      }
-    }
-  }
-
-  // Build foreground mask (1 = garment foreground, 0 = background)
-  const fgMask = new Uint8Array(totalPixels);
-  let fgCount = 0;
-  let minX = w, minY = h, maxX = 0, maxY = 0;
-
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const pIdx = y * w + x;
-      if (!bgMask[pIdx]) {
-        // Also clear enclosed background holes (e.g., between sleeve & torso or between pant legs)
-        const dIdx = pIdx * 4;
-        if (isBgPixelColor(data[dIdx], data[dIdx + 1], data[dIdx + 2], 0.62)) {
-          bgMask[pIdx] = 1;
-          continue;
-        }
-        fgMask[pIdx] = 1;
-        fgCount++;
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
-    }
-  }
-
-  const fgRatio = fgCount / Math.max(1, totalPixels);
-  const validSegmentation = fgRatio >= 0.04 && fgRatio <= 0.94 && maxX > minX + 10 && maxY > minY + 10;
-
-  // Create standardized 420x420 Studio Canvas so every garment photo has the exact same aesthetic
-  const studioSize = 420;
-  const studioCanvas = document.createElement('canvas');
-  studioCanvas.width = studioSize;
-  studioCanvas.height = studioSize;
-  const sCtx = studioCanvas.getContext('2d');
-
-  // Uniform Studio Backdrop (warm alabaster center with soft gallery vignette)
-  const radGrad = sCtx.createRadialGradient(
-    studioSize * 0.5, studioSize * 0.44, studioSize * 0.06,
-    studioSize * 0.5, studioSize * 0.5, studioSize * 0.72
-  );
-  radGrad.addColorStop(0, '#fcfbf9');
-  radGrad.addColorStop(0.65, '#f5f2eb');
-  radGrad.addColorStop(1, '#eae4d8');
-  sCtx.fillStyle = radGrad;
-  sCtx.fillRect(0, 0, studioSize, studioSize);
-
-  // Subtle studio floor shadow ellipse
-  sCtx.save();
-  sCtx.fillStyle = 'rgba(30, 40, 34, 0.055)';
-  sCtx.beginPath();
-  sCtx.ellipse(studioSize * 0.5, studioSize * 0.88, studioSize * 0.28, studioSize * 0.035, 0, 0, Math.PI * 2);
-  sCtx.fill();
-  sCtx.restore();
-
-  if (validSegmentation) {
-    // Feather alpha along garment boundary for crisp, anti-aliased cutout edges
-    const cutoutCanvas = document.createElement('canvas');
-    cutoutCanvas.width = w;
-    cutoutCanvas.height = h;
-    const cCtx = cutoutCanvas.getContext('2d');
-    const cutoutImgData = cCtx.createImageData(w, h);
-    const cData = cutoutImgData.data;
-
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const pIdx = y * w + x;
-        const dIdx = pIdx * 4;
-        if (!fgMask[pIdx]) {
-          cData[dIdx + 3] = 0;
-          continue;
-        }
-        // Count 3x3 foreground neighbors for smooth edge feathering
-        let nSum = 0, nTotal = 0;
-        for (let dy = -1; dy <= 1; dy++) {
-          const ny = y + dy;
-          if (ny < 0 || ny >= h) continue;
-          for (let dx = -1; dx <= 1; dx++) {
-            const nx = x + dx;
-            if (nx < 0 || nx >= w) continue;
-            nTotal++;
-            if (fgMask[ny * w + nx]) nSum++;
-          }
-        }
-        cData[dIdx] = data[dIdx];
-        cData[dIdx + 1] = data[dIdx + 1];
-        cData[dIdx + 2] = data[dIdx + 2];
-        const edgeFactor = nSum / Math.max(1, nTotal);
-        cData[dIdx + 3] = edgeFactor < 0.55 ? Math.round(edgeFactor * 210) : 255;
-      }
-    }
-    cCtx.putImageData(cutoutImgData, 0, 0);
-
-    const cropW = Math.max(1, maxX - minX + 1);
-    const cropH = Math.max(1, maxY - minY + 1);
-    const targetBox = studioSize * 0.80;
-    const scale = Math.min(targetBox / cropW, targetBox / cropH);
-    const drawW = Math.round(cropW * scale);
-    const drawH = Math.round(cropH * scale);
-    const drawX = Math.round((studioSize - drawW) / 2);
-    const drawY = Math.round((studioSize - drawH) / 2);
-
-    sCtx.save();
-    sCtx.shadowColor = 'rgba(18, 28, 23, 0.16)';
-    sCtx.shadowBlur = 18;
-    sCtx.shadowOffsetX = 0;
-    sCtx.shadowOffsetY = 8;
-    sCtx.drawImage(cutoutCanvas, minX, minY, cropW, cropH, drawX, drawY, drawW, drawH);
-    sCtx.restore();
-  } else {
-    // Full-bleed close-up fallback: center with studio mat & soft shadow
-    const targetBox = studioSize * 0.84;
-    const scale = Math.min(targetBox / w, targetBox / h);
-    const drawW = Math.round(w * scale);
-    const drawH = Math.round(h * scale);
-    const drawX = Math.round((studioSize - drawW) / 2);
-    const drawY = Math.round((studioSize - drawH) / 2);
-    sCtx.save();
-    sCtx.shadowColor = 'rgba(18, 28, 23, 0.14)';
-    sCtx.shadowBlur = 14;
-    sCtx.shadowOffsetY = 6;
-    sCtx.drawImage(workCanvas, 0, 0, w, h, drawX, drawY, drawW, drawH);
-    sCtx.restore();
-    minX = Math.floor(w * 0.12);
-    maxX = Math.ceil(w * 0.88);
-    minY = Math.floor(h * 0.12);
-    maxY = Math.ceil(h * 0.88);
-    for (let y = minY; y <= maxY; y++) {
-      for (let x = minX; x <= maxX; x++) {
-        fgMask[y * w + x] = 1;
-      }
-    }
-  }
-
-  // Subtle inner gallery border
-  sCtx.strokeStyle = 'rgba(180, 168, 148, 0.32)';
-  sCtx.lineWidth = 2;
-  sCtx.strokeRect(1, 1, studioSize - 2, studioSize - 2);
-
-  let studioDataUrl = originalDataUrl;
-  try {
-    studioDataUrl = studioCanvas.toDataURL('image/jpeg', 0.86);
-  } catch {}
 
   return {
-    studioDataUrl,
-    originalDataUrl,
+    dataUrl,
     ctx,
     width: w,
     height: h,
-    fgMask,
-    bbox: { minX, minY, maxX, maxY },
-    bgRemoved: validSegmentation
+    fgMask: null,
+    bbox: { minX: Math.floor(w * 0.1), minY: Math.floor(h * 0.1), maxX: Math.ceil(w * 0.9), maxY: Math.ceil(h * 0.9) }
   };
-}
-
-function toggleItemStudioCutout(e) {
-  if (e) e.stopPropagation();
-  if (!currentItemStudioPhoto && !currentItemOriginalPhoto) return;
-  currentItemUsingStudio = !currentItemUsingStudio;
-  currentItemPhoto = currentItemUsingStudio
-    ? (currentItemStudioPhoto || currentItemOriginalPhoto)
-    : (currentItemOriginalPhoto || currentItemStudioPhoto);
-  showPhotoPreview(currentItemPhoto);
-  const btn = document.getElementById('toggle-bg-cutout-btn');
-  const studioBadge = document.getElementById('studio-bg-badge');
-  if (btn) {
-    btn.textContent = currentItemUsingStudio ? '🖼️ Use Original Photo' : '✨ Use Studio Cutout';
-  }
-  if (studioBadge) {
-    studioBadge.textContent = currentItemUsingStudio ? '✨ Studio BG Removed' : '🖼️ Original Photo';
-  }
-  toast(currentItemUsingStudio ? '✨ Switched to uniform Studio Cutout!' : '🖼️ Switched to Original Photo');
 }
 
 /* ================================================================
@@ -6975,24 +6637,21 @@ function loadPhotoIntoItemModalFromSrc(src, fileNameHint = '') {
   img.crossOrigin = 'anonymous';
   img.onload = () => {
     try {
-      const studioRes = removeBackgroundAndStandardizePhoto(img);
-      currentItemOriginalPhoto = studioRes.originalDataUrl;
-      currentItemStudioPhoto = studioRes.studioDataUrl;
-      currentItemUsingStudio = true;
-      currentItemPhoto = currentItemStudioPhoto;
+      const prep = preparePhotoForAnalysis(img);
+      currentItemOriginalPhoto = prep.dataUrl;
+      currentItemPhoto = prep.dataUrl;
 
-      showPhotoPreview(currentItemPhoto, studioRes.bgRemoved);
+      showPhotoPreview(currentItemPhoto, false);
       autoDetectColorAndDetails(
-        studioRes.ctx,
-        studioRes.width,
-        studioRes.height,
-        studioRes.fgMask,
-        studioRes.bbox,
+        prep.ctx,
+        prep.width,
+        prep.height,
+        prep.fgMask,
+        prep.bbox,
         fileNameHint
       );
     } catch {
       currentItemOriginalPhoto = src;
-      currentItemStudioPhoto = src;
       currentItemPhoto = src;
       showPhotoPreview(src, false);
       toast('📷 Photo attached!');
@@ -7016,33 +6675,21 @@ function processPhotoFile(file) {
   reader.readAsDataURL(file);
 }
 
-function showPhotoPreview(src, showStudioToggle = true) {
+function showPhotoPreview(src) {
   const preview = document.getElementById('photo-preview');
   const container = document.getElementById('photo-preview-container');
   const placeholder = document.getElementById('photo-placeholder');
   const controls = document.getElementById('photo-controls');
-  const toggleBtn = document.getElementById('toggle-bg-cutout-btn');
-  const studioBadge = document.getElementById('studio-bg-badge');
   preview.src = src;
   container.style.display = 'block';
   placeholder.style.display = 'none';
   controls.style.display = 'flex';
-  if (toggleBtn) {
-    toggleBtn.style.display = (currentItemOriginalPhoto && currentItemStudioPhoto) ? 'inline-flex' : 'none';
-    toggleBtn.textContent = currentItemUsingStudio ? '🖼️ Use Original Photo' : '✨ Use Studio Cutout';
-  }
-  if (studioBadge) {
-    studioBadge.style.display = showStudioToggle ? 'inline-flex' : 'none';
-    studioBadge.textContent = currentItemUsingStudio ? '✨ Studio BG Removed' : '🖼️ Original Photo';
-  }
 }
 
 function removePhoto(e) {
   if (e) e.stopPropagation();
   currentItemPhoto = null;
   currentItemOriginalPhoto = null;
-  currentItemStudioPhoto = null;
-  currentItemUsingStudio = true;
   const preview = document.getElementById('photo-preview');
   const container = document.getElementById('photo-preview-container');
   const placeholder = document.getElementById('photo-placeholder');
@@ -7087,7 +6734,7 @@ function autoDetectColorAndDetails(ctx, w, h, fgMask, bbox, fileNameHint = '') {
     nameInput.dataset.autoFilled = 'true';
   }
 
-  toast(`✨ Studio cutout ready · Identified ${analysis.colorName} ${currentSubtype}!`);
+  toast(`✨ Identified ${analysis.colorName} ${currentSubtype}!`);
 }
 
 function extractDroppedImageUrl(dt) {
@@ -7501,13 +7148,13 @@ function createDraftPieceFromSrc(src, rawFileName) {
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       try {
-        const studioRes = removeBackgroundAndStandardizePhoto(img);
+        const prep = preparePhotoForAnalysis(img);
         const analysis = analyzeGarmentPhotoVision(
-          studioRes.ctx,
-          studioRes.width,
-          studioRes.height,
-          studioRes.fgMask,
-          studioRes.bbox,
+          prep.ctx,
+          prep.width,
+          prep.height,
+          prep.fgMask,
+          prep.bbox,
           rawFileName
         );
         resolve({
@@ -7521,11 +7168,8 @@ function createDraftPieceFromSrc(src, rawFileName) {
           color: analysis.hex,
           colorName: analysis.colorName,
           formality: analysis.formality,
-          visionNote: analysis.visionNote || 'Studio Vision ID',
-          image: studioRes.studioDataUrl,
-          studioImage: studioRes.studioDataUrl,
-          originalImage: studioRes.originalDataUrl,
-          usingStudio: true
+          visionNote: analysis.visionNote || 'Vision ID',
+          image: prep.dataUrl
         });
       } catch {
         const inferred = inferGarmentFromPhotoContext(rawFileName, 300, 300, 74, 125, 181);
@@ -7541,24 +7185,13 @@ function createDraftPieceFromSrc(src, rawFileName) {
           colorName: inferred.colorName,
           formality: inferred.formality,
           visionNote: 'Filename match',
-          image: src,
-          studioImage: src,
-          originalImage: src,
-          usingStudio: true
+          image: src
         });
       }
     };
     img.onerror = () => resolve(null);
     img.src = src;
   });
-}
-
-function toggleMassDraftStudioPhoto(draftId) {
-  const d = massUploadDrafts.find(x => x.draftId === draftId);
-  if (!d || !d.originalImage || !d.studioImage) return;
-  d.usingStudio = !d.usingStudio;
-  d.image = d.usingStudio ? d.studioImage : d.originalImage;
-  renderMassValidateModal();
 }
 
 async function processMassWardrobeFiles(fileList, urlList = []) {
@@ -7569,7 +7202,7 @@ async function processMassWardrobeFiles(fileList, urlList = []) {
     return;
   }
 
-  toast(`⏳ Removing backgrounds & identifying ${files.length + urls.length} garment photo(s)...`);
+  toast(`⏳ Identifying ${files.length + urls.length} garment photo(s)...`);
 
   const filePromises = files.map(file => new Promise((resolve) => {
     const reader = new FileReader();
@@ -7591,7 +7224,7 @@ async function processMassWardrobeFiles(fileList, urlList = []) {
 
   massUploadDrafts.push(...results);
   openMassValidateModal();
-  toast(`✨ Studio background removed & identified ${results.length} piece(s)!`);
+  toast(`✨ Identified ${results.length} piece(s)!`);
 }
 
 function openMassValidateModal() {
@@ -7613,7 +7246,7 @@ function renderMassValidateModal() {
 
   const count = massUploadDrafts.length;
   if (titleEl) {
-    titleEl.textContent = `📚 Validate ${count} Studio-Standardized Wardrobe Piece${count === 1 ? '' : 's'}`;
+    titleEl.textContent = `📚 Validate ${count} Wardrobe Piece${count === 1 ? '' : 's'}`;
   }
   if (approveAllBtn) {
     approveAllBtn.textContent = `✅ Validate & Save All (${count})`;
@@ -7670,8 +7303,8 @@ function renderMassValidateModal() {
 
     return `
       <div class="mass-validate-card" id="mass-card-${d.draftId}">
-        <div class="mass-validate-thumb" onclick="openPhotoLightbox(massUploadDrafts[${idx}]?.image, '${escapeHtml(d.name).replace(/'/g, "\\'")}')" title="Tap to zoom studio photo">
-          <img src="${d.image}" alt="${escapeHtml(d.name)}" style="object-fit:contain; padding:4px;">
+        <div class="mass-validate-thumb" onclick="openPhotoLightbox(massUploadDrafts[${idx}]?.image, '${escapeHtml(d.name).replace(/'/g, "\\'")}')" title="Tap to zoom photo">
+          <img src="${d.image}" alt="${escapeHtml(d.name)}" style="object-fit:cover;">
           <div class="mass-validate-color-pill">
             <span style="width:9px; height:9px; border-radius:50%; background:${d.color}; border:1px solid #fff; display:inline-block;"></span>
             <span>${escapeHtml(d.colorName || 'Color')}</span>
@@ -7718,11 +7351,8 @@ function renderMassValidateModal() {
             </select>
           </div>
           <div class="mass-validate-row-actions">
-            <span style="font-size:0.73rem; color:var(--text-secondary);">✨ <strong>${escapeHtml(d.colorName)} ${escapeHtml(d.subType)}</strong> (${escapeHtml(d.visionNote || 'Studio Vision')})</span>
+            <span style="font-size:0.73rem; color:var(--text-secondary);">✨ <strong>${escapeHtml(d.colorName)} ${escapeHtml(d.subType)}</strong> (${escapeHtml(d.visionNote || 'Vision')})</span>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
-              <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 9px; font-size:0.72rem;" onclick="toggleMassDraftStudioPhoto('${d.draftId}')">
-                ${d.usingStudio ? '🖼️ Original' : '✨ Studio Cutout'}
-              </button>
               <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 10px; font-size:0.74rem; color:#b91c1c;" onclick="removeMassDraft('${d.draftId}')">✕ Remove</button>
               <button type="button" class="btn btn-primary btn-sm" style="padding:4px 12px; font-size:0.74rem;" onclick="approveSingleMassDraft('${d.draftId}')">✓ Validate This Piece</button>
             </div>
@@ -8137,12 +7767,10 @@ function openEditModal(id) {
 
   if (item.image) {
     currentItemPhoto = item.image;
-    currentItemStudioPhoto = item.image;
-    currentItemOriginalPhoto = item.originalImage || item.image;
-    currentItemUsingStudio = true;
-    showPhotoPreview(item.image, true);
+    currentItemOriginalPhoto = item.image;
+    showPhotoPreview(item.image);
     const badge = document.getElementById('detected-color-badge');
-    badge.textContent = `📷 Saved studio photo`;
+    badge.textContent = `📷 Saved photo`;
     badge.style.display = 'inline-flex';
   } else {
     removePhoto();

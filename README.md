@@ -6,14 +6,13 @@ A modern, weather- and hemisphere-season-aware, computer-vision-assisted, and pe
 
 ## 🌟 Key Features
 
-### 🆕 Studio Background Removal, High-Precision Vision ID, Custom Categories/Types/Formalities & Location Season Styling
+### 🆕 High-Precision Vision ID, Custom Categories/Types/Formalities & Location Season Styling
 1. **🏛️ Contemporary Editorial Design & `WTW` Monogram Crest**:
    - Features a bespoke **`WTW`** monogram emblem in deep botanical emerald (`#0f241d`) and brushed champagne gold (`#c89b6e`), paired with editorial typography (*Cormorant Garamond* + *Plus Jakarta Sans*), glassmorphic navigation, and live status pills in the header (**Install on iPhone** has been removed from the main page header and lives exclusively in *Profile & Settings*).
-2. **✨ Automatic Studio Background Removal & Uniform Standardization**:
-   - Every uploaded or camera-captured clothing photo automatically runs through an edge-connected flood-fill + multi-cluster background segmentation pipeline that removes distracting backgrounds, suppresses cast shadows, feathers garment edges, and centers the piece onto a uniform `420×420` studio canvas (`#fcfbf9` → `#eae4d8` radial gallery backdrop with soft ground shadow) so your entire closet shares a cohesive boutique look.
-   - Includes a 1-click **🖼️ Use Original Photo / ✨ Use Studio Cutout** toggle in both the single-item modal and the Mass Validation modal.
+2. **📸 Clean Photo Upload & Authentic Gallery Presentation**:
+   - Preserves original clothing photos with full fidelity and crisp aspect-ratio rendering across wardrobe cards, outfit previews, and lightboxes.
 3. **🎯 High-Precision Computer-Vision Item Identification**:
-   - Analyzes foreground-only garment pixels (ignoring background and glare) across a 56-shade fashion color palette and a normalized `32×32` silhouette grid (aspect ratio, twin-leg split for Jeans/Chinos/Trousers/Shorts, lateral sleeve-wing spread & drop ratio for Short-Sleeve vs. Long-Sleeve vs. Sleeveless tops, collar/placket contrast for Shirts & Outerwear, horizontal contour for Footwear, and ring/strap geometry for Belts & Accessories).
+   - Analyzes clothing photos across a 56-shade fashion color palette and a normalized `32×32` silhouette grid (aspect ratio, twin-leg split for Jeans/Chinos/Trousers/Shorts, lateral sleeve-wing spread & drop ratio for Short-Sleeve vs. Long-Sleeve vs. Sleeveless tops, collar/placket contrast for Shirts & Outerwear, horizontal contour for Footwear, and ring/strap geometry for Belts & Accessories).
 4. **👚 150+ Precise Garment Types + Custom Categories, Types & 9+ Formalities**:
    - Includes over **150 specific garment types** across Masculine and Feminine styles.
    - In **Add / Edit Clothing Item**, you can create your own **Custom Category** (`＋ Add Category`), **Custom Garment Type** (`＋ Add Type`), and **Custom Formality** (`＋ Add Formality`).
