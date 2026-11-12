@@ -12,7 +12,16 @@ A modern, weather- and hemisphere-season-aware, computer-vision-assisted, and pe
    - Changes made on your PC (wardrobe items, captured photos, personal palette, body shapes, custom categories, and vision statements) automatically sync in real-time with your phone and second PC.
    - Protected by a private **Vault Key / Passphrase** (default `marcelo-atelier-wardrobe`) configured in *Profile & Settings*.
    - Features a live **`🟢 Cloud Synced`** status badge in the header and in settings.
-2. **🏛️ Contemporary Editorial Design & `WTW` Monogram Crest**:
+2. **✨ Google Material Design 3 & Modern Antigravity Floating UI Aesthetics**:
+   - **Deep Sophisticated Dark Theme**: Deep obsidian background with subtle glowing teal (`#00e5c0`) and soft yellow accents (`#ffd166`), glassmorphism card surfaces, and multi-elevation floating shadows.
+   - **Refined Slim Header**: Minimalist `WTW` brand logo on the left with sleek, rounded status pills on the right displaying live `Spring - Bathurst` and `Cloud Synced`.
+   - **Floating 'My Persona' Hero Card**: Floats with rounded corners (`border-radius: 26px`), a thin glassmorphism border, and a subtle glowing drop-shadow.
+   - **Tactile Sliding Pill Toggle**: Smooth animated pill switcher between Masculine and Feminine wardrobe preferences.
+   - **Six User Portrait Thumbnails**: Clean, spacious 6-column grid with generous negative space, multi-angle role hints (Close-up, Full Body, Daylight, Profile, Elevated, Movement), hover scale, and tap-to-inspect.
+   - **Modern Pill-Shaped Action Buttons with Soft Gradients**: Soft luminous gradients for `📷 Use Camera`, `🔄 Re-analyze`, `🖼️ Photo Library`, and `🗂️ Saved Images`.
+   - **Clean Premium Sans-Serif Typography**: Refined font hierarchy powered by *Plus Jakarta Sans*.
+
+3. **🏛️ Bespoke Editorial Branding & `WTW` Monogram Emblem**:
    - Features a bespoke **`WTW`** monogram emblem in deep botanical emerald (`#0f241d`) and brushed champagne gold (`#c89b6e`), paired with editorial typography (*Cormorant Garamond* + *Plus Jakarta Sans*), glassmorphic navigation, and live status pills in the header (**Install on iPhone** has been removed from the main page header and lives exclusively in *Profile & Settings*).
 2. **📸 Clean Photo Upload & Authentic Gallery Presentation**:
    - Preserves original clothing photos with full fidelity and crisp aspect-ratio rendering across wardrobe cards, outfit previews, and lightboxes.

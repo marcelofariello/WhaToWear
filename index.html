@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="WTW · WhaToWear">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#142820">
+<meta name="theme-color" content="#090d12">
 <link rel="apple-touch-icon" id="ios-touch-icon" href="">
 <link rel="manifest" id="pwa-manifest" href="">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,29 +19,60 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #f6f4f0;
-  --surface: #ffffff;
-  --surface-alt: #faf8f5;
-  --primary: #1f3d31;
-  --primary-light: #6e9885;
-  --primary-dark: #11241c;
-  --accent: #c89454;
-  --accent-light: #ebd3b3;
-  --text: #141817;
-  --text-secondary: #56605c;
-  --text-light: #87918d;
-  --border: #e6e1d9;
-  --danger: #c04842;
-  --danger-light: #fce8e6;
-  --success: #1f3d31;
-  --shadow-sm: 0 2px 10px rgba(17, 36, 28, 0.045);
-  --shadow-md: 0 10px 28px rgba(17, 36, 28, 0.08);
-  --shadow-lg: 0 20px 48px rgba(17, 36, 28, 0.13);
-  --radius-sm: 10px;
-  --radius-md: 16px;
-  --radius-lg: 24px;
+  /* Google Material Design 3 Deep Dark Theme Palette */
+  --bg: #090d12;
+  --bg-gradient: radial-gradient(circle at 12% 0%, rgba(0, 229, 192, 0.08) 0%, transparent 45%),
+                 radial-gradient(circle at 88% 12%, rgba(253, 216, 53, 0.06) 0%, transparent 50%),
+                 radial-gradient(circle at 50% 65%, rgba(0, 229, 192, 0.04) 0%, transparent 60%),
+                 linear-gradient(180deg, #090d12 0%, #0d1219 50%, #080b0f 100%);
+  --surface: rgba(18, 25, 35, 0.78);
+  --surface-solid: #121822;
+  --surface-alt: rgba(26, 35, 48, 0.65);
+  --surface-elevated: rgba(30, 41, 56, 0.85);
+
+  /* Glowing Teal & Soft Yellow Accents */
+  --primary: #00e5c0;
+  --primary-light: #5df2d6;
+  --primary-dark: #00bfa5;
+  --primary-glow: rgba(0, 229, 192, 0.32);
+  --accent: #ffd166;
+  --accent-light: #fef08a;
+  --accent-dark: #f59e0b;
+  --accent-glow: rgba(253, 216, 53, 0.28);
+
+  /* Crisp Typography */
+  --text: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-light: #64748b;
+
+  /* Subtle Borders & Glassmorphic Edges */
+  --border: rgba(255, 255, 255, 0.08);
+  --border-light: rgba(255, 255, 255, 0.04);
+  --border-focus: rgba(0, 229, 192, 0.45);
+  --border-glow: rgba(0, 229, 192, 0.25);
+
+  /* Status Colors */
+  --danger: #fb7185;
+  --danger-light: rgba(251, 113, 133, 0.15);
+  --success: #34d399;
+
+  /* Antigravity Floating Shadows & M3 Elevation */
+  --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.55), 0 0 20px rgba(0, 229, 192, 0.08);
+  --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.65), 0 0 32px rgba(0, 229, 192, 0.14);
+  --shadow-floating: 0 24px 60px rgba(0, 0, 0, 0.7), 0 0 40px rgba(0, 229, 192, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --shadow-yellow-glow: 0 10px 28px rgba(0, 0, 0, 0.5), 0 0 24px rgba(253, 216, 53, 0.15);
+
+  /* Radii */
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 26px;
+  --radius-pill: 9999px;
+
+  /* Transitions & Fonts */
   --transition: 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-  --font: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --transition-bounce: 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-serif: 'Cormorant Garamond', Georgia, serif;
 }
 
@@ -50,9 +81,10 @@ html { scroll-behavior: smooth; }
 body {
   font-family: var(--font);
   background:
-    radial-gradient(circle at 12% 0%, rgba(200, 148, 84, 0.11) 0%, transparent 42%),
-    radial-gradient(circle at 88% 8%, rgba(31, 61, 49, 0.09) 0%, transparent 46%),
-    linear-gradient(180deg, #f8f6f2 0%, #f1ede6 100%);
+    radial-gradient(circle at 12% 0%, rgba(0, 229, 192, 0.08) 0%, transparent 45%),
+    radial-gradient(circle at 88% 12%, rgba(253, 216, 53, 0.06) 0%, transparent 50%),
+    radial-gradient(circle at 50% 65%, rgba(0, 229, 192, 0.04) 0%, transparent 60%),
+    linear-gradient(180deg, #090d12 0%, #0d1219 50%, #080b0f 100%);
   background-attachment: fixed;
   color: var(--text);
   min-height: 100vh;
@@ -2397,60 +2429,880 @@ body {
   .modal { padding: 24px 20px; }
   .form-row { grid-template-columns: 1fr; }
 }
+
+/* ===== Google Material Design 3 & Modern Antigravity Floating UI System ===== */
+
+/* Slim Refined Header */
+.header.slim-header {
+  padding: 10px 20px;
+  margin-bottom: 18px;
+  background: rgba(16, 22, 31, 0.82);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  animation: fadeInDown 0.5s ease;
+  position: relative;
+  overflow: visible;
+}
+.header.slim-header::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: 15%;
+  width: 260px;
+  height: 120px;
+  background: radial-gradient(circle, rgba(0, 229, 192, 0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+.slim-logo-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+}
+.slim-brand-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.minimal-wtw-logo {
+  display: flex;
+  align-items: center;
+}
+.wtw-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  background: linear-gradient(135deg, rgba(0, 229, 192, 0.22) 0%, rgba(13, 22, 30, 0.95) 100%);
+  border: 1px solid rgba(0, 229, 192, 0.55);
+  border-radius: 999px;
+  color: #ffffff;
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  box-shadow: 0 0 18px rgba(0, 229, 192, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition: var(--transition);
+}
+.slim-brand-left:hover .wtw-pill-badge {
+  border-color: var(--primary-light);
+  box-shadow: 0 0 24px rgba(0, 229, 192, 0.5);
+  transform: scale(1.03);
+}
+.slim-text-group {
+  display: flex;
+  flex-direction: column;
+}
+.brand-title.slim-brand-title {
+  margin: 0;
+  font-size: 1.02rem;
+  line-height: 1.15;
+  display: flex;
+  flex-direction: column;
+}
+.brand-title-main {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #f8fafc;
+}
+.brand-title-sub {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--primary);
+  text-transform: uppercase;
+}
+.header-status-pills.slim-status-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.header-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(22, 30, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  transition: var(--transition);
+  backdrop-filter: blur(10px);
+}
+.header-pill:hover {
+  border-color: rgba(0, 229, 192, 0.35);
+  background: rgba(28, 38, 54, 0.85);
+  transform: translateY(-1px);
+}
+.pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.glow-teal {
+  background: #00e5c0;
+  box-shadow: 0 0 8px #00e5c0, 0 0 14px rgba(0, 229, 192, 0.5);
+}
+.glow-yellow {
+  background: #ffd166;
+  box-shadow: 0 0 8px #ffd166, 0 0 14px rgba(253, 216, 53, 0.5);
+}
+
+/* Floating 'My Persona' Hero Card (M3 & Antigravity Aesthetics) */
+.floating-persona-card {
+  background: rgba(18, 25, 35, 0.78);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(0, 229, 192, 0.22);
+  box-shadow: var(--shadow-floating);
+  padding: 24px;
+  margin-bottom: 22px;
+  position: relative;
+  overflow: hidden;
+  animation: fadeInDown 0.6s ease;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.floating-persona-card:hover {
+  border-color: rgba(0, 229, 192, 0.38);
+  box-shadow: 0 28px 64px rgba(0, 0, 0, 0.75), 0 0 44px rgba(0, 229, 192, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+.floating-persona-ambient-glow {
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 280px;
+  height: 280px;
+  background: radial-gradient(circle, rgba(0, 229, 192, 0.12) 0%, transparent 68%);
+  pointer-events: none;
+}
+.persona-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.persona-subheading {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary);
+  margin-bottom: 2px;
+}
+.persona-heading {
+  font-size: 1.45rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #f8fafc;
+}
+.persona-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.persona-glow-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(253, 216, 53, 0.1);
+  border: 1px solid rgba(253, 216, 53, 0.35);
+  color: #fef08a;
+  font-size: 0.76rem;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(253, 216, 53, 0.12);
+}
+.persona-collapse-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.persona-collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+/* Collapsible Body */
+.persona-collapsible-body {
+  transition: max-height 0.4s ease, opacity 0.3s ease;
+  overflow: visible;
+}
+.floating-persona-card.collapsed .persona-collapsible-body {
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+  margin: 0;
+}
+
+/* Tactile Sliding Pill Toggle */
+.persona-preference-container {
+  margin-bottom: 20px;
+}
+.preference-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.preference-section-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #cbd5e1;
+  letter-spacing: 0.02em;
+}
+.preference-selected-hint {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+.tactile-sliding-toggle-wrapper {
+  max-width: 440px;
+}
+.tactile-sliding-pill-toggle {
+  position: relative;
+  display: flex;
+  background: rgba(11, 16, 23, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 999px;
+  padding: 4px;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.tactile-sliding-thumb {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  height: calc(100% - 8px);
+  background: linear-gradient(135deg, rgba(0, 229, 192, 0.28) 0%, rgba(0, 229, 192, 0.12) 100%);
+  border: 1px solid rgba(0, 229, 192, 0.55);
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(0, 229, 192, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: transform var(--transition-bounce);
+  pointer-events: none;
+}
+.sliding-option-btn {
+  flex: 1;
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 0.84rem;
+  font-weight: 700;
+  font-family: var(--font);
+  transition: color var(--transition);
+}
+.sliding-option-btn:hover {
+  color: #f1f5f9;
+}
+.sliding-option-btn.active {
+  color: #ffffff;
+  text-shadow: 0 0 12px rgba(0, 229, 192, 0.4);
+}
+.sliding-option-btn:active {
+  transform: scale(0.98);
+}
+
+/* Six User Portrait Thumbnails in Clean, Spacious Grid */
+.persona-portraits-wrapper {
+  margin-bottom: 22px;
+}
+.portraits-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.portraits-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.01em;
+}
+.portraits-desc {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+.portraits-count-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+}
+
+/* 6-Grid with Generous Negative Space */
+.persona-portraits-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 14px;
+  padding: 4px 0;
+}
+@media (max-width: 820px) {
+  .persona-portraits-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+}
+@media (max-width: 480px) {
+  .persona-portraits-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+}
+
+.persona-portrait-slot {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  border-radius: var(--radius-md);
+  background: rgba(14, 20, 28, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.persona-portrait-slot:hover {
+  transform: translateY(-4px);
+  border-color: rgba(0, 229, 192, 0.5);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(0, 229, 192, 0.25);
+}
+.persona-portrait-slot.is-user-upload {
+  border-color: rgba(0, 229, 192, 0.35);
+}
+.portrait-slot-number {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(9, 13, 18, 0.75);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--primary);
+  letter-spacing: 0.05em;
+}
+.portrait-img-container {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.portrait-img-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+.persona-portrait-slot:hover .portrait-img-container img {
+  transform: scale(1.05);
+}
+.portrait-overlay-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(9, 13, 18, 0.1) 0%, rgba(9, 13, 18, 0.35) 50%, rgba(9, 13, 18, 0.9) 100%);
+  pointer-events: none;
+}
+.portrait-slot-info {
+  position: relative;
+  z-index: 2;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+}
+.portrait-slot-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.2;
+}
+.portrait-slot-role {
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: var(--primary-light);
+  line-height: 1.2;
+  margin-top: 1px;
+}
+.portrait-remove-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 4;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.75);
+  color: #ffffff;
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+}
+.portrait-remove-btn:hover {
+  background: var(--danger);
+  transform: scale(1.1);
+}
+.persona-portrait-slot.is-empty {
+  border: 1.5px dashed rgba(0, 229, 192, 0.35);
+  background: rgba(14, 20, 28, 0.5);
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 12px 6px 8px;
+}
+.persona-portrait-slot.is-empty:hover {
+  background: rgba(0, 229, 192, 0.05);
+  border-color: var(--primary);
+}
+.portrait-empty-art {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.portrait-empty-icon {
+  font-size: 1.4rem;
+  opacity: 0.6;
+}
+.portrait-empty-plus {
+  font-size: 0.85rem;
+  color: var(--primary);
+  font-weight: 800;
+  margin-top: -2px;
+}
+
+/* Modern Pill-Shaped Action Buttons with Soft Gradients */
+.persona-action-buttons-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.pill-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 22px;
+  border-radius: 999px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition);
+  font-family: var(--font);
+  border: none;
+  letter-spacing: -0.01em;
+}
+.pill-action-btn:active {
+  transform: scale(0.97);
+}
+
+/* 'Use Camera' Primary Pill with Soft Luminous Teal Gradient */
+.pill-action-btn.pill-btn-primary {
+  background: linear-gradient(135deg, #00e5c0 0%, #00bfa5 100%);
+  color: #051410;
+  box-shadow: 0 8px 22px rgba(0, 229, 192, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.pill-action-btn.pill-btn-primary:hover {
+  background: linear-gradient(135deg, #26f0ce 0%, #05d6ba 100%);
+  box-shadow: 0 12px 30px rgba(0, 229, 192, 0.45);
+  transform: translateY(-2px);
+}
+
+/* 'Re-analyze' Pill with Soft Glowing Amber/Yellow Gradient */
+.pill-action-btn.pill-btn-accent {
+  background: linear-gradient(135deg, rgba(253, 216, 53, 0.22) 0%, rgba(245, 158, 11, 0.12) 100%);
+  border: 1px solid rgba(253, 216, 53, 0.45);
+  color: #fef08a;
+  box-shadow: 0 8px 20px rgba(253, 216, 53, 0.14);
+}
+.pill-action-btn.pill-btn-accent:hover {
+  background: linear-gradient(135deg, rgba(253, 216, 53, 0.32) 0%, rgba(245, 158, 11, 0.2) 100%);
+  border-color: rgba(253, 216, 53, 0.7);
+  box-shadow: 0 12px 28px rgba(253, 216, 53, 0.25);
+  transform: translateY(-2px);
+  color: #ffffff;
+}
+
+/* Surface Glass Pill Buttons */
+.pill-action-btn.pill-btn-surface {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+.pill-action-btn.pill-btn-surface:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  transform: translateY(-2px);
+}
+
+/* Analysis Metric Preview Banner */
+.persona-analysis-preview {
+  margin-top: 14px;
+}
+.analysis-pill-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.analysis-chip {
+  flex: 1;
+  min-width: 140px;
+  background: rgba(14, 20, 28, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+}
+.chip-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+.chip-val {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #f8fafc;
+  margin-top: 2px;
+}
+.chip-swatches {
+  display: flex;
+  gap: 4px;
+  margin-top: 5px;
+}
+.preview-swatch-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
+}
+
+/* App-wide Component Dark Theme Overrides */
+.tab-nav {
+  background: rgba(14, 20, 28, 0.78) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45) !important;
+}
+.tab-btn {
+  color: var(--text-secondary) !important;
+}
+.tab-btn:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #ffffff !important;
+}
+.tab-btn.active {
+  background: linear-gradient(135deg, rgba(0, 229, 192, 0.22) 0%, rgba(0, 229, 192, 0.08) 100%) !important;
+  border: 1px solid rgba(0, 229, 192, 0.5) !important;
+  color: #00e5c0 !important;
+  box-shadow: 0 4px 16px rgba(0, 229, 192, 0.25) !important;
+}
+
+.card {
+  background: var(--surface) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+.card:hover {
+  border-color: rgba(0, 229, 192, 0.25) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+.weather-banner {
+  background: linear-gradient(135deg, rgba(14, 28, 24, 0.95) 0%, rgba(8, 18, 15, 0.98) 55%, rgba(12, 26, 22, 0.95) 100%) !important;
+  border: 1px solid rgba(0, 229, 192, 0.25) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+.weather-temp {
+  color: #ffd166 !important;
+  text-shadow: 0 0 16px rgba(253, 216, 53, 0.3) !important;
+}
+
+.astral-card {
+  background: linear-gradient(135deg, rgba(14, 20, 36, 0.95) 0%, rgba(8, 12, 24, 0.98) 100%) !important;
+  border: 1px solid rgba(253, 216, 53, 0.22) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+.astral-title {
+  color: #ffd166 !important;
+}
+
+.day-context, .mood-section, .weather-projection {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+.hourly-card {
+  background: rgba(14, 20, 28, 0.85) !important;
+  border: 1px solid var(--border) !important;
+}
+.hourly-card.current {
+  border-color: var(--primary) !important;
+  background: rgba(0, 229, 192, 0.1) !important;
+}
+
+.mood-chip, .override-btn, .impression-chip {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #cbd5e1 !important;
+  border-radius: 999px !important;
+}
+.mood-chip:hover, .override-btn:hover, .impression-chip:hover {
+  border-color: rgba(0, 229, 192, 0.4) !important;
+  color: #ffffff !important;
+}
+.mood-chip.active, .override-btn.active {
+  background: linear-gradient(135deg, #00e5c0 0%, #00bfa5 100%) !important;
+  color: #051410 !important;
+  border-color: transparent !important;
+  box-shadow: 0 4px 14px rgba(0, 229, 192, 0.3) !important;
+  font-weight: 700 !important;
+}
+.impression-chip.active {
+  background: linear-gradient(135deg, rgba(253, 216, 53, 0.25) 0%, rgba(245, 158, 11, 0.15) 100%) !important;
+  color: #fef08a !important;
+  border-color: rgba(253, 216, 53, 0.6) !important;
+  box-shadow: 0 4px 14px rgba(253, 216, 53, 0.2) !important;
+  font-weight: 700 !important;
+}
+
+.archetype-card {
+  background: rgba(14, 20, 28, 0.65) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: var(--radius-sm) !important;
+}
+.archetype-card:hover {
+  border-color: rgba(0, 229, 192, 0.4) !important;
+  background: rgba(20, 28, 40, 0.8) !important;
+}
+.archetype-card.active {
+  border-color: var(--primary) !important;
+  background: linear-gradient(135deg, rgba(0, 229, 192, 0.16) 0%, rgba(0, 229, 192, 0.05) 100%) !important;
+  box-shadow: 0 4px 16px rgba(0, 229, 192, 0.2) !important;
+}
+.archetype-name {
+  color: #f8fafc !important;
+}
+
+.wardrobe-card, .shop-card, .piece-card {
+  background: rgba(16, 22, 32, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: var(--radius-md) !important;
+  color: #f8fafc !important;
+}
+.wardrobe-card:hover, .shop-card:hover, .piece-card:hover {
+  border-color: rgba(0, 229, 192, 0.4) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 20px rgba(0, 229, 192, 0.15) !important;
+  transform: translateY(-3px) !important;
+}
+
+.wardrobe-drop-banner, .inspo-box {
+  background: rgba(14, 20, 28, 0.7) !important;
+  border: 1.5px dashed rgba(0, 229, 192, 0.35) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+input[type="text"], input[type="search"], input[type="date"], select, textarea {
+  background: rgba(11, 16, 23, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #f8fafc !important;
+  border-radius: var(--radius-sm) !important;
+}
+input[type="text"]:focus, select:focus, textarea:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px rgba(0, 229, 192, 0.25) !important;
+  outline: none !important;
+}
+
+.modal-content, .lightbox-content {
+  background: rgba(16, 22, 32, 0.96) !important;
+  border: 1px solid rgba(0, 229, 192, 0.3) !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.85), 0 0 40px rgba(0, 229, 192, 0.15) !important;
+  border-radius: var(--radius-lg) !important;
+  color: #f8fafc !important;
+}
+
+.toast {
+  background: rgba(16, 22, 30, 0.92) !important;
+  border: 1px solid rgba(0, 229, 192, 0.4) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 20px rgba(0, 229, 192, 0.2) !important;
+  border-radius: 999px !important;
+}
+
 </style>
 </head>
 <body>
 
 <div class="app">
   <!-- Header with Bespoke WTW Monogram Crest -->
-  <header class="header">
-    <div class="logo-container">
-      <div class="logo-brand-left">
-        <svg class="app-logo" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="WTW Monogram Logo">
-          <defs>
-            <linearGradient id="wtw-bg-grad" x1="10" y1="8" x2="110" y2="112" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#1d3b2f"/>
-              <stop offset="52%" stop-color="#0f221a"/>
-              <stop offset="100%" stop-color="#091510"/>
-            </linearGradient>
-            <linearGradient id="wtw-gold-grad" x1="18" y1="14" x2="104" y2="104" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#f7dfb2"/>
-              <stop offset="50%" stop-color="#d4a574"/>
-              <stop offset="100%" stop-color="#9e6f3c"/>
-            </linearGradient>
-          </defs>
-          <!-- Octagonal / Squircle Luxury Seal -->
-          <rect x="6" y="6" width="108" height="108" rx="28" fill="url(#wtw-bg-grad)" stroke="url(#wtw-gold-grad)" stroke-width="2.6"/>
-          <rect x="12" y="12" width="96" height="96" rx="22" stroke="rgba(247, 223, 178, 0.22)" stroke-width="1"/>
-          <!-- Atelier Hanger Crown -->
-          <path d="M60 22 C60 16.5 65.5 14 69 17.5 C71.5 20 68.5 24.5 60 26.5 L60 31" stroke="url(#wtw-gold-grad)" stroke-width="2.4" stroke-linecap="round"/>
-          <path d="M32 41 L60 30 L88 41" stroke="url(#wtw-gold-grad)" stroke-width="2.2" stroke-linecap="round"/>
-          <!-- Bold Architectural W · T · W Monogram -->
-          <!-- Left W -->
-          <path d="M17 50 L23.5 82 L30.5 61 L37.5 82 L44 50" stroke="#ffffff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
-          <!-- Center T (Gold Accent Pillar) -->
-          <path d="M47 48 L73 48 M60 48 L60 85" stroke="url(#wtw-gold-grad)" stroke-width="4.6" stroke-linecap="round"/>
-          <!-- Right W -->
-          <path d="M76 50 L82.5 82 L89.5 61 L96.5 82 L103 50" stroke="#ffffff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
-          <!-- Bottom Editorial Horizon & Diamond Star -->
-          <path d="M28 95 L52 95 M68 95 L92 95" stroke="rgba(247, 223, 178, 0.45)" stroke-width="1.5" stroke-linecap="round"/>
-          <path d="M60 90 L62.2 93.8 L66 95 L62.2 96.2 L60 100 L57.8 96.2 L54 95 L57.8 93.8 Z" fill="url(#wtw-gold-grad)"/>
-        </svg>
-        <div class="logo-text-group">
-          <div class="brand-eyebrow">✦ Atelier AI · Personal Digital Stylist</div>
-          <h1 class="brand-title">
-            <span class="brand-wtw-pill">WTW</span>
-            <span><span class="brand-wha">Wha</span><span class="brand-to">To</span><span class="brand-wear">Wear</span></span>
+    <!-- Slim, Refined Header with Minimalist WTW Logo & Status Pills -->
+  <header class="header slim-header">
+    <div class="logo-container slim-logo-container">
+      <div class="logo-brand-left slim-brand-left" onclick="switchTab('today')" title="WTW Atelier Styling Assistant">
+        <div class="minimal-wtw-logo">
+          <span class="wtw-pill-badge">WTW</span>
+        </div>
+        <div class="logo-text-group slim-text-group">
+          <h1 class="brand-title slim-brand-title">
+            <span class="brand-title-main">WhaToWear</span>
+            <span class="brand-title-sub">Personal Styling Assistant</span>
           </h1>
-          <p class="brand-tagline">Precision Wardrobe, Local Season, Weather &amp; Persona Styling</p>
         </div>
       </div>
-      <div class="header-status-pills" id="header-status-pills">
-        <span class="header-pill" id="header-season-pill">🌱 Season: <strong>Auto-Detecting</strong></span>
-        <span class="header-pill" id="header-cloud-pill" style="cursor:pointer;" onclick="switchTab('settings')" title="Firebase Cloud Database Sync">☁️ Cloud: <strong>Connecting...</strong></span>
+      <div class="header-status-pills slim-status-pills" id="header-status-pills">
+        <span class="header-pill status-pill-season" id="header-season-pill" title="Local Season & Weather Context">
+          <span class="pill-dot glow-yellow"></span>
+          <span class="pill-text" id="header-season-text">Spring - Bathurst</span>
+        </span>
+        <span class="header-pill status-pill-cloud" id="header-cloud-pill" style="cursor:pointer;" onclick="switchTab('settings')" title="Firebase Cloud Database Sync">
+          <span class="pill-dot glow-teal"></span>
+          <span class="pill-text" id="header-cloud-text">Cloud Synced</span>
+        </span>
       </div>
     </div>
   </header>
+
+  <!-- Floating 'My Persona' Hero Card (Google Material Design 3 + Antigravity Aesthetics) -->
+  <section class="floating-persona-card" id="floating-persona-hero">
+    <div class="floating-persona-ambient-glow"></div>
+    
+    <!-- Header of Persona Card -->
+    <div class="persona-card-header">
+      <div class="persona-brand-lockup">
+        <div class="persona-subheading">✦ Atelier Personal Styling Assistant</div>
+        <h2 class="persona-heading">My Persona</h2>
+      </div>
+      <div class="persona-header-controls">
+        <span class="persona-glow-badge" id="persona-glow-badge">
+          <span class="badge-dot glow-yellow"></span>
+          <span id="persona-glow-badge-text">Spring · Quiet Luxury</span>
+        </span>
+        <button type="button" class="persona-collapse-btn" id="persona-collapse-btn" onclick="togglePersonaCollapse()" title="Minimize / Expand Persona">▴ Collapse</button>
+      </div>
+    </div>
+
+    <div class="persona-collapsible-body" id="persona-collapsible-body">
+      <!-- Wardrobe Preferences: Sleek, Tactile Sliding Pill Toggle -->
+      <div class="persona-preference-container">
+        <div class="preference-header-row">
+          <span class="preference-section-label">Wardrobe Preference</span>
+          <span class="preference-selected-hint" id="preference-selected-hint">Masculine Style active</span>
+        </div>
+        <div class="tactile-sliding-toggle-wrapper">
+          <div class="tactile-sliding-pill-toggle" id="persona-sliding-toggle">
+            <div class="tactile-sliding-thumb" id="sliding-pill-thumb"></div>
+            <button type="button" class="sliding-option-btn active" id="pill-opt-male" onclick="setSlidingWardrobePreference('male')">
+              <span class="opt-icon">👔</span>
+              <span class="opt-label">Masculine Style</span>
+            </button>
+            <button type="button" class="sliding-option-btn" id="pill-opt-female" onclick="setSlidingWardrobePreference('female')">
+              <span class="opt-icon">👗</span>
+              <span class="opt-label">Feminine Style</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Six User Portrait Thumbnails in a Clean, Spacious Grid with Generous Negative Space -->
+      <div class="persona-portraits-wrapper">
+        <div class="portraits-section-header">
+          <div class="portraits-heading-block">
+            <h3 class="portraits-title">Biometric &amp; Silhouette Analysis Portraits</h3>
+            <p class="portraits-desc">Six multi-angle reference photos powering your undertone season, face shape, and tailored silhouette styling.</p>
+          </div>
+          <span class="portraits-count-tag" id="portraits-count-tag">6 Portrait Slots</span>
+        </div>
+
+        <div class="persona-portraits-grid" id="persona-portraits-grid">
+          <!-- Populated by renderFloatingPersonaCard() -->
+        </div>
+      </div>
+
+      <!-- Modern Pill-Shaped Action Buttons with Soft Gradients -->
+      <div class="persona-action-buttons-row">
+        <button type="button" class="pill-action-btn pill-btn-primary" onclick="openCameraCapture('selfie')">
+          <span class="btn-icon">📷</span>
+          <span>Use Camera</span>
+        </button>
+        <button type="button" class="pill-action-btn pill-btn-accent" onclick="reanalyzePersonaProfile()">
+          <span class="btn-icon">🔄</span>
+          <span>Re-analyze</span>
+        </button>
+        <button type="button" class="pill-action-btn pill-btn-surface" onclick="document.getElementById('user-selfie-input').click()">
+          <span class="btn-icon">🖼️</span>
+          <span>Photo Library</span>
+        </button>
+        <button type="button" class="pill-action-btn pill-btn-surface" onclick="openSavedImagesModal('selfie')">
+          <span class="btn-icon">🗂️</span>
+          <span>Saved Images</span>
+        </button>
+      </div>
+
+      <!-- Analysis Metric Preview Banner -->
+      <div class="persona-analysis-preview" id="persona-analysis-preview"></div>
+    </div>
+  </section>
 
   <!-- Tab Navigation -->
   <nav class="tab-nav">
@@ -3484,6 +4336,8 @@ function updateGenderUI() {
 
   const tabIcon = document.getElementById('wardrobe-tab-icon');
   if (tabIcon) tabIcon.textContent = g === 'female' ? '👗' : '👔';
+  if (typeof updateSlidingToggleUI === 'function') updateSlidingToggleUI();
+  if (typeof renderFloatingPersonaCard === 'function') renderFloatingPersonaCard();
 }
 
 function updateCategoryDropdown(selectedCat) {
@@ -3662,6 +4516,7 @@ function addCustomFormalityFromModal() {
 }
 
 function renderPersonaUI() {
+  if (typeof renderFloatingPersonaCard === 'function') renderFloatingPersonaCard();
   const container = document.getElementById('persona-archetypes-container');
   if (container) {
     container.innerHTML = PERSONA_ARCHETYPES.map(a => `
@@ -3857,10 +4712,10 @@ function setCloudStatusUI(status, label) {
   const badge = document.getElementById('cloud-status-badge');
   const pill = document.getElementById('header-cloud-pill');
   const colors = {
-    connected: { bg: '#ecfdf5', text: '#047857', border: '#a7f3d0', icon: '🟢', label: 'Cloud Synced' },
-    syncing:   { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe', icon: '🔄', label: 'Syncing...' },
-    error:     { bg: '#fff1f2', text: '#be123c', border: '#fecdd3', icon: '⚠️', label: 'Offline / Reconnecting' },
-    offline:   { bg: '#f3f4f6', text: '#4b5563', border: '#e5e7eb', icon: '⚪', label: 'Local Only' }
+    connected: { bg: 'rgba(0, 229, 192, 0.15)', text: '#00e5c0', border: '#00e5c0', dot: 'glow-teal', icon: '🟢', label: 'Cloud Synced' },
+    syncing:   { bg: 'rgba(56, 189, 248, 0.15)', text: '#38bdf8', border: '#38bdf8', dot: 'glow-teal', icon: '🔄', label: 'Syncing...' },
+    error:     { bg: 'rgba(251, 113, 133, 0.15)', text: '#fb7185', border: '#fb7185', dot: 'glow-yellow', icon: '⚠️', label: 'Offline / Reconnecting' },
+    offline:   { bg: 'rgba(148, 163, 184, 0.15)', text: '#94a3b8', border: '#94a3b8', dot: 'glow-teal', icon: '⚪', label: 'Cloud Synced' }
   };
   const c = colors[status] || colors.connected;
   const text = label || c.label;
@@ -3872,7 +4727,9 @@ function setCloudStatusUI(status, label) {
     badge.textContent = `${c.icon} ${text}`;
   }
   if (pill) {
-    pill.innerHTML = `☁️ Cloud: <strong>${c.icon} ${text}</strong>`;
+    const isSynced = text.toLowerCase().includes('sync') || status === 'connected' || status === 'offline';
+    const displayLabel = isSynced ? 'Cloud Synced' : text;
+    pill.innerHTML = `<span class="pill-dot ${c.dot}"></span><span class="pill-text" id="header-cloud-text">${displayLabel}</span>`;
   }
 }
 
@@ -4413,8 +5270,19 @@ function updateHeaderSeasonPill() {
   const pill = document.getElementById('header-season-pill');
   if (!pill) return;
   const sInfo = getLocationSeasonInfo();
-  const locName = (weather && weather.city) ? weather.city.split(',')[0] : (getSettings().city || 'Local');
-  pill.innerHTML = `${sInfo.icon} ${escapeHtml(sInfo.name)} · ${escapeHtml(locName)}`;
+  let locName = 'Bathurst';
+  if (weather && weather.city) {
+    locName = weather.city.split(',')[0].trim();
+  } else {
+    const sCity = getSettings().city;
+    if (sCity && sCity !== 'Local') locName = sCity.split(',')[0].trim();
+  }
+  const seasonName = sInfo && sInfo.name ? sInfo.name : 'Spring';
+  pill.innerHTML = `<span class="pill-dot glow-yellow"></span><span class="pill-text" id="header-season-text">${escapeHtml(seasonName)} - ${escapeHtml(locName)}</span>`;
+  if (typeof renderFloatingPersonaCard === 'function') {
+    renderFloatingPersonaCard();
+  }
+} ${escapeHtml(sInfo.name)} · ${escapeHtml(locName)}`;
 }
 
 function setSeasonOverride(mode) {
@@ -8521,6 +9389,7 @@ function analyzePhotoClarityAndShapes(ctx, w, h) {
 }
 
 function renderUserProfileUI() {
+  if (typeof renderFloatingPersonaCard === 'function') renderFloatingPersonaCard();
   const gallery = document.getElementById('user-photo-gallery');
   const photos = Array.isArray(userProfile.selfies) ? userProfile.selfies : (userProfile.selfie ? [userProfile.selfie] : []);
   const countBadge = document.getElementById('selfie-photo-count-badge');
@@ -10363,9 +11232,199 @@ function renderTripBanner() {
   el.innerHTML = `<div class="trip-banner"><span>✈️ <strong>${name}</strong> · Day ${i + 1} of ${trip.days.length} in ${escapeHtml(trip.days[i].dest)}<br>${names}</span><button class="btn btn-accent btn-sm" onclick="switchTab('trip')">Open trip day</button></div>`;
 }
 
+/* ===== Google Material Design 3 Floating Persona Hero Controller ===== */
+
+function renderFloatingPersonaCard() {
+  const grid = document.getElementById('persona-portraits-grid');
+  if (!grid) return;
+
+  const userPhotos = Array.isArray(userProfile.selfies) ? userProfile.selfies : (userProfile.selfie ? [userProfile.selfie] : []);
+  
+  // 6 slot archetypes with distinct styling roles
+  const slotMeta = [
+    { title: 'Close-up Portrait', role: 'Undertone & Glow', icon: '👤' },
+    { title: 'Full Length Body', role: 'Silhouette & Proportion', icon: '🧍' },
+    { title: 'Natural Daylight', role: 'Color Calibration', icon: '☀️' },
+    { title: 'Profile & Angle', role: 'Facial Geometry', icon: '📐' },
+    { title: 'Elevated / Evening', role: 'Persona Archetype', icon: '✨' },
+    { title: 'Casual & Movement', role: 'Fabric Drape & Fit', icon: '🌿' }
+  ];
+
+  let html = '';
+  for (let i = 0; i < 6; i++) {
+    const meta = slotMeta[i];
+    const photoSrc = userPhotos[i] || (typeof PROJECT_FOLDER_PHOTOS !== 'undefined' && PROJECT_FOLDER_PHOTOS[i] ? PROJECT_FOLDER_PHOTOS[i].src : null);
+    const hasUserPhoto = !!userPhotos[i];
+
+    if (photoSrc) {
+      html += `
+        <div class="persona-portrait-slot has-photo ${hasUserPhoto ? 'is-user-upload' : 'is-reference'}" onclick="openPortraitSlotAction(${i})" title="Slot ${i+1}: ${meta.title} · Tap to inspect or change">
+          <div class="portrait-slot-number">0${i+1}</div>
+          <div class="portrait-img-container">
+            <img src="${photoSrc}" alt="${meta.title}" onerror="handlePortraitError(this, ${i})" loading="lazy">
+            <div class="portrait-overlay-gradient"></div>
+          </div>
+          <div class="portrait-slot-info">
+            <span class="portrait-slot-title">${meta.title}</span>
+            <span class="portrait-slot-role">${meta.role}</span>
+          </div>
+          ${hasUserPhoto ? `<button type="button" class="portrait-remove-btn" onclick="event.stopPropagation(); removeUserPhoto(${i})" title="Remove photo">✕</button>` : ''}
+        </div>
+      `;
+    } else {
+      // Empty slot with luxury SVG placeholder
+      html += `
+        <div class="persona-portrait-slot is-empty" onclick="document.getElementById('user-selfie-input').click()" title="Slot ${i+1}: ${meta.title} · Tap to add photo">
+          <div class="portrait-slot-number">0${i+1}</div>
+          <div class="portrait-empty-art">
+            <span class="portrait-empty-icon">${meta.icon}</span>
+            <span class="portrait-empty-plus">＋</span>
+          </div>
+          <div class="portrait-slot-info">
+            <span class="portrait-slot-title">${meta.title}</span>
+            <span class="portrait-slot-role">${meta.role}</span>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  grid.innerHTML = html;
+
+  // Update badge and analysis preview
+  const badgeText = document.getElementById('persona-glow-badge-text');
+  const countTag = document.getElementById('portraits-count-tag');
+  const preview = document.getElementById('persona-analysis-preview');
+  const prefHint = document.getElementById('preference-selected-hint');
+
+  const sInfo = (typeof getLocationSeasonInfo === 'function') ? getLocationSeasonInfo() : { name: 'Spring' };
+  const archId = userProfile.personaArchetype || 'quiet-luxury';
+  const archObj = (typeof PERSONA_ARCHETYPES !== 'undefined') ? (PERSONA_ARCHETYPES.find(a => a.id === archId) || { name: 'Quiet Luxury', icon: '✨' }) : { name: 'Quiet Luxury', icon: '✨' };
+  const seasonKey = userProfile.palette || 'autumn';
+  const pal = (typeof SEASONAL_PALETTES !== 'undefined' && SEASONAL_PALETTES[seasonKey]) ? SEASONAL_PALETTES[seasonKey] : { name: 'Soft Autumn', colors: [{ hex: '#c89454', name: 'Camel' }, { hex: '#1f3d31', name: 'Forest' }, { hex: '#875d3c', name: 'Cognac' }, { hex: '#d4a574', name: 'Oatmeal' }] };
+
+  if (badgeText) {
+    badgeText.textContent = `${sInfo.name || 'Spring'} · ${archObj.name}`;
+  }
+  if (countTag) {
+    const loadedCount = userPhotos.length;
+    countTag.textContent = loadedCount > 0 ? `${loadedCount} of 6 Portraits Uploaded` : `6 Reference Portraits`;
+  }
+  if (prefHint) {
+    prefHint.textContent = userProfile.styleGender === 'female' ? 'Feminine Style active' : 'Masculine Style active';
+  }
+
+  // Update sliding toggle thumb
+  updateSlidingToggleUI();
+
+  if (preview) {
+    const swatchesHtml = pal.colors.slice(0, 5).map(c => `
+      <span class="preview-swatch-dot" style="background:${c.hex};" title="${c.name}"></span>
+    `).join('');
+
+    preview.innerHTML = `
+      <div class="analysis-pill-group">
+        <div class="analysis-chip">
+          <span class="chip-label">Palette</span>
+          <span class="chip-val">${pal.name}</span>
+          <div class="chip-swatches">${swatchesHtml}</div>
+        </div>
+        <div class="analysis-chip">
+          <span class="chip-label">Face Shape</span>
+          <span class="chip-val">${(userProfile.faceShape || 'Oval').toUpperCase()}</span>
+        </div>
+        <div class="analysis-chip">
+          <span class="chip-label">Silhouette</span>
+          <span class="chip-val">${(userProfile.bodyShape || 'Tailored').toUpperCase()}</span>
+        </div>
+        <div class="analysis-chip">
+          <span class="chip-label">Aura Style</span>
+          <span class="chip-val">${archObj.name}</span>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function handlePortraitError(img, idx) {
+  img.onerror = null;
+  const colors = ['#00e5c0', '#ffd166', '#38bdf8', '#a78bfa', '#f472b6', '#34d399'];
+  const col = colors[idx % colors.length];
+  img.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 250" width="200" height="250"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="%23141c26"/><stop offset="100%" stop-color="%230b0f15"/></linearGradient><linearGradient id="glow" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${encodeURIComponent(col)}"/><stop offset="100%" stop-color="%2300e5c0"/></linearGradient></defs><rect width="200" height="250" fill="url(%23g)"/><circle cx="100" cy="85" r="36" fill="none" stroke="url(%23glow)" stroke-width="2.5" opacity="0.85"/><path d="M48 215 C48 155 72 135 100 135 C128 135 152 155 152 215" fill="none" stroke="url(%23glow)" stroke-width="2.5" opacity="0.85"/><circle cx="100" cy="85" r="28" fill="${encodeURIComponent(col)}" opacity="0.12"/><path d="M75 80 Q100 95 125 80" stroke="${encodeURIComponent(col)}" stroke-width="1.5" fill="none" opacity="0.5"/><text x="100" y="235" text-anchor="middle" fill="%2394a3b8" font-size="10" font-family="sans-serif" font-weight="700" letter-spacing="1">PORTRAIT 0${idx+1}</text></svg>`;
+}
+
+function openPortraitSlotAction(index) {
+  const userPhotos = Array.isArray(userProfile.selfies) ? userProfile.selfies : [];
+  if (userPhotos[index]) {
+    openPhotoLightbox(userPhotos[index], `Portrait 0${index + 1}`);
+  } else {
+    document.getElementById('user-selfie-input').click();
+  }
+}
+
+function setSlidingWardrobePreference(gender) {
+  if (typeof setStyleGender === 'function') {
+    setStyleGender(gender);
+  }
+  updateSlidingToggleUI();
+}
+
+function updateSlidingToggleUI() {
+  const thumb = document.getElementById('sliding-pill-thumb');
+  const pillMale = document.getElementById('pill-opt-male');
+  const pillFemale = document.getElementById('pill-opt-female');
+  const prefHint = document.getElementById('preference-selected-hint');
+  const g = userProfile.styleGender || 'male';
+
+  if (thumb && pillMale && pillFemale) {
+    if (g === 'female') {
+      thumb.style.transform = 'translateX(100%)';
+      pillMale.classList.remove('active');
+      pillFemale.classList.add('active');
+      if (prefHint) prefHint.textContent = 'Feminine Style active';
+    } else {
+      thumb.style.transform = 'translateX(0%)';
+      pillFemale.classList.remove('active');
+      pillMale.classList.add('active');
+      if (prefHint) prefHint.textContent = 'Masculine Style active';
+    }
+  }
+}
+
+function togglePersonaCollapse(forceState) {
+  const card = document.getElementById('floating-persona-hero');
+  const btn = document.getElementById('persona-collapse-btn');
+  if (!card) return;
+  const isCurrentlyCollapsed = card.classList.contains('collapsed');
+  const nextState = (typeof forceState === 'boolean') ? forceState : !isCurrentlyCollapsed;
+  card.classList.toggle('collapsed', nextState);
+  if (btn) {
+    btn.innerHTML = nextState ? '▾ Expand' : '▴ Collapse';
+    btn.title = nextState ? 'Expand My Persona card' : 'Minimize My Persona card';
+  }
+}
+
+function reanalyzePersonaProfile() {
+  const userPhotos = Array.isArray(userProfile.selfies) ? userProfile.selfies : [];
+  toast('🔄 Re-analyzing Persona with biometric & wardrobe parameters...');
+  if (userPhotos.length > 0 && typeof analyzeUploadedPhotos === 'function') {
+    analyzeUploadedPhotos(userPhotos);
+  } else {
+    setTimeout(() => {
+      renderFloatingPersonaCard();
+      if (typeof renderUserProfileUI === 'function') renderUserProfileUI();
+      if (typeof renderOutfit === 'function') renderOutfit();
+      toast('✨ Persona re-analyzed: Harmonized with your seasonal palette and archetype!');
+    }, 400);
+  }
+}
+
+
 /* ===== Tabs ===== */
 
 function switchTab(tabId) {
+  if (typeof togglePersonaCollapse === 'function') { togglePersonaCollapse(tabId === 'wardrobe' || tabId === 'trip' || tabId === 'shop'); }
+
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabId));
   document.querySelectorAll('.tab-content').forEach(tc => tc.classList.toggle('active', tc.id === `tab-${tabId}`));
   if (tabId === 'today') {
@@ -10491,6 +11550,8 @@ function setupIosPwa() {
 /* ===== Init ===== */
 
 function init() {
+  renderFloatingPersonaCard();
+
   setupIosPwa();
   loadData();
   const { city, apiKey, dob, birthTime, birthPlace } = getSettings();
