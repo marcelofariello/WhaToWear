@@ -5279,12 +5279,10 @@ function updateHeaderSeasonPill() {
   }
   const seasonName = sInfo && sInfo.name ? sInfo.name : 'Spring';
   pill.innerHTML = `<span class="pill-dot glow-yellow"></span><span class="pill-text" id="header-season-text">${escapeHtml(seasonName)} - ${escapeHtml(locName)}</span>`;
-  if (typeof renderFloatingPersonaCard === 'function') {
+    if (typeof renderFloatingPersonaCard === 'function') {
     renderFloatingPersonaCard();
   }
-} ${escapeHtml(sInfo.name)} · ${escapeHtml(locName)}`;
 }
-
 function setSeasonOverride(mode) {
   seasonOverride = mode || 'auto';
   try { localStorage.setItem('wtw_season_override', seasonOverride); } catch (e) {}
