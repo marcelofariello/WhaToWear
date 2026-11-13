@@ -9,7 +9,7 @@ import type {
   SyncUserScope,
 } from '../types/cloudSync.js';
 
-export const DEFAULT_UPLOAD_CONCURRENCY = 4;
+export const DEFAULT_UPLOAD_CONCURRENCY = 5;
 export const FIRESTORE_BATCH_MAX_OPS = 400;
 export const FIRESTORE_SAFE_DOC_BYTES = 900 * 1024;
 
@@ -72,7 +72,8 @@ export function sanitizeItemForFirestore(
 export async function runWithBoundedConcurrency<T, R>(
   items: readonly T[],
   concurrency: number,
-  worker: (item: T, index: number) => Promise<R>
+  worker: (item: T, index: number) => Promise<R>,
+  onItemSettled?: (index: number, outcome: PromiseSettledResult<R>) => void
 ): Promise<Array<PromiseSettledResult<R>>> {
   const limit = Math.max(1, Math.min(concurrency, items.length || 1));
   const results: Array<PromiseSettledResult<R>> = new Array(items.length);
@@ -87,6 +88,9 @@ export async function runWithBoundedConcurrency<T, R>(
         results[idx] = { status: 'fulfilled', value };
       } catch (reason) {
         results[idx] = { status: 'rejected', reason };
+      }
+      if (onItemSettled) {
+        onItemSettled(idx, results[idx]);
       }
     }
   });
@@ -160,47 +164,55 @@ export async function syncWardrobeItemsBatch(
     failed: 0,
   });
 
-  const storageOutcomes = await runWithBoundedConcurrency(items, concurrency, async (item) => {
-    const needsUpload = isInlineBase64DataUrl(item.image) && !item.imageUrl;
-    if (!needsUpload) {
-      return sanitizeItemForFirestore(item, scope, now);
-    }
+  let succeededCount = 0;
+  let failedStorageCount = 0;
+  const storageOutcomes = await runWithBoundedConcurrency(
+    items,
+    concurrency,
+    async (item) => {
+      const needsUpload = isInlineBase64DataUrl(item.image) && !item.imageUrl;
+      if (!needsUpload) {
+        return sanitizeItemForFirestore(item, scope, now);
+      }
 
-    const uploaded = await adapters.uploadItemImage(item, scope);
-    return sanitizeItemForFirestore(
-      {
-        ...item,
-        image: uploaded.imageUrl,
-        imageUrl: uploaded.imageUrl,
-        storagePath: uploaded.storagePath,
-      },
-      scope,
-      now
-    );
-  });
-
-  storageOutcomes.forEach((outcome, idx) => {
-    completed++;
-    const sourceItem = items[idx];
-    if (outcome.status === 'fulfilled') {
-      readyForFirestore.push(outcome.value);
-    } else {
-      failedRecords.push({
-        item: sourceItem,
-        stage: 'storage',
-        reason: formatErrorMessage(outcome.reason),
-        failedAt: Date.now(),
+      const uploaded = await adapters.uploadItemImage(item, scope);
+      return sanitizeItemForFirestore(
+        {
+          ...item,
+          image: uploaded.imageUrl,
+          imageUrl: uploaded.imageUrl,
+          storagePath: uploaded.storagePath,
+        },
+        scope,
+        now
+      );
+    },
+    (idx, outcome) => {
+      completed++;
+      const sourceItem = items[idx];
+      if (outcome.status === 'fulfilled') {
+        readyForFirestore.push(outcome.value);
+        succeededCount++;
+      } else {
+        failedStorageCount++;
+        failedRecords.push({
+          item: sourceItem,
+          stage: 'storage',
+          reason: formatErrorMessage(outcome.reason),
+          failedAt: Date.now(),
+        });
+      }
+      adapters.onProgress?.({
+        phase: 'uploading',
+        total: items.length,
+        completed,
+        succeeded: succeededCount,
+        failed: failedStorageCount,
+        currentLabel: sourceItem.name,
       });
     }
-    adapters.onProgress?.({
-      phase: 'uploading',
-      total: items.length,
-      completed,
-      succeeded: readyForFirestore.length,
-      failed: failedRecords.length,
-      currentLabel: sourceItem.name,
-    });
-  });
+  );
+  void storageOutcomes;
 
   const committedItems: CloudWardrobeItem[] = [];
   let batchesCommitted = 0;

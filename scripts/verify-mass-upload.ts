@@ -62,8 +62,12 @@ async function runTests(): Promise<void> {
   let maxInFlight = 0;
   const firestoreStore = new Map<string, CloudWardrobeItem>();
   let summarySnapshots: CloudWardrobeItem[] = [];
+  const progressSnapshots: number[] = [];
 
   const partialResult = await syncWardrobeItemsBatch(items, scope, {
+    onProgress: (p) => {
+      if (p.phase === 'uploading') progressSnapshots.push(p.completed);
+    },
     uploadItemImage: async (item) => {
       inFlight++;
       if (inFlight > maxInFlight) maxInFlight = inFlight;
@@ -95,8 +99,12 @@ async function runTests(): Promise<void> {
   });
 
   assert.ok(
-    maxInFlight <= DEFAULT_UPLOAD_CONCURRENCY,
-    `Expected bounded concurrency <= ${DEFAULT_UPLOAD_CONCURRENCY}, observed ${maxInFlight}`
+    maxInFlight <= DEFAULT_UPLOAD_CONCURRENCY && maxInFlight >= 2,
+    `Expected bounded concurrency between 2 and ${DEFAULT_UPLOAD_CONCURRENCY}, observed ${maxInFlight}`
+  );
+  assert.ok(
+    progressSnapshots.includes(1) && progressSnapshots.includes(15),
+    `Expected live per-item upload progress events, got ${JSON.stringify(progressSnapshots)}`
   );
   assert.notEqual(partialResult.status, 'connected', 'Failed promises must prevent connected status');
   assert.notEqual(partialResult.statusLabel, 'Cloud Synced', 'Failed promises must prevent false Cloud Synced label');

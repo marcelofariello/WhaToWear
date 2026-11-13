@@ -4891,9 +4891,13 @@ let subcollectionItemsLoaded = false;
 let failedCloudSyncItems = [];
 let isCloudSyncInFlight = false;
 
-const CLOUD_UPLOAD_CONCURRENCY = 4;
+const CLOUD_UPLOAD_CONCURRENCY = 5;
+const COMPRESSION_LOOKAHEAD_CONCURRENCY = 4;
 const FIRESTORE_BATCH_LIMIT = 400;
 const FIRESTORE_SAFE_DOC_BYTES = 900 * 1024;
+let ensureFirebaseAuthPromise = null;
+const compressedUploadCache = new Map();
+const compressedUploadInFlight = new Map();
 
 function isInlineBase64DataUrl(val) {
   return typeof val === 'string' && /^\s*data:/i.test(val);
@@ -5019,19 +5023,27 @@ async function ensureFirebaseAuthSession() {
   if (typeof firebase === 'undefined' || typeof firebase.auth !== 'function') {
     return null;
   }
-  try {
-    firebaseAuth = firebase.auth();
-    if (firebaseAuth.currentUser) {
-      currentFirebaseUser = firebaseAuth.currentUser;
-      return currentFirebaseUser;
-    }
-    const cred = await firebaseAuth.signInAnonymously();
-    currentFirebaseUser = cred?.user || firebaseAuth.currentUser || null;
+  firebaseAuth = firebaseAuth || firebase.auth();
+  if (firebaseAuth.currentUser) {
+    currentFirebaseUser = firebaseAuth.currentUser;
     return currentFirebaseUser;
-  } catch (err) {
-    console.warn('Firebase anonymous auth unavailable:', err?.code || '', err?.message || err);
-    return firebaseAuth?.currentUser || null;
   }
+  if (ensureFirebaseAuthPromise) {
+    return ensureFirebaseAuthPromise;
+  }
+  ensureFirebaseAuthPromise = (async () => {
+    try {
+      const cred = await firebaseAuth.signInAnonymously();
+      currentFirebaseUser = cred?.user || firebaseAuth.currentUser || null;
+      return currentFirebaseUser;
+    } catch (err) {
+      console.warn('Firebase anonymous auth unavailable:', err?.code || '', err?.message || err);
+      return firebaseAuth?.currentUser || null;
+    } finally {
+      ensureFirebaseAuthPromise = null;
+    }
+  })();
+  return ensureFirebaseAuthPromise;
 }
 
 function initFirebaseSync() {
@@ -5273,52 +5285,168 @@ function applyRemoteCloudData(data, opts = {}) {
   }
 }
 
-async function compressImageForCloudUpload(srcDataUrl, { maxDim = 900, initialQuality = 0.80, maxBytes = 350 * 1024 } = {}) {
-  const img = await new Promise((resolve, reject) => {
-    const i = new Image();
-    i.crossOrigin = 'anonymous';
-    i.onload = () => resolve(i);
-    i.onerror = () => reject(new Error('Failed to decode garment image for compression'));
-    i.src = srcDataUrl;
-  });
+function dataUrlToBlobFast(dataUrl) {
+  if (typeof dataUrl !== 'string') return null;
+  const match = dataUrl.match(/^\s*data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  if (!match) return null;
+  const mime = match[1].toLowerCase();
+  const bin = atob(match[2]);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) {
+    bytes[i] = bin.charCodeAt(i);
+  }
+  return { blob: new Blob([bytes], { type: mime }), bytes, mime };
+}
 
-  const rawW = img.naturalWidth || img.width || 480;
-  const rawH = img.naturalHeight || img.height || 480;
-  const scale = Math.min(1, maxDim / Math.max(rawW, rawH));
-  const w = Math.max(1, Math.round(rawW * scale));
-  const h = Math.max(1, Math.round(rawH * scale));
+function readJpegDimensionsFromBytes(bytes) {
+  if (!bytes || bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+  let offset = 2;
+  const scanLimit = Math.min(bytes.length - 8, 65536);
+  while (offset < scanLimit) {
+    if (bytes[offset] !== 0xff) {
+      offset++;
+      continue;
+    }
+    const marker = bytes[offset + 1];
+    if (marker === 0xd9 || marker === 0xda) break;
+    if (marker === 0x00 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) {
+      offset += 2;
+      continue;
+    }
+    const segLen = (bytes[offset + 2] << 8) | bytes[offset + 3];
+    if (segLen < 2) break;
+    // SOF0..SOF3, SOF5..SOF7, SOF9..SOF11, SOF13..SOF15 encode image height/width
+    if (
+      (marker >= 0xc0 && marker <= 0xc3) ||
+      (marker >= 0xc5 && marker <= 0xc7) ||
+      (marker >= 0xc9 && marker <= 0xcb) ||
+      (marker >= 0xcd && marker <= 0xcf)
+    ) {
+      if (offset + 8 < bytes.length) {
+        const height = (bytes[offset + 5] << 8) | bytes[offset + 6];
+        const width = (bytes[offset + 7] << 8) | bytes[offset + 8];
+        if (width > 0 && height > 0) return { width, height };
+      }
+      break;
+    }
+    offset += 2 + segLen;
+  }
+  return null;
+}
 
+async function renderBitmapToJpegBlob(source, w, h, quality) {
+  if (typeof OffscreenCanvas !== 'undefined') {
+    try {
+      const oc = new OffscreenCanvas(w, h);
+      const ctx = oc.getContext('2d');
+      ctx.drawImage(source, 0, 0, w, h);
+      if (typeof oc.convertToBlob === 'function') {
+        return await oc.convertToBlob({ type: 'image/jpeg', quality });
+      }
+    } catch {
+      // Fall back to standard DOM canvas when OffscreenCanvas JPEG conversion is unsupported
+    }
+  }
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(img, 0, 0, w, h);
-
-  const exportBlob = (q) => new Promise((resolve, reject) => {
+  ctx.drawImage(source, 0, 0, w, h);
+  return await new Promise((resolve, reject) => {
     if (typeof canvas.toBlob === 'function') {
-      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Canvas JPEG compression failed'))), 'image/jpeg', q);
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Canvas JPEG compression failed'))), 'image/jpeg', quality);
       return;
     }
     try {
-      const dataUri = canvas.toDataURL('image/jpeg', q);
-      const bin = atob(dataUri.split(',')[1]);
-      const arr = new Uint8Array(bin.length);
-      for (let idx = 0; idx < bin.length; idx++) arr[idx] = bin.charCodeAt(idx);
-      resolve(new Blob([arr], { type: 'image/jpeg' }));
+      const fast = dataUrlToBlobFast(canvas.toDataURL('image/jpeg', quality));
+      if (fast) resolve(fast.blob);
+      else reject(new Error('Canvas JPEG dataURL export failed'));
     } catch (e) {
       reject(e);
     }
   });
-
-  const qualitySteps = [initialQuality, 0.68, 0.56];
-  let blob = await exportBlob(qualitySteps[0]);
-  for (let i = 1; i < qualitySteps.length && blob.size > maxBytes; i++) {
-    blob = await exportBlob(qualitySteps[i]);
-  }
-  return { blob, byteLength: blob.size, width: w, height: h };
 }
 
-async function uploadBlobToFirebaseStorage(storagePath, srcDataUrl, metadataTags = {}) {
+async function compressImageForCloudUpload(
+  srcDataUrl,
+  { maxDim = 760, initialQuality = 0.76, maxBytes = 180 * 1024, fastBypassBytes = 140 * 1024 } = {}
+) {
+  if (compressedUploadCache.has(srcDataUrl)) {
+    return compressedUploadCache.get(srcDataUrl);
+  }
+  if (compressedUploadInFlight.has(srcDataUrl)) {
+    return compressedUploadInFlight.get(srcDataUrl);
+  }
+
+  const job = (async () => {
+    const parsedFast = dataUrlToBlobFast(srcDataUrl);
+    if (parsedFast && parsedFast.mime === 'image/jpeg' && parsedFast.blob.size <= fastBypassBytes) {
+      const dims = readJpegDimensionsFromBytes(parsedFast.bytes);
+      if (!dims || Math.max(dims.width, dims.height) <= maxDim) {
+        const fastResult = {
+          blob: parsedFast.blob,
+          byteLength: parsedFast.blob.size,
+          width: dims?.width || 480,
+          height: dims?.height || 480,
+          fastBypass: true
+        };
+        compressedUploadCache.set(srcDataUrl, fastResult);
+        return fastResult;
+      }
+    }
+
+    let bitmap = null;
+    let imgEl = null;
+    try {
+      if (typeof createImageBitmap === 'function') {
+        try {
+          const srcBlob = parsedFast ? parsedFast.blob : await fetch(srcDataUrl).then(r => r.blob());
+          bitmap = await createImageBitmap(srcBlob);
+        } catch {
+          bitmap = null;
+        }
+      }
+
+      if (!bitmap) {
+        imgEl = await new Promise((resolve, reject) => {
+          const i = new Image();
+          i.crossOrigin = 'anonymous';
+          i.onload = () => resolve(i);
+          i.onerror = () => reject(new Error('Failed to decode garment image for compression'));
+          i.src = srcDataUrl;
+        });
+      }
+
+      const source = bitmap || imgEl;
+      const rawW = bitmap ? bitmap.width : (imgEl.naturalWidth || imgEl.width || 480);
+      const rawH = bitmap ? bitmap.height : (imgEl.naturalHeight || imgEl.height || 480);
+      const scale = Math.min(1, maxDim / Math.max(rawW, rawH));
+      const w = Math.max(1, Math.round(rawW * scale));
+      const h = Math.max(1, Math.round(rawH * scale));
+
+      let blob = await renderBitmapToJpegBlob(source, w, h, initialQuality);
+      if (blob.size > maxBytes) {
+        blob = await renderBitmapToJpegBlob(source, w, h, 0.58);
+      }
+      const result = { blob, byteLength: blob.size, width: w, height: h };
+      compressedUploadCache.set(srcDataUrl, result);
+      return result;
+    } finally {
+      if (bitmap && typeof bitmap.close === 'function') {
+        bitmap.close();
+      }
+    }
+  })();
+
+  compressedUploadInFlight.set(srcDataUrl, job);
+  try {
+    return await job;
+  } finally {
+    compressedUploadInFlight.delete(srcDataUrl);
+  }
+}
+
+async function uploadBlobToFirebaseStorage(storagePath, srcDataUrl, metadataTags = {}, opts = {}) {
   if (!firebaseStorage && typeof firebase !== 'undefined' && typeof firebase.storage === 'function') {
     firebaseStorage = firebase.storage();
   }
@@ -5326,18 +5454,32 @@ async function uploadBlobToFirebaseStorage(storagePath, srcDataUrl, metadataTags
     throw new Error('Firebase Storage SDK is not available. Cannot upload garment image.');
   }
 
-  await ensureFirebaseAuthSession();
-  const { blob, byteLength } = await compressImageForCloudUpload(srcDataUrl);
-  const storageRef = firebaseStorage.ref(storagePath);
-  const snap = await storageRef.put(blob, {
-    contentType: 'image/jpeg',
-    customMetadata: metadataTags
-  });
-  const imageUrl = await snap.ref.getDownloadURL();
-  return { imageUrl, storagePath, bytes: byteLength };
+  // Run compression before awaiting auth so image prep overlaps with auth session setup
+  const authPromise = opts.authPromise || ensureFirebaseAuthSession();
+  const compressed = await compressImageForCloudUpload(srcDataUrl);
+  await authPromise;
+
+  try {
+    const storageRef = firebaseStorage.ref(storagePath);
+    const snap = await storageRef.put(compressed.blob, {
+      contentType: 'image/jpeg',
+      cacheControl: 'public,max-age=31536000,immutable',
+      customMetadata: metadataTags
+    });
+    const tokens = snap?.metadata?.downloadTokens;
+    const bucket = snap?.metadata?.bucket;
+    const fullPath = snap?.metadata?.fullPath || storagePath;
+    const firstToken = typeof tokens === 'string' ? tokens.split(',')[0].trim() : '';
+    const imageUrl = (firstToken && bucket)
+      ? `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(fullPath)}?alt=media&token=${encodeURIComponent(firstToken)}`
+      : await snap.ref.getDownloadURL();
+    return { imageUrl, storagePath, bytes: compressed.byteLength };
+  } finally {
+    compressedUploadCache.delete(srcDataUrl);
+  }
 }
 
-async function runWithBoundedConcurrency(items, concurrency, worker) {
+async function runWithBoundedConcurrency(items, concurrency, worker, onItemSettled = null) {
   const limit = Math.max(1, Math.min(concurrency, items.length || 1));
   const results = new Array(items.length);
   let cursor = 0;
@@ -5350,6 +5492,9 @@ async function runWithBoundedConcurrency(items, concurrency, worker) {
         results[idx] = { status: 'fulfilled', value };
       } catch (reason) {
         results[idx] = { status: 'rejected', reason };
+      }
+      if (typeof onItemSettled === 'function') {
+        try { onItemSettled(idx, results[idx]); } catch {}
       }
     }
   });
@@ -5489,45 +5634,82 @@ async function syncWardrobeItemsToCloud(itemsToSync, { deletedIds = [], onProgre
     setCloudStatusUI('syncing', targets.length > 0 ? `Uploading 0/${targets.length}...` : 'Syncing...');
     onProgress?.({ phase: 'uploading', total: targets.length, completed: 0, succeeded: 0, failed: 0 });
 
-    await ensureFirebaseAuthSession();
+    const authPromise = ensureFirebaseAuthSession();
+    const needsUploadItem = (item) => !item.imageUrl && (
+      isInlineBase64DataUrl(item.image) ||
+      (typeof item.image === 'string' && item.image.startsWith('/api/garment-photos/'))
+    );
 
-    const storageOutcomes = await runWithBoundedConcurrency(targets, CLOUD_UPLOAD_CONCURRENCY, async (item) => {
-      const needsUpload = !item.imageUrl && (
-        isInlineBase64DataUrl(item.image) ||
-        (typeof item.image === 'string' && item.image.startsWith('/api/garment-photos/'))
-      );
-      if (!needsUpload) {
-        return sanitizeWardrobeItemForFirestore(item, scope, now);
+    // Pre-compress upcoming upload items in parallel with auth & active Storage transfers
+    const uploadCandidates = targets.filter(needsUploadItem);
+    const lookaheadDonePromise = runWithBoundedConcurrency(
+      uploadCandidates,
+      COMPRESSION_LOOKAHEAD_CONCURRENCY,
+      (item) => compressImageForCloudUpload(item.image)
+    ).catch(() => {});
+
+    let succeededCount = 0;
+    const storageOutcomes = await runWithBoundedConcurrency(
+      targets,
+      CLOUD_UPLOAD_CONCURRENCY,
+      async (item) => {
+        if (!needsUploadItem(item)) {
+          return sanitizeWardrobeItemForFirestore(item, scope, now);
+        }
+
+        const storagePath = `wardrobes/${scope.vaultKey}/items/${item.id}.jpg`;
+        const uploaded = await uploadBlobToFirebaseStorage(
+          storagePath,
+          item.image,
+          {
+            userId: scope.userId,
+            vaultKey: scope.vaultKey,
+            itemId: item.id
+          },
+          { authPromise }
+        );
+
+        return sanitizeWardrobeItemForFirestore(
+          {
+            ...item,
+            image: uploaded.imageUrl,
+            imageUrl: uploaded.imageUrl,
+            storagePath: uploaded.storagePath
+          },
+          scope,
+          now
+        );
+      },
+      (idx, outcome) => {
+        completed++;
+        const sourceItem = targets[idx];
+        if (outcome.status === 'fulfilled') {
+          succeededCount++;
+        } else {
+          const err = outcome.reason;
+          const msg = (err && (err.code ? `${err.code}: ${err.message}` : err.message)) || String(err || 'Storage upload failed');
+          console.error(`[CloudSync][Storage] Failed for "${sourceItem.name}" (${sourceItem.id}):`, err);
+        }
+        setCloudStatusUI('syncing', `Uploading ${completed}/${targets.length}...`);
+        onProgress?.({
+          phase: 'uploading',
+          total: targets.length,
+          completed,
+          succeeded: succeededCount,
+          failed: completed - succeededCount,
+          currentLabel: sourceItem.name
+        });
       }
-
-      const storagePath = `wardrobes/${scope.vaultKey}/items/${item.id}.jpg`;
-      const uploaded = await uploadBlobToFirebaseStorage(storagePath, item.image, {
-        userId: scope.userId,
-        vaultKey: scope.vaultKey,
-        itemId: item.id
-      });
-
-      return sanitizeWardrobeItemForFirestore(
-        {
-          ...item,
-          image: uploaded.imageUrl,
-          imageUrl: uploaded.imageUrl,
-          storagePath: uploaded.storagePath
-        },
-        scope,
-        now
-      );
-    });
+    );
+    await lookaheadDonePromise;
 
     storageOutcomes.forEach((outcome, idx) => {
-      completed++;
       const sourceItem = targets[idx];
       if (outcome.status === 'fulfilled') {
         readyForFirestore.push(outcome.value);
       } else {
         const err = outcome.reason;
         const msg = (err && (err.code ? `${err.code}: ${err.message}` : err.message)) || String(err || 'Storage upload failed');
-        console.error(`[CloudSync][Storage] Failed for "${sourceItem.name}" (${sourceItem.id}):`, err);
         newlyFailed.push({
           itemId: sourceItem.id,
           item: sourceItem,
@@ -5536,15 +5718,6 @@ async function syncWardrobeItemsToCloud(itemsToSync, { deletedIds = [], onProgre
           failedAt: Date.now()
         });
       }
-      setCloudStatusUI('syncing', `Uploading ${completed}/${targets.length}...`);
-      onProgress?.({
-        phase: 'uploading',
-        total: targets.length,
-        completed,
-        succeeded: readyForFirestore.length,
-        failed: newlyFailed.length,
-        currentLabel: sourceItem.name
-      });
     });
 
     const committedItems = [];
@@ -8994,12 +9167,12 @@ function preparePhotoForAnalysis(img) {
   const ctx = workCanvas.getContext('2d');
   ctx.drawImage(img, 0, 0, w, h);
 
-  // Original photo stays 100% unaltered in dataUrl; segmentation is purely for accurate CV vision analysis
+  // Original photo stays compact in dataUrl; segmentation is purely for accurate CV vision analysis
   let dataUrl = '';
   try {
-    dataUrl = workCanvas.toDataURL('image/jpeg', 0.88);
+    dataUrl = workCanvas.toDataURL('image/jpeg', 0.80);
   } catch {
-    dataUrl = img.src;
+    dataUrl = img.src || '';
   }
 
   const seg = segmentGarmentForAnalysis(ctx, w, h);
@@ -10276,110 +10449,162 @@ function inferGarmentFromPhotoContext(fileName, w, h, r, g, b) {
   };
 }
 
+async function finalizeDraftPieceFromImage(imgSource, rawFileName, fallbackSrcProvider) {
+  try {
+    const prep = preparePhotoForAnalysis(imgSource);
+    const analysis = analyzeGarmentPhotoVision(
+      prep.ctx,
+      prep.width,
+      prep.height,
+      prep.fgMask,
+      prep.bbox,
+      rawFileName,
+      prep.componentCount || 1
+    );
+
+    let category = analysis.category;
+    let subType = analysis.subType;
+    let length = analysis.length;
+    let season = analysis.season || 'all-season';
+    let hex = analysis.hex;
+    let colorName = analysis.colorName;
+    let formality = analysis.formality;
+    let name = analysis.name;
+    let visionNote = analysis.visionNote || 'Vision ID';
+
+    if (shouldAttemptBackendApi()) {
+      const aiResult = await recognizeGarmentViaApi(prep.dataUrl, rawFileName);
+      if (aiResult) {
+        const swatch = resolveColorSwatchFromName(aiResult.primaryColor, analysis.hex);
+        category = aiResult.category;
+        subType = aiResult.subcategory;
+        length = getDefaultLengthForPiece(category, subType) || length;
+        season = aiResult.season;
+        hex = swatch.hex;
+        colorName = swatch.colorName;
+        formality = inferFormalityFromRecognizedPiece(category, subType, analysis.formality);
+        name = `${colorName} ${subType}`;
+        visionNote = `Gemini 3.8 Flash · ${Math.round(aiResult.confidenceScore * 100)}% match`;
+      }
+    }
+
+    return {
+      draftId: generateId(),
+      name,
+      autoNamed: analysis.autoNamed,
+      category,
+      subType,
+      length,
+      season,
+      color: hex,
+      colorName,
+      formality,
+      visionNote,
+      alternatives: analysis.alternatives || [],
+      image: prep.dataUrl
+    };
+  } catch {
+    const inferred = inferGarmentFromPhotoContext(rawFileName, 300, 300, 74, 125, 181);
+    const safeImage = typeof fallbackSrcProvider === 'function' ? await fallbackSrcProvider() : fallbackSrcProvider;
+    return {
+      draftId: generateId(),
+      name: inferred.name,
+      autoNamed: inferred.autoNamed,
+      category: inferred.category,
+      subType: inferred.subType,
+      length: inferred.length,
+      season: 'all-season',
+      color: '#4a7db5',
+      colorName: inferred.colorName,
+      formality: inferred.formality,
+      visionNote: 'Filename match',
+      image: safeImage
+    };
+  }
+}
+
 function createDraftPieceFromSrc(src, rawFileName) {
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = async () => {
-      try {
-        const prep = preparePhotoForAnalysis(img);
-        const analysis = analyzeGarmentPhotoVision(
-          prep.ctx,
-          prep.width,
-          prep.height,
-          prep.fgMask,
-          prep.bbox,
-          rawFileName,
-          prep.componentCount || 1
-        );
-
-        let category = analysis.category;
-        let subType = analysis.subType;
-        let length = analysis.length;
-        let season = analysis.season || 'all-season';
-        let hex = analysis.hex;
-        let colorName = analysis.colorName;
-        let formality = analysis.formality;
-        let name = analysis.name;
-        let visionNote = analysis.visionNote || 'Vision ID';
-
-        if (shouldAttemptBackendApi()) {
-          const aiResult = await recognizeGarmentViaApi(prep.dataUrl, rawFileName);
-          if (aiResult) {
-            const swatch = resolveColorSwatchFromName(aiResult.primaryColor, analysis.hex);
-            category = aiResult.category;
-            subType = aiResult.subcategory;
-            length = getDefaultLengthForPiece(category, subType) || length;
-            season = aiResult.season;
-            hex = swatch.hex;
-            colorName = swatch.colorName;
-            formality = inferFormalityFromRecognizedPiece(category, subType, analysis.formality);
-            name = `${colorName} ${subType}`;
-            visionNote = `Gemini 3.8 Flash · ${Math.round(aiResult.confidenceScore * 100)}% match`;
-          }
-        }
-
-        resolve({
-          draftId: generateId(),
-          name,
-          autoNamed: analysis.autoNamed,
-          category,
-          subType,
-          length,
-          season,
-          color: hex,
-          colorName,
-          formality,
-          visionNote,
-          alternatives: analysis.alternatives || [],
-          image: prep.dataUrl
-        });
-      } catch {
-        const inferred = inferGarmentFromPhotoContext(rawFileName, 300, 300, 74, 125, 181);
-        resolve({
-          draftId: generateId(),
-          name: inferred.name,
-          autoNamed: inferred.autoNamed,
-          category: inferred.category,
-          subType: inferred.subType,
-          length: inferred.length,
-          season: 'all-season',
-          color: '#4a7db5',
-          colorName: inferred.colorName,
-          formality: inferred.formality,
-          visionNote: 'Filename match',
-          image: src
-        });
-      }
-    };
+    img.onload = async () => resolve(await finalizeDraftPieceFromImage(img, rawFileName, src));
     img.onerror = () => resolve(null);
     img.src = src;
   });
 }
 
+async function createDraftPieceFromFile(file) {
+  if (typeof createImageBitmap === 'function') {
+    let bitmap = null;
+    try {
+      bitmap = await createImageBitmap(file);
+      return await finalizeDraftPieceFromImage(bitmap, file.name, () => new Promise((res) => {
+        const r = new FileReader();
+        r.onload = (e) => res(e.target.result);
+        r.onerror = () => res('');
+        r.readAsDataURL(file);
+      }));
+    } catch {
+      // Fall through to object URL Image decode if createImageBitmap fails on exotic format
+    } finally {
+      if (bitmap && typeof bitmap.close === 'function') bitmap.close();
+    }
+  }
+
+  const objUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('Image load failed'));
+      i.src = objUrl;
+    });
+    return await finalizeDraftPieceFromImage(img, file.name, () => new Promise((res) => {
+      const r = new FileReader();
+      r.onload = (e) => res(e.target.result);
+      r.onerror = () => res('');
+      r.readAsDataURL(file);
+    }));
+  } catch {
+    return null;
+  } finally {
+    URL.revokeObjectURL(objUrl);
+  }
+}
+
 async function processMassWardrobeFiles(fileList, urlList = []) {
   const files = Array.from(fileList || []).filter(isImageFile);
   const urls = Array.from(urlList || []).filter(Boolean);
-  if (!files.length && !urls.length) {
+  const totalCount = files.length + urls.length;
+  if (!totalCount) {
     toast('Please select or drop at least one image file');
     return;
   }
 
-  toast(`⏳ Identifying ${files.length + urls.length} garment photo(s)...`);
+  toast(`⏳ Processing ${totalCount} garment photo(s)...`);
 
-  const filePromises = files.map(file => new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const draft = await createDraftPieceFromSrc(e.target.result, file.name);
-      resolve(draft);
-    };
-    reader.onerror = () => resolve(null);
-    reader.readAsDataURL(file);
-  }));
+  const tasks = [
+    ...files.map(file => () => createDraftPieceFromFile(file)),
+    ...urls.map((u, idx) => () => createDraftPieceFromSrc(u, `Photo_${idx + 1}`))
+  ];
 
-  const urlPromises = urls.map((u, idx) => createDraftPieceFromSrc(u, `Photo_${idx + 1}`));
+  let processed = 0;
+  const outcomes = await runWithBoundedConcurrency(
+    tasks,
+    4,
+    (fn) => fn(),
+    () => {
+      processed++;
+      if (processed === totalCount || processed % 4 === 0) {
+        toast(`⏳ Preparing garment drafts: ${processed}/${totalCount}...`);
+      }
+    }
+  );
 
-  const results = (await Promise.all([...filePromises, ...urlPromises])).filter(Boolean);
+  const results = outcomes
+    .filter(o => o.status === 'fulfilled' && o.value)
+    .map(o => o.value);
+
   if (!results.length) {
     toast('⚠️ Could not process the selected photo(s)');
     return;
@@ -10387,7 +10612,7 @@ async function processMassWardrobeFiles(fileList, urlList = []) {
 
   massUploadDrafts.push(...results);
   openMassValidateModal();
-  toast(`✨ Identified ${results.length} piece(s)!`);
+  toast(`✨ Ready! Identified ${results.length} piece(s)`);
 }
 
 function openMassValidateModal() {
