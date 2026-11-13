@@ -4921,7 +4921,7 @@ function loadData() {
   }
 }
 
-function runRetroactiveWardrobeCleanup({ silent = false } = {}) {
+function runRetroactiveWardrobeCleanup({ silent = false, skipSave = false } = {}) {
   if (!Array.isArray(wardrobe) || wardrobe.length === 0) {
     if (!silent) toast('Wardrobe is currently empty');
     return 0;
@@ -4985,7 +4985,7 @@ function runRetroactiveWardrobeCleanup({ silent = false } = {}) {
     if (changed) updatedCount++;
   });
 
-  if (updatedCount > 0) {
+  if (updatedCount > 0 && !skipSave) {
     saveData();
     renderFilters();
     renderWardrobe();
@@ -4994,7 +4994,7 @@ function runRetroactiveWardrobeCleanup({ silent = false } = {}) {
     if (!silent) {
       toast(`✨ Wardrobe cleaned & synchronized: updated ${updatedCount} piece title${updatedCount === 1 ? '' : 's'} & attributes!`);
     }
-  } else if (!silent) {
+  } else if (updatedCount === 0 && !silent) {
     toast('✓ All wardrobe piece names and attributes are already up to date!');
   }
   return updatedCount;
@@ -5337,6 +5337,7 @@ function normalizeRemoteWardrobeItem(raw, scope) {
     length: raw.length || '',
     season: raw.season || 'all-season',
     color: raw.color || '#4a7db5',
+    colorName: raw.colorName || '',
     formality: raw.formality || 'casual',
     image: imgUrl,
     imageUrl: imgUrl,
@@ -5395,12 +5396,16 @@ function setupCloudRealtimeListener() {
       try {
         const merged = mergeRemoteItemsWithPendingLocal(remoteItems);
         wardrobe = merged;
+        const cleanedRemoteCount = runRetroactiveWardrobeCleanup({ silent: true, skipSave: true });
         saveLocalDataOnly();
         renderFilters();
         renderWardrobe();
         renderWardrobeIllusionSection();
         renderOutfit();
         renderShopRecommendations();
+        if (cleanedRemoteCount > 0 && !snapshot.metadata?.fromCache) {
+          setTimeout(() => scheduleCloudPush(), 350);
+        }
       } finally {
         setTimeout(() => { isApplyingRemoteCloudData = false; }, 150);
       }
@@ -5456,7 +5461,11 @@ function applyRemoteCloudData(data, opts = {}) {
         .map(it => normalizeRemoteWardrobeItem(it, scope))
         .filter(Boolean);
       wardrobe = mergeRemoteItemsWithPendingLocal(normalized);
+      const cleanedLegacyCount = runRetroactiveWardrobeCleanup({ silent: true, skipSave: true });
       saveLocalDataOnly();
+      if (cleanedLegacyCount > 0 && !opts.fromCache) {
+        setTimeout(() => scheduleCloudPush(), 350);
+      }
     }
 
     if (data.userProfile && typeof data.userProfile === 'object') {
@@ -6270,7 +6279,11 @@ function syncPullFromCloud(manualNotice = false) {
       if (remoteItems.length > 0) {
         subcollectionItemsLoaded = true;
         wardrobe = mergeRemoteItemsWithPendingLocal(remoteItems);
+        const cleanedPullCount = runRetroactiveWardrobeCleanup({ silent: true, skipSave: true });
         saveLocalDataOnly();
+        if (cleanedPullCount > 0) {
+          setTimeout(() => scheduleCloudPush(), 350);
+        }
       }
       if (doc.exists) {
         applyRemoteCloudData(doc.data(), { fromCache: false });
