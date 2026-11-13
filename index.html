@@ -3800,6 +3800,7 @@ input[type="text"]:focus, select:focus, textarea:focus {
           <button class="btn btn-secondary btn-sm" onclick="exportWardrobe()">📤 Export</button>
           <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-file').click()">📥 Import</button>
           <input type="file" id="import-file" accept=".json" style="display:none" onchange="importWardrobe(event)">
+          <button class="btn btn-secondary btn-sm" onclick="runRetroactiveWardrobeCleanup()">✨ Clean &amp; Sync Item Titles</button>
           <button class="btn btn-danger btn-sm" onclick="clearWardrobe()">🗑️ Clear All</button>
         </div>
       </div>
@@ -4093,55 +4094,31 @@ const STYLE_GENDER_CONFIG = {
     },
     subTypes: {
       tops: [
-        'T-Shirt', 'Crewneck T-Shirt', 'V-Neck T-Shirt', 'Heavyweight Boxy Tee', 'Graphic / Printed T-Shirt', 'Long-Sleeve T-Shirt',
+        'T-Shirt', 'Crewneck T-Shirt', 'V-Neck T-Shirt', 'Graphic T-Shirt', 'Long-Sleeve T-Shirt',
         'Polo Shirt', 'Knitted Polo Shirt', 'Long-Sleeve Polo Shirt',
-        'Dress Shirt', 'Oxford Button-Down Shirt (OCBD)', 'Poplin Dress Shirt', 'Twill Dress Shirt', 'French-Cuff Tuxedo Shirt',
-        'Linen Shirt', 'Linen Camp-Collar Shirt', 'Cuban / Camp-Collar Shirt', 'Band / Mandarin-Collar Shirt',
-        'Chambray Shirt', 'Denim Shirt', 'Flannel Shirt', 'Corduroy Shirt', 'Short-Sleeve Button-Up Shirt',
-        'Overshirt', 'Utility Shacket / Overshirt', 'Wool Overshirt',
-        'Henley', 'Long-Sleeve Henley', 'Waffle-Knit Thermal Top',
-        'Sweater', 'Merino Wool Crewneck Sweater', 'Cashmere V-Neck Sweater', 'Cable-Knit Fisherman Sweater',
-        'Quarter-Zip / Half-Zip Pullover', 'Turtleneck', 'Mock-Neck Pullover',
-        'Cardigan', 'Shawl-Collar Cardigan', 'Button-Front Cardigan', 'Knitted Sweater Vest / Gilet',
-        'Crewneck Sweatshirt', 'Hoodie', 'Zip-Up Hoodie', 'Fleece Pullover', 'Tank Top', 'Athletic Performance Top'
+        'Dress Shirt', 'Oxford Button-Down Shirt', 'Linen Shirt', 'Chambray Shirt', 'Denim Shirt', 'Flannel Shirt', 'Corduroy Shirt', 'Short-Sleeve Button-Up Shirt',
+        'Overshirt', 'Henley', 'Long-Sleeve Henley',
+        'Sweater', 'Crewneck Sweater', 'V-Neck Sweater', 'Quarter-Zip Pullover', 'Turtleneck', 'Cardigan',
+        'Sweatshirt', 'Hoodie', 'Fleece Pullover', 'Tank Top', 'Athletic Top'
       ],
       bottoms: [
-        'Jeans', 'Dark Indigo Jeans', 'Mid-Wash Straight Jeans', 'Light-Wash Vintage Jeans', 'Slim-Fit Jeans', 'Relaxed / Tapered Jeans', 'Selvedge Denim Jeans', 'Black Denim Jeans', 'White / Ecru Jeans',
-        'Chinos', 'Tailored Stretch Chinos', 'Pleated Chinos',
-        'Dress Pants', 'Tailored Wool Dress Trousers', 'Pleated Dress Trousers', 'Flannel Dress Trousers', 'Gurkha Trousers',
-        'Linen Trousers', 'Linen Drawstring Pants', 'Corduroy Trousers', 'Wide-Leg Relaxed Trousers',
-        'Cargo Pants', 'Carpenter / Utility Pants',
-        'Shorts', 'Tailored Chino Shorts', 'Linen Resort Shorts', 'Denim Shorts', 'Bermuda Walk Shorts', 'Athletic / Running Shorts', 'Sweatshorts',
-        'Joggers', 'Tailored Smart Joggers', 'Technical Track Pants'
+        'Jeans', 'Straight Jeans', 'Slim Jeans', 'Wide-Leg Jeans',
+        'Chinos', 'Pleated Chinos', 'Dress Trousers', 'Linen Trousers', 'Corduroy Trousers',
+        'Cargo Pants', 'Shorts', 'Chino Shorts', 'Linen Shorts', 'Denim Shorts', 'Athletic Shorts', 'Sweatshorts',
+        'Joggers', 'Track Pants'
       ],
       shoes: [
-        'Sneakers', 'Minimalist White Leather Sneakers', 'Low-Top Canvas Sneakers', 'Retro Suede Trainers', 'Chunky Runner Sneakers', 'High-Top Sneakers', 'Running Shoes',
-        'Dress Shoes', 'Oxford Shoes', 'Cap-Toe Oxford Shoes', 'Wholecut Oxford Shoes', 'Wingtip Brogues', 'Plain-Toe Derby Shoes', 'Suede Derby Shoes', 'Double Monk Strap Shoes', 'Patent Leather Tuxedo Shoes',
-        'Loafers', 'Penny Loafers', 'Tassel Loafers', 'Horsebit Loafers', 'Suede Driving Loafers', 'Boat / Deck Shoes', 'Espadrilles',
-        'Boots', 'Chelsea Boots', 'Suede Chelsea Boots', 'Chukka / Desert Boots', 'Lace-Up Service / Combat Boots', 'Wingtip Dress Boots', 'Hiking / Weather Boots',
-        'Sandals', 'Leather Slide Sandals', 'Cork Footbed Buckle Sandals'
+        'Sneakers', 'Canvas Sneakers', 'Running Shoes', 'Dress Shoes', 'Oxford Shoes', 'Derby Shoes', 'Brogues',
+        'Loafers', 'Penny Loafers', 'Tassel Loafers', 'Boots', 'Chelsea Boots', 'Chukka Boots', 'Combat Boots', 'Sandals'
       ],
       outerwear: [
-        'Blazer', 'Single-Breasted Navy / Wool Blazer', 'Double-Breasted Tailored Blazer', 'Unstructured Linen / Cotton Blazer', 'Tweed / Houndstooth Sport Coat', 'Suit Jacket', 'Tuxedo Dinner Jacket',
-        'Overcoat', 'Single-Breasted Wool Overcoat', 'Double-Breasted Chesterfield Overcoat', 'Cashmere Topcoat', 'Mac / Car Coat',
-        'Trench Coat', 'Pea Coat', 'Duffle Coat',
-        'Denim Jacket', 'Chore / Workwear Jacket', 'Harrington Jacket',
-        'Bomber Jacket', 'Suede Blouson / Bomber Jacket', 'Varsity Jacket',
-        'Leather Moto Jacket', 'Leather Café Racer Jacket', 'Shearling / Aviator Jacket',
-        'Waxed Field / Barn Jacket', 'Quilted Liner Jacket',
-        'Windbreaker', 'Rain Jacket', 'Technical Waterproof Shell', 'Hooded Storm Parka',
-        'Puffer Jacket', 'Lightweight Packable Puffer',
-        'Vest', 'Quilted / Puffer Gilet (Vest)', 'Fleece Vest', 'Tailored Suit Waistcoat'
+        'Blazer', 'Suit Jacket', 'Overcoat', 'Trench Coat', 'Pea Coat', 'Denim Jacket', 'Chore Jacket',
+        'Harrington Jacket', 'Bomber Jacket', 'Leather Jacket', 'Field Jacket', 'Windbreaker', 'Rain Jacket',
+        'Puffer Jacket', 'Vest'
       ],
       accessories: [
-        'Belt', 'Dress Leather Belt', 'Casual Braided / Woven Belt', 'Suede Belt', 'Reversible Buckle Belt',
-        'Watch', 'Dress Mechanical Watch', 'Chronograph Watch', 'Steel Dive / Sport Watch', 'Minimalist Leather Watch', 'Smartwatch',
-        'Tie', 'Silk Necktie', 'Knitted Tie', 'Bow Tie', 'Pocket Square', 'Cufflinks & Tie Bar',
-        'Scarf', 'Cashmere / Wool Winter Scarf', 'Lightweight Linen / Silk Scarf',
-        'Sunglasses', 'Aviator Sunglasses', 'Wayfarer / Acetate Sunglasses', 'Optical Glasses',
-        'Backpack', 'Leather Briefcase / Folio', 'Messenger / Crossbody Bag', 'Structured Tote Bag', 'Weekender Duffle Bag',
-        'Hat / Cap', 'Baseball Cap', 'Merino Wool Beanie', 'Fedora / Panama Hat', 'Bucket Hat',
-        'Leather Dress Gloves', 'Umbrella', 'Leather Bracelet', 'Signet Ring / Cuff Bracelet'
+        'Belt', 'Dress Belt', 'Casual Belt', 'Watch', 'Tie', 'Bow Tie', 'Pocket Square', 'Scarf',
+        'Sunglasses', 'Backpack', 'Briefcase', 'Tote Bag', 'Duffle Bag', 'Cap', 'Beanie', 'Hat', 'Umbrella'
       ]
     }
   },
@@ -4158,55 +4135,28 @@ const STYLE_GENDER_CONFIG = {
     },
     subTypes: {
       tops: [
-        'Blouse', 'Silk Button-Up Blouse', 'Satin Draped Blouse', 'Bow-Tie / Pussy-Bow Blouse', 'Chiffon / Sheer Blouse', 'Peplum Blouse', 'Linen Relaxed Blouse', 'Wrap / Surplice Blouse',
-        'Button-Up Shirt', 'Crisp Poplin Button-Up Shirt', 'Oversized Boyfriend Shirt', 'Linen Shirt', 'Chambray / Denim Shirt',
-        'Silk Camisole', 'Satin Lace-Trim Camisole', 'Halter Top',
-        'Bodysuit', 'Ribbed Knit Bodysuit', 'Long-Sleeve Fitted Bodysuit',
-        'T-Shirt', 'Crewneck Cotton Tee', 'V-Neck Tee', 'Fitted Baby Tee', 'Graphic Tee', 'Long-Sleeve Ribbed Top',
-        'Crop Top', 'Corset / Bustier Top', 'Off-the-Shoulder / Bardot Top', 'One-Shoulder Asymmetric Top', 'Square-Neck Top', 'Tank Top',
-        'Knit Sweater', 'Cashmere Crewneck Sweater', 'V-Neck Knit Sweater', 'Chunky Cable-Knit Sweater', 'Oversized Slouchy Sweater',
-        'Turtleneck', 'Mock-Neck Ribbed Knit', 'Knitted Polo Top', 'Sweater Vest',
-        'Cardigan', 'Cropped Button Cardigan', 'Longline Open Cardigan', 'Cashmere Wrap Cardigan',
-        'Overshirt / Shacket', 'Pullover Hoodie', 'Crewneck Sweatshirt', 'Tunic Top'
+        'Blouse', 'Button-Up Shirt', 'Linen Shirt', 'Camisole', 'Bodysuit',
+        'T-Shirt', 'Crewneck T-Shirt', 'V-Neck T-Shirt', 'Crop Top', 'Tank Top',
+        'Sweater', 'V-Neck Sweater', 'Turtleneck', 'Cardigan', 'Overshirt', 'Hoodie', 'Sweatshirt'
       ],
       bottoms: [
-        'High-Waist Jeans', 'Straight-Leg Vintage Jeans', 'Wide-Leg / Palazzo Jeans', 'Mom / Tapered Jeans', 'Skinny / Slim Jeans', 'Bootcut / Flare Jeans', 'Black Denim Jeans', 'White / Ecru Jeans',
-        'Tailored Trousers', 'Wide-Leg Pleated Trousers', 'Cigarette / Ankle-Grazing Pants', 'High-Waist Suit Trousers', 'Paperbag-Waist Pants', 'Linen Wide-Leg Trousers', 'Culottes',
-        'Leather / Faux-Leather Pants', 'Corduroy Trousers', 'Cargo / Parachute Pants',
-        'Midi Skirt', 'Satin Bias-Cut Midi Skirt', 'Pleated Midi Skirt', 'Tailored Pencil Skirt', 'Knit Midi Skirt',
-        'Mini Skirt', 'A-Line Mini Skirt', 'Denim Skirt', 'Pleated Tennis Skirt', 'Tailored Skort',
-        'Maxi Skirt', 'Wrap Skirt',
-        'Chino Shorts', 'Tailored Linen Shorts', 'Denim Cutoff Shorts', 'Bermuda Tailored Shorts', 'Cycling / Biker Shorts',
-        'Leggings', 'Flare / Split-Hem Leggings', 'Cashmere / Knit Lounge Joggers'
+        'Jeans', 'High-Waist Jeans', 'Straight Jeans', 'Wide-Leg Jeans',
+        'Trousers', 'Wide-Leg Trousers', 'Linen Trousers', 'Cargo Pants',
+        'Midi Skirt', 'Mini Skirt', 'Maxi Skirt', 'Shorts', 'Chino Shorts', 'Linen Shorts', 'Denim Shorts',
+        'Leggings', 'Joggers'
       ],
       shoes: [
-        'White Sneakers', 'Minimalist Leather Court Sneakers', 'Retro Suede Trainers', 'Platform / Chunky Sneakers', 'Canvas Sneakers', 'Running Trainers',
-        'Heeled Pumps', 'Pointed-Toe Stiletto Pumps', 'Block-Heel Pumps', 'Slingback Heels', 'Kitten-Heel Pumps', 'Platform Evening Heels',
-        'Strappy Sandals', 'Strappy Heeled Evening Sandals', 'Flat Leather Sandals', 'Resort Slide Sandals', 'Footbed Buckle Sandals',
-        'Espadrilles', 'Espadrille Wedges',
-        'Ballet Flats', 'Mary Jane Flats', 'Pointed-Toe Flats',
-        'Loafers', 'Chunky Lug-Sole Loafers', 'Classic Horsebit / Penny Loafers',
-        'Mules', 'Heeled Mules', 'Backless Leather Loafers',
-        'Ankle Boots', 'Pointed-Toe Stiletto Booties', 'Block-Heel Leather Ankle Boots', 'Chelsea Boots', 'Knee-High Leather Boots', 'Suede Over-the-Knee Boots', 'Lace-Up Combat Boots'
+        'Sneakers', 'Canvas Sneakers', 'Running Shoes', 'Pumps', 'Heeled Pumps',
+        'Sandals', 'Strappy Sandals', 'Espadrilles', 'Ballet Flats', 'Loafers', 'Mules',
+        'Ankle Boots', 'Boots', 'Chelsea Boots', 'Knee-High Boots'
       ],
       outerwear: [
-        'Tailored Blazer', 'Oversized Double-Breasted Blazer', 'Single-Breasted Wool Blazer', 'Cropped Bouclé / Tweed Jacket', 'Unstructured Linen Blazer',
-        'Trench Coat', 'Classic Belted Gabardine Trench', 'Mac / Car Coat',
-        'Wool Coat', 'Double-Breasted Tailored Wool Coat', 'Belted Cashmere Wrap Coat', 'Maxi Duster Coat', 'Pea Coat', 'Faux-Fur / Teddy Shearling Coat',
-        'Leather Moto Jacket', 'Oversized Leather Bomber Jacket', 'Suede Shirt Jacket',
-        'Denim Jacket', 'Cropped Denim Jacket', 'Quilted Liner / Barn Jacket', 'Bomber Jacket', 'Utility Safari Jacket',
-        'Oversized Cardigan', 'Kimono Layer', 'Tailored Waistcoat / Suit Vest', 'Puffer Vest / Gilet',
-        'Puffer Jacket', 'Longline Down Winter Coat', 'Rain Parka', 'Lightweight Windbreaker', 'Evening Cape / Shawl Coat'
+        'Blazer', 'Trench Coat', 'Overcoat', 'Wool Coat', 'Leather Jacket',
+        'Denim Jacket', 'Bomber Jacket', 'Cardigan', 'Puffer Jacket', 'Windbreaker'
       ],
       accessories: [
-        'Belt', 'Classic Leather Waist Belt', 'Slim Gold-Buckle Dress Belt', 'Suede Belt', 'Chain / Statement Corset Belt',
-        'Handbag / Tote', 'Structured Leather Tote Bag', 'Crossbody Bag', 'Quilted Chain Shoulder Bag', 'Mini Top-Handle Bag', 'Suede Slouchy Hobo Bag', 'Evening Clutch / Minaudière', 'Raffia / Woven Basket Bag',
-        'Silk Scarf', 'Printed Silk Neck Scarf', 'Cashmere / Wool Winter Scarf', 'Pashmina Evening Shawl',
-        'Gold Necklace', 'Layered Pendant Necklace', 'Pearl Strand / Choker Necklace',
-        'Earrings', 'Gold Hoop Earrings', 'Pearl / Diamond Stud Earrings', 'Statement Drop Earrings', 'Tennis / Cuff Bracelet',
-        'Watch / Tank Timepiece',
-        'Sunglasses', 'Cat-Eye Sunglasses', 'Oversized Acetate Sunglasses', 'Oval Metal Sunglasses',
-        'Sun Hat', 'Wide-Brim Wool Fedora', 'Beret / Cashmere Beanie', 'Silk Hair Ribbon / Claw Clip', 'Umbrella'
+        'Belt', 'Tote Bag', 'Crossbody Bag', 'Shoulder Bag', 'Clutch',
+        'Scarf', 'Necklace', 'Earrings', 'Watch', 'Sunglasses', 'Sun Hat', 'Beanie', 'Umbrella'
       ]
     }
   }
@@ -4548,6 +4498,7 @@ function handleCategorySelectChange() {
     return;
   }
   updateSubTypes();
+  syncItemModalAutoFields({ updateTypeProps: true, forceNameRecalc: true });
 }
 
 function addCustomCategoryFromModal() {
@@ -4607,50 +4558,71 @@ function getColorNameFromHex(hex) {
   return 'Neutral';
 }
 
+function cleanGarmentType(subType) {
+  if (!subType) return 'Item';
+  let s = String(subType).trim();
+  // Strip verbose marketing adjectives, fabric qualifiers, and tailoring buzzwords
+  s = s.replace(/\b(merino wool|merino|cashmere|tailored|minimalist|lightweight packable|lightweight|heavyweight boxy|heavyweight|boxy|packable|dark indigo|mid[- ]wash straight|light[- ]wash vintage|selvedge denim|vintage|stretch|slim[- ]fit|relaxed \/ tapered|unstructured|single-breasted navy \/ wool|double-breasted tailored|classic belted gabardine)\b/gi, '');
+  // Clean up punctuation, duplicate spaces, or leading/trailing slashes and dashes
+  s = s.replace(/\s+/g, ' ').replace(/^[\/\-\s]+|[\/\-\s]+$/g, '').trim();
+  return s || 'Item';
+}
+
 function getLengthLabelForItemName(category, length, subType) {
   const cat = String(category || '').toLowerCase();
   const subLower = String(subType || '').toLowerCase();
   const effectiveLen = length || getDefaultLengthForPiece(cat, subType);
 
   if (cat === 'tops') {
-    if (effectiveLen === 'sleeveless') return /\bsleeveless\b/.test(subLower) ? '' : 'Sleeveless';
-    if (effectiveLen === 'short') return /\bshort[- ]sleeve(d)?\b/.test(subLower) ? '' : 'Short-Sleeve';
-    if (effectiveLen === 'long') return /\blong[- ]sleeve(d)?\b/.test(subLower) ? '' : 'Long-Sleeve';
+    if (effectiveLen === 'short') {
+      return /\bshort[- ]sleeve\b/i.test(subLower) ? '' : 'Short Sleeve';
+    }
+    if (effectiveLen === 'long') {
+      return /\blong[- ]sleeve\b/i.test(subLower) ? '' : 'Long Sleeve';
+    }
+    if (effectiveLen === 'sleeveless') {
+      return /\bsleeveless\b/i.test(subLower) ? '' : 'Sleeveless';
+    }
   }
   if (cat === 'bottoms') {
-    if (effectiveLen === 'shorts') return /\b(short|shorts|skort)\b/.test(subLower) ? '' : 'Shorts';
-    if (effectiveLen === 'cropped') return /\b(crop|cropped|capri|culotte)\b/.test(subLower) ? '' : 'Cropped';
-    if (effectiveLen === 'long') return /\b(full[- ]length|long)\b/.test(subLower) ? '' : 'Full-Length';
+    if (effectiveLen === 'shorts') {
+      return /\b(short|shorts|skort)\b/i.test(subLower) ? '' : 'Shorts';
+    }
+    if (effectiveLen === 'cropped') {
+      return /\b(crop|cropped|capri|culotte)\b/i.test(subLower) ? '' : 'Cropped';
+    }
+    return '';
   }
   return '';
 }
 
 function buildStandardGarmentName({ category = 'tops', subType = 'Item', length = '', color = '#4a7db5', colorName = '' } = {}) {
-  const rawSub = String(subType || 'Item').trim() || 'Item';
+  const cleanedSub = cleanGarmentType(subType);
   const cat = String(category || 'tops').toLowerCase();
-  const effectiveLen = length || getDefaultLengthForPiece(cat, rawSub);
+  const effectiveLen = length || getDefaultLengthForPiece(cat, cleanedSub);
   const resolvedColor = String(colorName || '').trim() || getColorNameFromHex(color);
 
-  let cleanSub = rawSub;
-  if (cat === 'tops' && effectiveLen) {
-    if (effectiveLen === 'short' && /\blong[- ]sleeve(d)?\b/i.test(cleanSub)) {
-      cleanSub = cleanSub.replace(/\blong[- ]sleeve(d)?\b/i, 'Short-Sleeve').replace(/\s+/g, ' ').trim();
-    } else if (effectiveLen === 'long' && /\bshort[- ]sleeve(d)?\b/i.test(cleanSub)) {
-      cleanSub = cleanSub.replace(/\bshort[- ]sleeve(d)?\b/i, 'Long-Sleeve').replace(/\s+/g, ' ').trim();
-    } else if (effectiveLen === 'sleeveless' && /\b(short|long)[- ]sleeve(d)?\b/i.test(cleanSub)) {
-      cleanSub = cleanSub.replace(/\b(short|long)[- ]sleeve(d)?\b/i, 'Sleeveless').replace(/\s+/g, ' ').trim();
+  let baseSub = cleanedSub;
+  if (cat === 'tops') {
+    if (effectiveLen === 'short') {
+      baseSub = baseSub.replace(/\b(short|long)[- ]sleeve(d)?\b/gi, '').replace(/\s+/g, ' ').trim();
+    } else if (effectiveLen === 'long') {
+      baseSub = baseSub.replace(/\b(short|long)[- ]sleeve(d)?\b/gi, '').replace(/\s+/g, ' ').trim();
+    } else if (effectiveLen === 'sleeveless') {
+      baseSub = baseSub.replace(/\b(short|long)[- ]sleeve(d)?|sleeveless\b/gi, '').replace(/\s+/g, ' ').trim();
     }
   }
+  if (!baseSub) baseSub = cleanedSub;
 
-  const lengthPart = getLengthLabelForItemName(cat, effectiveLen, cleanSub);
-  const subLower = cleanSub.toLowerCase();
+  const lengthPart = getLengthLabelForItemName(cat, effectiveLen, baseSub);
   const colorLower = resolvedColor.toLowerCase();
+  const subLower = baseSub.toLowerCase();
   const colorPart = (colorLower && colorLower !== 'neutral' && subLower.includes(colorLower)) ? '' : resolvedColor;
 
-  return [colorPart, lengthPart, cleanSub].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  return [colorPart, lengthPart, baseSub].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 }
 
-function syncItemModalAutoFields({ updateTypeProps = false, explicitColorName = '' } = {}) {
+function syncItemModalAutoFields({ updateTypeProps = false, explicitColorName = '', forceNameRecalc = true } = {}) {
   const cat = document.getElementById('item-category')?.value || 'tops';
   const subType = document.getElementById('item-subtype')?.value || 'Item';
   const lengthSel = document.getElementById('item-length');
@@ -4662,12 +4634,12 @@ function syncItemModalAutoFields({ updateTypeProps = false, explicitColorName = 
 
   if (updateTypeProps) {
     const formalitySel = document.getElementById('item-formality');
-    if (formalitySel && formalitySel.dataset.userEdited !== 'true') {
-      const inferredForm = inferFormalityFromRecognizedPiece(cat, subType, 'casual');
+    if (formalitySel) {
+      const inferredForm = inferFormalityFromRecognizedPiece(cat, subType, len);
       updateFormalityDropdown(inferredForm);
     }
     const seasonSel = document.getElementById('item-season');
-    if (seasonSel && seasonSel.dataset.userEdited !== 'true') {
+    if (seasonSel) {
       seasonSel.value = inferItemSeasonSuitability({
         category: cat,
         subType,
@@ -4677,7 +4649,7 @@ function syncItemModalAutoFields({ updateTypeProps = false, explicitColorName = 
   }
 
   const nameInput = document.getElementById('item-name');
-  if (nameInput && (nameInput.dataset.autoFilled === 'true' || !nameInput.value.trim())) {
+  if (nameInput && (forceNameRecalc || nameInput.dataset.autoFilled === 'true' || !nameInput.value.trim())) {
     nameInput.value = buildStandardGarmentName({
       category: cat,
       subType,
@@ -4700,7 +4672,7 @@ function handleSubTypeSelectChange() {
     return;
   }
   autoSelectLengthBySubtype();
-  syncItemModalAutoFields({ updateTypeProps: true });
+  syncItemModalAutoFields({ updateTypeProps: true, forceNameRecalc: true });
 }
 
 function addCustomSubTypeFromModal() {
@@ -4916,6 +4888,7 @@ async function hydrateUnlimitedPhotosFromIdb() {
       );
     }
     if (changed) {
+      runRetroactiveWardrobeCleanup({ silent: true });
       renderWardrobe();
       renderWardrobeIllusionSection();
       renderUserProfileUI();
@@ -4946,6 +4919,87 @@ function loadData() {
     wardrobe = [];
   }
 }
+
+function runRetroactiveWardrobeCleanup({ silent = false } = {}) {
+  if (!Array.isArray(wardrobe) || wardrobe.length === 0) {
+    if (!silent) toast('Wardrobe is currently empty');
+    return 0;
+  }
+  let updatedCount = 0;
+
+  wardrobe.forEach(item => {
+    let changed = false;
+    const cat = item.category || 'tops';
+    const cleanSub = cleanGarmentType(item.subType || item.name || 'Item');
+    if (item.subType !== cleanSub) {
+      item.subType = cleanSub;
+      changed = true;
+    }
+
+    const effectiveLen = item.length || getDefaultLengthForPiece(cat, item.subType);
+    if (item.length !== effectiveLen) {
+      item.length = effectiveLen;
+      changed = true;
+    }
+
+    const colorHex = item.color || '#4a7db5';
+    const resolvedColorName = String(item.colorName || '').trim() || getColorNameFromHex(colorHex);
+    if (!item.colorName || item.colorName !== resolvedColorName) {
+      item.colorName = resolvedColorName;
+      changed = true;
+    }
+
+    // 1. Recalculate strictly reactive ITEM NAME: [Color Name] + [Length] + [Garment Type]
+    const recalculatedName = buildStandardGarmentName({
+      category: cat,
+      subType: item.subType,
+      length: effectiveLen,
+      color: colorHex,
+      colorName: resolvedColorName
+    });
+
+    if (item.name !== recalculatedName) {
+      item.name = recalculatedName;
+      changed = true;
+    }
+
+    // 2. Auto-populate matching SEASON SUITABILITY and FORMALITY values where mismatched
+    const matchingSeason = inferItemSeasonSuitability({
+      category: cat,
+      subType: item.subType,
+      length: effectiveLen
+    }, { forceRecalc: true });
+
+    if (!item.season || item.season === 'auto' || item.season !== matchingSeason) {
+      item.season = matchingSeason;
+      changed = true;
+    }
+
+    const matchingFormality = inferFormalityFromRecognizedPiece(cat, item.subType, effectiveLen);
+    if (!item.formality || item.formality !== matchingFormality) {
+      item.formality = matchingFormality;
+      changed = true;
+    }
+
+    if (changed) updatedCount++;
+  });
+
+  if (updatedCount > 0) {
+    saveData();
+    renderFilters();
+    renderWardrobe();
+    renderOutfit();
+    renderShopRecommendations();
+    if (!silent) {
+      toast(`✨ Wardrobe cleaned & synchronized: updated ${updatedCount} piece title${updatedCount === 1 ? '' : 's'} & attributes!`);
+    }
+  } else if (!silent) {
+    toast('✓ All wardrobe piece names and attributes are already up to date!');
+  }
+  return updatedCount;
+}
+
+window.runRetroactiveWardrobeCleanup = runRetroactiveWardrobeCleanup;
 
 /* ================================================================
    FIREBASE MULTI-DEVICE CLOUD SYNC ENGINE
@@ -6516,39 +6570,52 @@ function setOccasionOverride(formalityId) {
   }
 }
 
-function inferItemSeasonSuitability(item) {
+function inferItemSeasonSuitability(item, { forceRecalc = false } = {}) {
   if (!item) return 'all-season';
-  if (item.season && item.season !== 'auto') return item.season;
-  const sub = ((item.subType || '') + ' ' + (item.name || '')).toLowerCase();
-  const cat = (item.category || '').toLowerCase();
-  const len = (item.length || '').toLowerCase();
+  if (!forceRecalc && item.season && item.season !== 'auto') return item.season;
+  const sub = cleanGarmentType(item.subType || item.name || '').toLowerCase();
+  const cat = String(item.category || '').toLowerCase();
+  const len = String(item.length || '').toLowerCase() || getDefaultLengthForPiece(cat, sub);
 
   if (/\b(sweater vest|gilet)\b/.test(sub)) {
     return /\b(puffer|quilted|fleece)\b/.test(sub) ? 'autumn-winter' : 'all-season';
   }
+
+  // 1. Summer specific (ultra lightweight, sleeveless, swimwear, sandals)
   if (
-    /\b(linen|seersucker|tank top|camisole|halter|bandeau|tube top|sundress|flip-flop|slide sandal|strappy.*sandal|espadrille|swim|boardshort|bikini|bucket hat|raffia|panama)\b/.test(sub) ||
-    (cat === 'tops' && len === 'sleeveless') ||
-    (cat === 'bottoms' && len === 'shorts')
+    /\b(tank top|camisole|halter|bandeau|tube top|sundress|flip-flop|slide sandal|strappy.*sandal|espadrille|swim|boardshort|bikini|bucket hat|raffia|panama)\b/.test(sub) ||
+    (cat === 'tops' && len === 'sleeveless')
   ) {
     return 'summer';
   }
+
+  // 2. Spring & Summer (all short sleeves, shorts, lightweight weaves, light footwear)
   if (
-    /\b(short[- ]sleeve|polo|camp[- ]collar|cuban|capri|culotte|cropped|mule|canvas sneaker|boat shoe|deck shoe|ballet flat|mini skirt|midi skirt|wrap skirt|crop top|baby tee|resort)\b/.test(sub) ||
+    (cat === 'tops' && (len === 'short' || /\b(t-shirt|tee|polo|linen|camp[- ]collar|cuban|short[- ]sleeve|crop top|baby tee)\b/.test(sub))) ||
+    (cat === 'bottoms' && (len === 'shorts' || /\b(short|shorts|skort|bermuda|cropped)\b/.test(sub))) ||
     (cat === 'bottoms' && len === 'cropped') ||
-    (cat === 'tops' && len === 'short' && /\b(shirt|blouse|button-up|button-down|chambray)\b/.test(sub))
+    (cat === 'shoes' && /\b(canvas sneaker|boat shoe|deck shoe|ballet flat|mule|sandal)\b/.test(sub)) ||
+    (cat === 'outerwear' && /\b(windbreaker|denim jacket|safari|linen blazer)\b/.test(sub))
   ) {
     return 'spring-summer';
   }
-  if (/\b(puffer|down|parka|pea coat|duffle coat|overcoat|chesterfield|topcoat|shearling|aviator|faux-fur|teddy|thermal|snow boot|hiking.*boot|turtleneck|cable-knit|cashmere|beanie|gloves|fleece|winter coat)\b/.test(sub)) {
+
+  // 3. Winter specific (puffer, heavy down, snow boots, arctic parka)
+  if (/\b(puffer|down coat|parka|pea coat|duffle coat|snow boot|beanie|gloves|winter coat)\b/.test(sub)) {
     return 'winter';
   }
-  if (/\b(flannel|corduroy|merino|sweater|cardigan|overshirt|shacket|suede|chelsea boot|ankle boot|combat boot|knee-high|over-the-knee|trench coat|wool|velvet|hoodie|sweatshirt|longline|leather jacket|leather moto|café racer|cafe racer|barn jacket|quilted|pullover|henley)\b/.test(sub)) {
+
+  // 4. Autumn & Winter (sweaters, cardigans, long knits, coats, boots)
+  if (
+    (cat === 'tops' && (len === 'long' || /\b(sweater|cardigan|turtleneck|mock-neck|flannel|corduroy|hoodie|sweatshirt|thermal|pullover|henley)\b/.test(sub))) ||
+    (cat === 'outerwear' && /\b(overcoat|trench coat|wool coat|chesterfield|topcoat|shearling|aviator|leather jacket|leather moto|café racer|cafe racer|barn jacket|quilted|fleece)\b/.test(sub)) ||
+    (cat === 'shoes' && /\b(boot|boots|chelsea|chukka|combat|hiking|knee-high)\b/.test(sub)) ||
+    (cat === 'accessories' && /\b(scarf)\b/.test(sub))
+  ) {
     return 'autumn-winter';
   }
-  if (cat === 'outerwear' && /\b(windbreaker|denim jacket|bomber|chore|harrington|kimono|duster|safari)\b/.test(sub)) {
-    return 'spring-summer';
-  }
+
+  // 5. All season (classic jeans, regular chinos, dress trousers, button-downs, leather sneakers, belts, watches)
   return 'all-season';
 }
 
@@ -9990,19 +10057,41 @@ function resolveColorSwatchFromName(colorNameStr, fallbackHex) {
   };
 }
 
-function inferFormalityFromRecognizedPiece(category, subType, fallbackFormality = 'casual') {
-  const s = `${category || ''} ${subType || ''}`.toLowerCase();
-  if (/\b(tuxedo|french[- ]cuff|bow tie|gown|black tie)\b/.test(s)) return 'black-tie';
-  if (/\b(cocktail|evening|minaudière|minaudiere|platform evening|stiletto pump|stiletto bootie|satin lace)\b/.test(s)) return 'cocktail';
-  if (/\b(suit jacket|suit trouser|high-waist suit|waistcoat|oxford shoe|cap-toe oxford|wholecut oxford|patent leather|silk necktie|cufflink|dress pants|tailored wool dress trouser|heeled pump|pointed-toe.*pump|dress leather belt)\b/.test(s)) return 'formal';
-  if (/\b(poplin dress|twill dress|dress shirt|crisp poplin|pleated dress trouser|derby shoe|single-breasted.*blazer|double-breasted.*blazer|tailored blazer|sport coat|briefcase|folio|pashmina|trench coat|double-breasted tailored wool)\b/.test(s)) return 'business-casual';
-  if (/\b(oxford button-down|button-up shirt|button-down|linen shirt|chambray|blouse|tailored trouser|wide-leg trouser|cigarette|ankle-grazing|blazer|wool coat|cashmere|merino|sweater|cardigan|silk camisole|midi skirt|pencil skirt|loafer|brogue|mule|chelsea boot|ankle boot|ballet flat|mary jane|belt|watch|scarf|structured.*tote|pearl|pumps?)\b/.test(s)) return 'smart-casual';
-  if (/\b(overshirt|shacket|knitted polo|polo|cuban|camp[- ]collar|mandarin|chino(?! short)|satin|henley|leather moto|café racer|cafe racer|suede|desert boot|chukka|chore jacket|harrington|bomber|crossbody|tote bag|fedora|boot)\b/.test(s)) return 'elevated-casual';
-  if (/\b(jogger|track pant|running shoe|running trainer|athletic|gym|yoga|cycling|biker short|sweatshort|performance top|fleece|windbreaker|technical waterproof|backpack)\b/.test(s) && !/\blounge\b/.test(s)) return 'athleisure';
-  if (/\b(lounge|resort|slide sandal|flip-flop|espadrille|bucket hat|bermuda)\b/.test(s)) return 'lounge';
-  if (/\b(t-shirt|tee|hoodie|sweatshirt|jean|denim|short|skirt|sneaker|trainer|sandal|tank|bodysuit|crop top|cargo|legging|beanie|cap|sunglass|umbrella|parka|puffer|rain jacket|combat boot|hiking)\b/.test(s)) return 'casual';
+function inferFormalityFromRecognizedPiece(category, subType, lenOrFallback = '', fallbackFormality = 'casual') {
+  const cat = String(category || '').toLowerCase();
+  const sub = cleanGarmentType(subType).toLowerCase();
+  const isLen = ['short', 'long', 'sleeveless', 'shorts', 'cropped', 'none'].includes(String(lenOrFallback || '').toLowerCase());
+  const len = isLen ? String(lenOrFallback).toLowerCase() : '';
+  const fallback = !isLen && lenOrFallback ? lenOrFallback : fallbackFormality;
 
-  const normalizedFallback = fallbackFormality === 'sporty' ? 'athleisure' : (fallbackFormality || 'casual');
+  // 1. Black Tie / Formal Evening
+  if (/\b(tuxedo|french[- ]cuff|bow tie|gown|black tie)\b/.test(sub)) return 'black-tie';
+  if (/\b(cocktail|evening|minaudière|minaudiere|platform evening|stiletto pump|stiletto bootie|satin lace)\b/.test(sub)) return 'cocktail';
+
+  // 2. Business Formal / Suiting
+  if (/\b(suit jacket|suit pant|suit trouser|high-waist suit|waistcoat|oxford shoe|cap-toe oxford|wholecut oxford|patent leather|silk necktie|cufflink|dress pants|dress trouser|tailored wool dress trouser|heeled pump|pointed-toe.*pump|dress leather belt|dress belt)\b/.test(sub)) return 'formal';
+
+  // 3. Business Casual
+  if (/\b(poplin dress|twill dress|dress shirt|crisp poplin|pleated dress trouser|derby shoe|double monk|single-breasted.*blazer|double-breasted.*blazer|tailored blazer|sport coat|briefcase|folio|trench coat)\b/.test(sub)) return 'business-casual';
+
+  // 4. Smart Casual
+  if (/\b(oxford button-down|button-up shirt|button-down|ocbd|linen shirt|blouse|trouser|trousers|wide-leg trouser|cigarette|ankle-grazing|blazer|overcoat|wool coat|cashmere|sweater|cardigan|turtleneck|mock-neck|silk camisole|midi skirt|pencil skirt|loafer|penny loafer|tassel loafer|brogue|mule|chelsea boot|ankle boot|chukka|desert boot|ballet flat|mary jane)\b/.test(sub)) return 'smart-casual';
+  if (cat === 'bottoms' && /\b(chino|chinos)\b/.test(sub) && len !== 'shorts') return 'smart-casual';
+
+  // 5. Elevated Casual
+  if (/\b(overshirt|shacket|knitted polo|polo|cuban|camp[- ]collar|mandarin|henley|leather moto|leather jacket|café racer|cafe racer|suede|chore jacket|harrington|bomber|crossbody|tote bag|fedora|boot)\b/.test(sub)) return 'elevated-casual';
+
+  // 6. Athleisure
+  if (/\b(jogger|track pant|running shoe|running trainer|athletic|gym|yoga|cycling|biker short|sweatshort|performance top|fleece|windbreaker|technical waterproof|backpack)\b/.test(sub) && !/\blounge\b/.test(sub)) return 'athleisure';
+
+  // 7. Lounge
+  if (/\b(lounge|resort|slide sandal|flip-flop|espadrille|bucket hat|bermuda)\b/.test(sub)) return 'lounge';
+
+  // 8. Everyday Casual (T-Shirts, Jeans, Shorts, Sneakers, Hoodies, etc.)
+  if (/\b(t-shirt|tee|hoodie|sweatshirt|jean|jeans|denim|short|shorts|skort|skirt|sneaker|sneakers|trainer|sandal|tank|bodysuit|crop top|cargo|legging|beanie|cap|sunglass|umbrella|parka|puffer|rain jacket|combat boot|hiking)\b/.test(sub)) return 'casual';
+  if (len === 'shorts') return 'casual';
+
+  const normalizedFallback = fallback === 'sporty' ? 'athleisure' : (fallback || 'casual');
   const validIds = getAllFormalityLevels().map(f => f.id);
   return validIds.includes(normalizedFallback) ? normalizedFallback : 'casual';
 }
@@ -10068,15 +10157,26 @@ async function recognizeGarmentViaApi(dataUrl, fileNameHint = '') {
     if (!response.ok) return null;
 
     const data = await response.json();
-    if (!data || !data.category || !data.subcategory || !data.primaryColor || !data.season || typeof data.confidenceScore !== 'number') {
+    if (!data || !data.category || (!data.garment_type && !data.subcategory) || (!data.color_name && !data.primaryColor) || !data.season || typeof data.confidenceScore !== 'number') {
       return null;
     }
 
+    const resolvedGarmentType = cleanGarmentType(data.garment_type || data.subcategory || 'Item');
+    const resolvedColorName = String(data.color_name || data.primaryColor || '').trim();
+    const resolvedColorHex = (data.color_hex && /^#[0-9a-f]{6}$/i.test(data.color_hex))
+      ? data.color_hex
+      : null;
+
     return {
       category: mapRecognizedCategoryToConfig(data.category),
-      subcategory: String(data.subcategory).trim(),
-      primaryColor: String(data.primaryColor).trim(),
+      garment_type: resolvedGarmentType,
+      subcategory: resolvedGarmentType,
+      length: String(data.length || '').trim().toLowerCase(),
+      color_name: resolvedColorName,
+      primaryColor: resolvedColorName,
+      color_hex: resolvedColorHex,
       season: normalizeRecognizedSeason(data.season),
+      formality: String(data.formality || '').trim().toLowerCase(),
       confidenceScore: Math.max(0, Math.min(1, Number(data.confidenceScore)))
     };
   } catch {
@@ -10117,11 +10217,14 @@ async function hydrateModalWithGeminiRecognition(token, dataUrl, fileNameHint, f
   }
 
   const resolvedSwatch = resolveColorSwatchFromName(aiResult.primaryColor, fallbackAnalysis.hex);
+  const resolvedHex = aiResult.color_hex || resolvedSwatch.hex;
+  const resolvedColorName = aiResult.color_name || resolvedSwatch.colorName;
+  const cleanSub = cleanGarmentType(aiResult.garment_type || aiResult.subcategory);
   const pct = Math.round(aiResult.confidenceScore * 100);
   const currentEditId = document.getElementById('edit-id')?.value;
 
   const colorInput = document.getElementById('item-color');
-  if (colorInput) colorInput.value = resolvedSwatch.hex;
+  if (colorInput) colorInput.value = resolvedHex;
 
   if (!currentEditId) {
     const formalitySel = document.getElementById('item-formality');
@@ -10129,42 +10232,43 @@ async function hydrateModalWithGeminiRecognition(token, dataUrl, fileNameHint, f
     const seasonSel = document.getElementById('item-season');
     if (seasonSel) seasonSel.dataset.userEdited = 'false';
 
-    ensureSubTypeOptionSelected(aiResult.category, aiResult.subcategory);
-    const inferredLength = resolveRecognizedGarmentLength(aiResult.category, aiResult.subcategory, fallbackAnalysis.category, fallbackAnalysis.length);
+    ensureSubTypeOptionSelected(aiResult.category, cleanSub);
+    const inferredLength = aiResult.length || resolveRecognizedGarmentLength(aiResult.category, cleanSub, fallbackAnalysis.category, fallbackAnalysis.length);
     if (inferredLength) updateLengthOptions(inferredLength);
 
-    const inferredFormality = inferFormalityFromRecognizedPiece(aiResult.category, aiResult.subcategory, fallbackAnalysis.formality);
+    const inferredFormality = (aiResult.formality && getAllFormalityLevels().some(f => f.id === aiResult.formality))
+      ? aiResult.formality
+      : inferFormalityFromRecognizedPiece(aiResult.category, cleanSub, inferredLength);
     updateFormalityDropdown(inferredFormality);
     if (formalitySel) formalitySel.dataset.userEdited = 'false';
 
     if (seasonSel) {
       seasonSel.value = aiResult.season || inferItemSeasonSuitability({
         category: aiResult.category,
-        subType: aiResult.subcategory,
+        subType: cleanSub,
         length: inferredLength
       });
       seasonSel.dataset.userEdited = 'false';
     }
 
     const nameInput = document.getElementById('item-name');
-    const selectedSub = document.getElementById('item-subtype')?.value || aiResult.subcategory;
-    if (nameInput && (!nameInput.value.trim() || nameInput.dataset.autoFilled === 'true')) {
+    if (nameInput) {
       nameInput.value = buildStandardGarmentName({
         category: aiResult.category,
-        subType: selectedSub,
+        subType: cleanSub,
         length: inferredLength,
-        color: resolvedSwatch.hex,
-        colorName: resolvedSwatch.colorName
+        color: resolvedHex,
+        colorName: resolvedColorName
       });
       nameInput.dataset.autoFilled = 'true';
     }
   }
 
   if (badge) {
-    badge.textContent = `✨ Gemini AI: ${resolvedSwatch.colorName} ${aiResult.subcategory} (${pct}% match)`;
+    badge.textContent = `✨ Gemini AI: ${resolvedColorName} ${cleanSub} (${pct}% match)`;
     badge.style.display = 'inline-flex';
   }
-  toast(`🤖 Gemini identified ${resolvedSwatch.colorName} ${aiResult.subcategory} (${pct}% confidence)`);
+  toast(`🤖 Gemini identified ${resolvedColorName} ${cleanSub} (${pct}% confidence)`);
 }
 
 function isImageFile(file) {
@@ -10317,8 +10421,8 @@ function applyCvAlternativeModal(cat, sub, len, form) {
   const hexVal = document.getElementById('item-color')?.value || '#4a7db5';
   const colorName = getColorNameFromHex(hexVal);
   const nameInput = document.getElementById('item-name');
-  if (nameInput && (!nameInput.value.trim() || nameInput.dataset.autoFilled === 'true')) {
-    nameInput.value = buildStandardGarmentName({ category: cat, subType: sub, length: resolvedLen, color: hexVal, colorName });
+  if (nameInput) {
+    nameInput.value = buildStandardGarmentName({ category: cat, subType: cleanGarmentType(sub), length: resolvedLen, color: hexVal, colorName });
     nameInput.dataset.autoFilled = 'true';
   }
   const badge = document.getElementById('detected-color-badge');
@@ -10373,12 +10477,12 @@ function autoDetectColorAndDetails(ctx, w, h, fgMask, bbox, fileNameHint = '', c
   }
 
   const nameInput = document.getElementById('item-name');
-  const currentSubtype = document.getElementById('item-subtype').value || analysis.subType || 'Item';
+  const currentSubtype = cleanGarmentType(document.getElementById('item-subtype').value || analysis.subType || 'Item');
   const currentCat = document.getElementById('item-category')?.value || analysis.category || 'tops';
   const lengthSel = document.getElementById('item-length');
   const lengthRow = document.getElementById('length-row');
   const currentLen = (lengthSel && lengthRow && lengthRow.style.display !== 'none') ? lengthSel.value : (analysis.length || getDefaultLengthForPiece(currentCat, currentSubtype));
-  if (!nameInput.value.trim() || nameInput.dataset.autoFilled === 'true') {
+  if (nameInput) {
     nameInput.value = buildStandardGarmentName({
       category: currentCat,
       subType: currentSubtype,
@@ -10818,12 +10922,14 @@ async function finalizeDraftPieceFromImage(imgSource, rawFileName, fallbackSrcPr
       if (aiResult) {
         const swatch = resolveColorSwatchFromName(aiResult.primaryColor, analysis.hex);
         category = aiResult.category;
-        subType = aiResult.subcategory;
-        length = resolveRecognizedGarmentLength(category, subType, analysis.category, analysis.length);
+        subType = cleanGarmentType(aiResult.garment_type || aiResult.subcategory);
+        length = aiResult.length || resolveRecognizedGarmentLength(category, subType, analysis.category, analysis.length);
+        hex = aiResult.color_hex || swatch.hex;
+        colorName = aiResult.color_name || swatch.colorName;
+        formality = (aiResult.formality && getAllFormalityLevels().some(f => f.id === aiResult.formality))
+          ? aiResult.formality
+          : inferFormalityFromRecognizedPiece(category, subType, length);
         season = aiResult.season || inferItemSeasonSuitability({ category, subType, length });
-        hex = swatch.hex;
-        colorName = swatch.colorName;
-        formality = inferFormalityFromRecognizedPiece(category, subType, analysis.formality);
         name = buildStandardGarmentName({ category, subType, length, color: hex, colorName });
         visionNote = `Gemini 3.8 Flash · ${Math.round(aiResult.confidenceScore * 100)}% match`;
       }
@@ -11114,7 +11220,7 @@ function refreshMassDraftDerivedFields(d, { updateTypeProps = false } = {}) {
   }
   if (updateTypeProps) {
     if (!d.formalityEdited) {
-      d.formality = inferFormalityFromRecognizedPiece(d.category, d.subType, d.formality || 'casual');
+      d.formality = inferFormalityFromRecognizedPiece(d.category, d.subType, d.length);
     }
     if (!d.seasonEdited) {
       d.season = inferItemSeasonSuitability({ category: d.category, subType: d.subType, length: d.length });
@@ -11123,7 +11229,7 @@ function refreshMassDraftDerivedFields(d, { updateTypeProps = false } = {}) {
   if (d.autoNamed !== false) {
     d.name = buildStandardGarmentName({
       category: d.category,
-      subType: d.subType,
+      subType: cleanGarmentType(d.subType),
       length: d.length,
       color: d.color,
       colorName: d.colorName
@@ -11581,8 +11687,18 @@ function openEditModal(id) {
   document.getElementById('modal-title').textContent = 'Edit Clothing Item';
   document.getElementById('edit-id').value = id;
   const nameInput = document.getElementById('item-name');
-  nameInput.value = item.name;
-  nameInput.dataset.autoFilled = 'false';
+  const cleanSub = cleanGarmentType(item.subType);
+  const colorName = item.colorName || getColorNameFromHex(item.color);
+  const effectiveLen = item.length || getDefaultLengthForPiece(item.category, cleanSub);
+  const computedName = buildStandardGarmentName({
+    category: item.category,
+    subType: cleanSub,
+    length: effectiveLen,
+    color: item.color,
+    colorName
+  });
+  nameInput.value = computedName || item.name;
+  nameInput.dataset.autoFilled = 'true';
   toggleCustomCategoryAdder(false);
   toggleCustomSubTypeAdder(false);
   toggleCustomFormalityAdder(false);
@@ -11630,17 +11746,19 @@ function closeModal() {
 }
 
 async function saveItem() {
-  const name = document.getElementById('item-name').value.trim();
   const category = document.getElementById('item-category').value;
-  const subType = document.getElementById('item-subtype').value;
+  const subType = cleanGarmentType(document.getElementById('item-subtype').value);
   const color = document.getElementById('item-color').value;
-  const formality = document.getElementById('item-formality').value;
-  const seasonSel = document.getElementById('item-season');
-  const season = seasonSel ? seasonSel.value : inferItemSeasonSuitability({ category, subType });
+  const colorName = getColorNameFromHex(color);
   const editId = document.getElementById('edit-id').value;
   const lengthSel = document.getElementById('item-length');
   const lengthRow = document.getElementById('length-row');
   const length = (lengthSel && lengthRow && lengthRow.style.display !== 'none') ? lengthSel.value : getItemLength({ category, subType });
+  const rawName = document.getElementById('item-name').value.trim();
+  const name = rawName || buildStandardGarmentName({ category, subType, length, color, colorName });
+  const formality = document.getElementById('item-formality').value || inferFormalityFromRecognizedPiece(category, subType, length);
+  const seasonSel = document.getElementById('item-season');
+  const season = seasonSel ? seasonSel.value : inferItemSeasonSuitability({ category, subType, length });
 
   if (!name) { toast('Please enter a name'); return; }
 
@@ -11651,6 +11769,7 @@ async function saveItem() {
     length,
     season,
     color,
+    colorName,
     formality,
     image: currentItemPhoto || null
   };
@@ -11751,8 +11870,31 @@ function loadSampleWardrobe() {
   let added = 0;
   samples.forEach(s => {
     if (isItemDisliked(s)) return;
-    if (!wardrobe.find(it => it.name === s.name)) {
-      wardrobe.push({ id: generateId(), ...s });
+    const cleanSub = cleanGarmentType(s.subType);
+    const effLen = s.length || getDefaultLengthForPiece(s.category, cleanSub);
+    const colorName = getColorNameFromHex(s.color);
+    const computedName = buildStandardGarmentName({
+      category: s.category,
+      subType: cleanSub,
+      length: effLen,
+      color: s.color,
+      colorName
+    });
+    const computedSeason = inferItemSeasonSuitability({ category: s.category, subType: cleanSub, length: effLen }, { forceRecalc: true });
+    const computedFormality = inferFormalityFromRecognizedPiece(s.category, cleanSub, effLen);
+
+    if (!wardrobe.find(it => it.name === computedName || it.name === s.name)) {
+      wardrobe.push({
+        id: generateId(),
+        name: computedName,
+        category: s.category,
+        subType: cleanSub,
+        length: effLen,
+        color: s.color,
+        colorName,
+        season: computedSeason,
+        formality: computedFormality
+      });
       added++;
     }
   });
@@ -14936,6 +15078,7 @@ function init() {
 
   setupIosPwa();
   loadData();
+  runRetroactiveWardrobeCleanup({ silent: true });
   const { city, apiKey, dob, birthTime, birthPlace } = getSettings();
   document.getElementById('setting-city').value = city;
   document.getElementById('setting-apikey').value = apiKey;
@@ -14957,12 +15100,12 @@ function init() {
   const lengthSel = document.getElementById('item-length');
   if (lengthSel) {
     lengthSel.addEventListener('change', () => {
-      syncItemModalAutoFields({ updateTypeProps: true });
+      syncItemModalAutoFields({ updateTypeProps: true, forceNameRecalc: true });
     });
   }
   const colorInput = document.getElementById('item-color');
   if (colorInput) {
-    const syncColorName = () => syncItemModalAutoFields({ updateTypeProps: false });
+    const syncColorName = () => syncItemModalAutoFields({ updateTypeProps: false, forceNameRecalc: true });
     colorInput.addEventListener('input', syncColorName);
     colorInput.addEventListener('change', syncColorName);
   }
