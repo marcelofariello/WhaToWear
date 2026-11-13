@@ -1079,11 +1079,12 @@ body {
 
 .card-photo-wrap {
   width: 100%;
-  height: 140px;
+  height: 150px;
   border-radius: var(--radius-sm);
   overflow: hidden;
   margin-bottom: 12px;
   position: relative;
+  z-index: 1;
   background: var(--surface-alt);
   display: flex;
   align-items: center;
@@ -1147,43 +1148,81 @@ body {
 }
 
 .clothing-card .card-actions {
-  position: absolute;
-  top: 8px;
-  right: 8px;
+  position: relative;
+  top: auto;
+  right: auto;
+  z-index: 20;
   display: flex;
-  gap: 4px;
-  opacity: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  opacity: 1;
   transition: var(--transition);
 }
 
-.clothing-card:hover .card-actions { opacity: 1; }
+.clothing-card .card-actions-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.clothing-card .card-actions-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  flex-shrink: 0;
+}
+
+.clothing-card .card-actions-cat {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.clothing-card .card-actions-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
 
 .icon-btn {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   transition: var(--transition);
+  position: relative;
+  z-index: 21;
 }
 
 .icon-btn-edit {
-  background: var(--surface-alt);
-  color: var(--text-secondary);
+  background: rgba(30, 41, 56, 0.92);
+  color: #e2e8f0;
 }
 
-.icon-btn-edit:hover { background: var(--primary-light); color: white; }
+.icon-btn-edit:hover { background: var(--primary); color: #051410; border-color: var(--primary); }
 
 .icon-btn-delete {
-  background: var(--danger-light);
-  color: var(--danger);
+  background: rgba(251, 113, 133, 0.22);
+  border-color: rgba(251, 113, 133, 0.45);
+  color: #fda4af;
 }
 
-.icon-btn-delete:hover { background: var(--danger); color: white; }
+.icon-btn-delete:hover { background: var(--danger); color: white; border-color: var(--danger); }
 
 /* ===== Modal ===== */
 .modal-overlay {
@@ -3144,16 +3183,128 @@ body {
   color: #f8fafc !important;
 }
 
-.wardrobe-card, .shop-card, .piece-card {
+.clothing-card, .wardrobe-card, .shop-card, .piece-card {
   background: rgba(16, 22, 32, 0.85) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: var(--radius-md) !important;
   color: #f8fafc !important;
 }
-.wardrobe-card:hover, .shop-card:hover, .piece-card:hover {
+.clothing-card:hover, .wardrobe-card:hover, .shop-card:hover, .piece-card:hover {
   border-color: rgba(0, 229, 192, 0.4) !important;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 20px rgba(0, 229, 192, 0.15) !important;
   transform: translateY(-3px) !important;
+}
+
+/* Personal Face/Body + Desired Style Blueprint & Outfit Decision Card */
+.persona-blueprint-box {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: rgba(14, 20, 28, 0.72);
+  border: 1px solid rgba(0, 229, 192, 0.24);
+}
+.persona-blueprint-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.blueprint-pill-card {
+  background: rgba(20, 28, 40, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+.blueprint-pill-title {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--primary);
+  margin-bottom: 4px;
+}
+.blueprint-pill-body {
+  font-size: 0.78rem;
+  color: #cbd5e1;
+  line-height: 1.45;
+}
+.blueprint-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+.blueprint-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 229, 192, 0.12);
+  border: 1px solid rgba(0, 229, 192, 0.3);
+  color: #a7f3d0;
+}
+.outfit-decision-card {
+  margin-top: 14px;
+  margin-bottom: 6px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(0, 229, 192, 0.08) 0%, rgba(253, 216, 53, 0.05) 100%);
+  border: 1px solid rgba(0, 229, 192, 0.28);
+}
+.outfit-decision-title {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--primary);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.outfit-decision-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+.outfit-decision-cell {
+  background: rgba(11, 16, 23, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  font-size: 0.76rem;
+  color: #e2e8f0;
+  line-height: 1.45;
+}
+.outfit-decision-cell strong {
+  display: block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #ffd166;
+  margin-bottom: 3px;
+}
+.cv-alt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 4px;
+}
+.cv-alt-chip {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(0, 229, 192, 0.1);
+  border: 1px solid rgba(0, 229, 192, 0.35);
+  color: #99f6e4;
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: var(--font);
+}
+.cv-alt-chip:hover {
+  background: rgba(0, 229, 192, 0.25);
+  color: #ffffff;
 }
 
 .wardrobe-drop-banner, .inspo-box {
@@ -3222,87 +3373,6 @@ input[type="text"]:focus, select:focus, textarea:focus {
       </div>
     </div>
   </header>
-
-  <!-- Floating 'My Persona' Hero Card (Google Material Design 3 + Antigravity Aesthetics) -->
-  <section class="floating-persona-card" id="floating-persona-hero">
-    <div class="floating-persona-ambient-glow"></div>
-    
-    <!-- Header of Persona Card -->
-    <div class="persona-card-header">
-      <div class="persona-brand-lockup">
-        <div class="persona-subheading">✦ Atelier Personal Styling Assistant</div>
-        <h2 class="persona-heading">My Persona</h2>
-      </div>
-      <div class="persona-header-controls">
-        <span class="persona-glow-badge" id="persona-glow-badge">
-          <span class="badge-dot glow-yellow"></span>
-          <span id="persona-glow-badge-text">Spring · Quiet Luxury</span>
-        </span>
-        <button type="button" class="persona-collapse-btn" id="persona-collapse-btn" onclick="togglePersonaCollapse()" title="Minimize / Expand Persona">▴ Collapse</button>
-      </div>
-    </div>
-
-    <div class="persona-collapsible-body" id="persona-collapsible-body">
-      <!-- Wardrobe Preferences: Sleek, Tactile Sliding Pill Toggle -->
-      <div class="persona-preference-container">
-        <div class="preference-header-row">
-          <span class="preference-section-label">Wardrobe Preference</span>
-          <span class="preference-selected-hint" id="preference-selected-hint">Masculine Style active</span>
-        </div>
-        <div class="tactile-sliding-toggle-wrapper">
-          <div class="tactile-sliding-pill-toggle" id="persona-sliding-toggle">
-            <div class="tactile-sliding-thumb" id="sliding-pill-thumb"></div>
-            <button type="button" class="sliding-option-btn active" id="pill-opt-male" onclick="setSlidingWardrobePreference('male')">
-              <span class="opt-icon">👔</span>
-              <span class="opt-label">Masculine Style</span>
-            </button>
-            <button type="button" class="sliding-option-btn" id="pill-opt-female" onclick="setSlidingWardrobePreference('female')">
-              <span class="opt-icon">👗</span>
-              <span class="opt-label">Feminine Style</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Six User Portrait Thumbnails in a Clean, Spacious Grid with Generous Negative Space -->
-      <div class="persona-portraits-wrapper">
-        <div class="portraits-section-header">
-          <div class="portraits-heading-block">
-            <h3 class="portraits-title">Biometric &amp; Silhouette Analysis Portraits</h3>
-            <p class="portraits-desc">Six multi-angle reference photos powering your undertone season, face shape, and tailored silhouette styling.</p>
-          </div>
-          <span class="portraits-count-tag" id="portraits-count-tag">6 Portrait Slots</span>
-        </div>
-
-        <div class="persona-portraits-grid" id="persona-portraits-grid">
-          <!-- Populated by renderFloatingPersonaCard() -->
-        </div>
-      </div>
-
-      <!-- Modern Pill-Shaped Action Buttons with Soft Gradients -->
-      <div class="persona-action-buttons-row">
-        <button type="button" class="pill-action-btn pill-btn-primary" onclick="openCameraCapture('selfie')">
-          <span class="btn-icon">📷</span>
-          <span>Use Camera</span>
-        </button>
-        <button type="button" class="pill-action-btn pill-btn-accent" onclick="reanalyzePersonaProfile()">
-          <span class="btn-icon">🔄</span>
-          <span>Re-analyze</span>
-        </button>
-        <button type="button" class="pill-action-btn pill-btn-surface" onclick="document.getElementById('user-selfie-input').click()">
-          <span class="btn-icon">🖼️</span>
-          <span>Photo Library</span>
-        </button>
-        <button type="button" class="pill-action-btn pill-btn-surface" onclick="openSavedImagesModal('selfie')">
-          <span class="btn-icon">🗂️</span>
-          <span>Saved Images</span>
-        </button>
-      </div>
-
-      <!-- Analysis Metric Preview Banner -->
-      <div class="persona-analysis-preview" id="persona-analysis-preview"></div>
-    </div>
-  </section>
 
   <!-- Tab Navigation -->
   <nav class="tab-nav">
@@ -3402,25 +3472,83 @@ input[type="text"]:focus, select:focus, textarea:focus {
 
   <!-- Settings Tab -->
   <div class="tab-content" id="tab-settings">
-    <!-- Dressing Style / Gender Mode Switcher -->
-    <div class="card">
-      <div class="settings-section">
-        <h3>👗 Dressing Style Preference</h3>
-        <p class="settings-note" style="margin-bottom:12px;">
-          Select your dressing preference. WhaToWear automatically updates all app icons, garment categories, silhouettes, and wardrobe essentials.
-        </p>
-        <div class="gender-switch-bar">
-          <button type="button" class="gender-pill active" id="gender-btn-male" onclick="setStyleGender('male')">
-            <span style="font-size:1.15rem;">👔</span>
-            <span>Masculine / Male Style</span>
-          </button>
-          <button type="button" class="gender-pill" id="gender-btn-female" onclick="setStyleGender('female')">
-            <span style="font-size:1.15rem;">👗</span>
-            <span>Feminine / Female Style</span>
-          </button>
+    <!-- My Persona Card (Moved from Main Page into Profile & Settings) -->
+    <section class="floating-persona-card" id="floating-persona-hero" aria-label="My Persona Style Profile">
+      <div class="floating-persona-ambient-glow"></div>
+      <div class="persona-card-header">
+        <div class="persona-title-area">
+          <div class="persona-subheading">✨ Biometric &amp; Aesthetic Twin</div>
+          <h2 class="persona-heading">My Persona</h2>
+        </div>
+        <div class="persona-header-controls">
+          <div class="persona-glow-badge" id="persona-glow-badge">
+            <span class="pill-dot glow-yellow"></span>
+            <span id="persona-glow-badge-text">Spring · Quiet Luxury</span>
+          </div>
+          <button type="button" class="persona-collapse-btn" id="persona-collapse-btn" onclick="togglePersonaCollapse()" title="Minimize / Expand My Persona card">▴ Collapse</button>
         </div>
       </div>
-    </div>
+
+      <div class="persona-collapsible-body" id="persona-collapsible-body">
+        <!-- Tactile Sliding Pill Toggle: Masculine vs Feminine Preference -->
+        <div class="persona-preference-container">
+          <div class="preference-header-row">
+            <span class="preference-section-label">Wardrobe &amp; Silhouette Preference</span>
+            <span class="preference-selected-hint" id="preference-selected-hint">Masculine Style active</span>
+          </div>
+          <div class="tactile-sliding-toggle-wrapper">
+            <div class="tactile-sliding-pill-toggle" id="sliding-preference-toggle" role="radiogroup" aria-label="Wardrobe Style Preference">
+              <div class="tactile-sliding-thumb" id="sliding-pill-thumb"></div>
+              <button type="button" class="sliding-option-btn active" id="pill-opt-male" data-pref="male" onclick="setSlidingWardrobePreference('male')">
+                <span class="option-icon">👔</span>
+                <span class="option-text">Masculine Style</span>
+              </button>
+              <button type="button" class="sliding-option-btn" id="pill-opt-female" data-pref="female" onclick="setSlidingWardrobePreference('female')">
+                <span class="option-icon">👗</span>
+                <span class="option-text">Feminine Style</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Six User Portrait Thumbnails in Clean, Spacious Grid -->
+        <div class="persona-portraits-wrapper">
+          <div class="portraits-section-header">
+            <div>
+              <div class="portraits-title">User Portraits · Personal Color, Face &amp; Body Biometrics</div>
+              <div class="portraits-desc">Six dedicated frames (or unlimited photos below) used to extract your skin undertone season, best colors, face shape, and body cuts</div>
+            </div>
+            <span class="portraits-count-tag" id="portraits-count-tag">0 of 6 Portraits Uploaded</span>
+          </div>
+          <div class="persona-portraits-grid" id="persona-portraits-grid">
+            <!-- Dynamically populated by renderFloatingPersonaCard() -->
+          </div>
+        </div>
+
+        <!-- Modern Pill-Shaped Action Buttons -->
+        <div class="persona-action-buttons-row">
+          <button type="button" class="pill-action-btn pill-btn-primary" onclick="openCameraCapture('selfie')">
+            <span>📷</span>
+            <span>Use Camera</span>
+          </button>
+          <button type="button" class="pill-action-btn pill-btn-surface" onclick="document.getElementById('user-selfie-input').click()">
+            <span>🖼️</span>
+            <span>Upload Photos</span>
+          </button>
+          <button type="button" class="pill-action-btn pill-btn-surface" onclick="openSavedImagesModal('selfie')">
+            <span>🗂️</span>
+            <span>Saved Images</span>
+          </button>
+          <button type="button" class="pill-action-btn pill-btn-accent" onclick="reanalyzePersonaProfile()">
+            <span>🔄</span>
+            <span>Re-analyze Persona</span>
+          </button>
+        </div>
+
+        <!-- Dynamic Preview Badges of Analyzed Seasonal Palette + Blueprint Summary -->
+        <div class="persona-analysis-preview" id="persona-analysis-preview"></div>
+      </div>
+    </section>
 
     <!-- Persona & Style Identity Profile ("How I want to be seen") -->
     <div class="card">
@@ -3551,6 +3679,7 @@ input[type="text"]:focus, select:focus, textarea:focus {
               </select>
             </div>
           </div>
+          <div id="personal-blueprint-box" class="persona-blueprint-box" style="display:none;"></div>
         </div>
       </div>
     </div>
@@ -3730,6 +3859,7 @@ input[type="text"]:focus, select:focus, textarea:focus {
         <div style="display:flex; gap:6px; align-items:center;">
           <button type="button" class="btn btn-secondary btn-sm" onclick="removePhoto(event)" style="padding:3px 9px; font-size:0.72rem;">✕ Remove</button>
         </div>
+        <div id="cv-alternatives-bar" class="cv-alt-chips" style="display:none; width:100%;"></div>
       </div>
     </div>
 
@@ -4069,6 +4199,7 @@ let userProfile = {
   faceShape: localStorage.getItem('wtw_face_shape') || 'oval',
   bodyShape: localStorage.getItem('wtw_body_shape') || 'rectangle',
   palette: localStorage.getItem('wtw_user_palette') || 'autumn',
+  personalAnalysis: safeJSON('wtw_personal_analysis', null),
   personaArchetype: localStorage.getItem('wtw_persona_archetype') || 'quiet-luxury',
   personaImpressions: JSON.parse(localStorage.getItem('wtw_persona_impressions') || '["Polished", "Approachable"]'),
   personaStatement: localStorage.getItem('wtw_persona_statement') || '',
@@ -4541,6 +4672,7 @@ function renderPersonaUI() {
   }
   renderInspoUI();
   renderDislikedStylesUI();
+  if (typeof renderPersonalBlueprintUI === 'function') renderPersonalBlueprintUI();
 }
 
 function setPersonaArchetype(id) {
@@ -4577,6 +4709,8 @@ function savePersonaProfile() {
   localStorage.setItem('wtw_persona_statement', stmt);
   localStorage.setItem('wtw_persona_statement_auto', 'false');
   if (typeof scheduleCloudPush === 'function') scheduleCloudPush();
+  if (typeof renderPersonalBlueprintUI === 'function') renderPersonalBlueprintUI();
+  if (typeof renderFloatingPersonaCard === 'function') renderFloatingPersonaCard();
   toast('Style vision saved!');
   renderOutfit();
   renderShopRecommendations();
@@ -4666,6 +4800,9 @@ async function hydrateUnlimitedPhotosFromIdb() {
       renderPersonaUI();
       renderOutfit();
       renderShopRecommendations();
+    }
+    if ((userProfile.selfies || []).length > 0 && !userProfile.personalAnalysis && typeof analyzeUploadedPhotos === 'function') {
+      analyzeUploadedPhotos(userProfile.selfies, { silent: true });
     }
   } catch (e) {
     console.warn('IndexedDB hydration skipped:', e);
@@ -4806,6 +4943,7 @@ function applyRemoteCloudData(data) {
         localStorage.setItem('wtw_face_shape', userProfile.faceShape || 'oval');
         localStorage.setItem('wtw_body_shape', userProfile.bodyShape || 'rectangle');
         localStorage.setItem('wtw_user_palette', userProfile.palette || 'autumn');
+        localStorage.setItem('wtw_personal_analysis', JSON.stringify(userProfile.personalAnalysis || null));
         localStorage.setItem('wtw_persona_archetype', userProfile.personaArchetype || 'quiet-luxury');
         localStorage.setItem('wtw_persona_impressions', JSON.stringify(userProfile.personaImpressions || []));
         localStorage.setItem('wtw_persona_statement', userProfile.personaStatement || '');
@@ -4887,6 +5025,7 @@ function syncPushToCloud(manualNotice = false) {
       faceShape: userProfile.faceShape || 'oval',
       bodyShape: userProfile.bodyShape || 'rectangle',
       palette: userProfile.palette || 'autumn',
+      personalAnalysis: userProfile.personalAnalysis || null,
       personaArchetype: userProfile.personaArchetype || 'quiet-luxury',
       personaImpressions: userProfile.personaImpressions || [],
       personaStatement: userProfile.personaStatement || '',
@@ -5012,7 +5151,9 @@ function saveProfileSettings() {
   localStorage.setItem('wtw_face_shape', faceShape);
   localStorage.setItem('wtw_body_shape', bodyShape);
   if (typeof scheduleCloudPush === 'function') scheduleCloudPush();
-  toast('Silhouette profile updated!');
+  if (typeof renderPersonalBlueprintUI === 'function') renderPersonalBlueprintUI();
+  if (typeof renderFloatingPersonaCard === 'function') renderFloatingPersonaCard();
+  toast('Silhouette profile & style blueprint updated!');
   renderOutfit();
   renderShopRecommendations();
 }
@@ -5894,27 +6035,497 @@ function logWearToday(topId, bottomId, outerId, midLayerId, beltId) {
   renderWardrobeIllusionSection();
 }
 
-/* ===== Multi-Layer (Up to 3 Top Layers) & Belt Coordination Helpers ===== */
+/* ===== Multi-Layer (Strict 3-Tier Top Hierarchy) & Belt Coordination Helpers ===== */
+
+function getTopLayerTier(it) {
+  if (!it || (it.category !== 'tops' && it.category !== 'outerwear')) return null;
+  const sub = (it.subType || '').toLowerCase();
+  const nm = (it.name || '').toLowerCase();
+  const txt = sub || nm;
+
+  // Tier 2 (Mid-Layer): Blazers/Sport Coats, Hoodies, Sweaters, Cardigans, Overshirts, Vests (even if stored in outerwear)
+  if (/\b(blazer|sport coat|suit jacket|dinner jacket|tuxedo jacket|boucl[eé]|tweed jacket)\b/.test(txt)) {
+    return 'mid';
+  }
+  if (/\b(overshirt|shacket|shirt jacket|kimono|vest|gilet|waistcoat)\b/.test(txt)) {
+    return 'mid';
+  }
+  if (/\b(hoodie|sweatshirt|sweater|cardigan|pullover|fleece|quarter-zip|half-zip|turtleneck|mock-neck|mock neck|poncho|knitted polo)\b/.test(txt) && !txt.includes('under')) {
+    return 'mid';
+  }
+
+  // Tier 3 (Outer Jacket / Coat / Weather Shell)
+  if (it.category === 'outerwear' || /\b(overcoat|topcoat|trench|pea coat|duffle coat|mac coat|car coat|wool coat|duster|parka|rain jacket|windbreaker|waterproof shell|anorak|puffer|quilted liner|shearling|aviator|leather moto|caf[eé] racer|cafe racer|bomber|blouson|varsity|denim jacket|trucker|chore|workwear jacket|harrington|field jacket|barn jacket|safari jacket|faux-fur|teddy coat|coat|jacket)\b/.test(txt)) {
+    // Wait: exclude short sleeve / leather pant edge cases; already gated to tops/outerwear
+    return 'outer';
+  }
+
+  // Tier 1 (Base Top — T-shirts short/long, Henleys, Camisoles, Bodysuits, Buttoned Shirts/Blouses)
+  return 'base';
+}
+
+function isPrimaryBaseTop(it) {
+  if (getTopLayerTier(it) !== 'base') return false;
+  const txt = ((it.subType || '') + ' ' + (it.name || '')).toLowerCase();
+  return /\b(t-shirt|tee|henley|thermal|camisole|bodysuit|tank|halter|square-neck|baby tee|ribbed top|performance top|crewneck|v-neck)\b/.test(txt);
+}
+
+function isShirtBaseTop(it) {
+  if (getTopLayerTier(it) !== 'base') return false;
+  const txt = ((it.subType || '') + ' ' + (it.name || '')).toLowerCase();
+  return /\b(dress shirt|oxford|ocbd|poplin|twill|tuxedo shirt|button-up|button-down|blouse|linen shirt|camp-collar|cuban|mandarin|polo)\b/.test(txt);
+}
 
 function isBaseTop(it) {
-  if (!it || it.category !== 'tops') return false;
-  const sub = (it.subType || '').toLowerCase();
-  if (/\b(sweater|cardigan|hoodie|sweatshirt|overshirt|shacket|fleece|pullover|poncho|vest)\b/.test(sub) && !sub.includes('under')) {
-    return false;
-  }
-  return true;
+  return getTopLayerTier(it) === 'base';
 }
 
 function isMidLayerCandidate(it) {
   if (!it) return false;
-  const sub = (it.subType || '').toLowerCase();
-  if (it.category === 'tops') {
-    return /\b(sweater|knit|cardigan|overshirt|shacket|flannel|hoodie|sweatshirt|quarter-zip|half-zip|pullover|vest|turtleneck|mock neck|oxford|dress shirt|button-up|chambray|denim shirt)\b/.test(sub);
+  if (getTopLayerTier(it) === 'mid') return true;
+  const txt = ((it.subType || '') + ' ' + (it.name || '')).toLowerCase();
+  // Casual heavy shirts can act as Layer 2 over a primary tee (handled cleanly in isLayerPairCompatible)
+  return it.category === 'tops' && /\b(flannel|chambray|denim shirt|corduroy shirt)\b/.test(txt);
+}
+
+function isOuterShellCandidate(it) {
+  return getTopLayerTier(it) === 'outer';
+}
+
+function isBlazerLike(it) {
+  if (!it) return false;
+  const txt = ((it.subType || '') + ' ' + (it.name || '')).toLowerCase();
+  return /\b(blazer|sport coat|suit jacket|dinner jacket|tuxedo jacket|boucl[eé])\b/.test(txt);
+}
+
+function isHoodieOrSweatshirt(it) {
+  if (!it) return false;
+  const txt = ((it.subType || '') + ' ' + (it.name || '')).toLowerCase();
+  return /\b(hoodie|sweatshirt|fleece)\b/.test(txt);
+}
+
+function isCoatOverBlazer(it) {
+  if (!it) return false;
+  const txt = ((it.subType || '') + ' ' + (it.name || '')).toLowerCase();
+  return /\b(overcoat|topcoat|trench|pea coat|duffle coat|mac|car coat|wool coat|duster|parka|rain|waterproof|anorak|field|barn)\b/.test(txt);
+}
+
+function isLayerPairCompatible(base, mid, outer) {
+  if (!base) return false;
+  const ids = [base.id];
+  if (mid) {
+    if (ids.includes(mid.id)) return false;
+    ids.push(mid.id);
   }
-  if (it.category === 'outerwear') {
-    return /\b(vest|gilet|blazer|cardigan|kimono|denim jacket|trucker|bomber|chore|harrington|shacket|overshirt|leather|suede|windbreaker)\b/.test(sub);
+  if (outer) {
+    if (ids.includes(outer.id)) return false;
+    ids.push(outer.id);
   }
-  return false;
+
+  // Layer 1 should be a true base layer (or only skip if user truly owns no base tops at all)
+  const baseTier = getTopLayerTier(base);
+  if ((mid || outer) && baseTier !== 'base') return false;
+
+  if (mid) {
+    if (!isMidLayerCandidate(mid)) return false;
+    // Open flannel/chambray/denim shirt mid-layer goes only over a clean primary tee/henley/tank (not a formal shirt or another collared shirt)
+    if (getTopLayerTier(mid) === 'base' && !isPrimaryBaseTop(base)) return false;
+    // Do not put a pullover/zip hoodie or sweatshirt over a formal dress shirt / blouse
+    if (isShirtBaseTop(base) && isHoodieOrSweatshirt(mid)) return false;
+  }
+
+  if (outer) {
+    const outerTier = getTopLayerTier(outer);
+    // When both Layer 2 (mid) and Layer 3 (outer) exist, Layer 3 MUST be a real outer jacket/coat, not a mid-layer
+    if (mid && outerTier !== 'outer') return false;
+    // If 2-layer outfit with no mid slot, allow outer OR mid in outer slot only if compatible
+    if (!mid && outerTier === 'base') return false;
+    // If Layer 2 is a formal Blazer, only layer proper long/structured coats over it (never cropped bomber/denim trucker)
+    if (mid && isBlazerLike(mid) && !isCoatOverBlazer(outer)) return false;
+  }
+
+  return true;
+}
+
+/* ===== Personal Image (Face/Body/Season) + Desired Style Decision Engine ===== */
+
+const FACE_SHAPE_STYLE_RULES = {
+  oval: {
+    label: 'Oval Face (Balanced)',
+    bestNecklines: ['Crewneck', 'V-Neck', 'Spread / Oxford Collar', 'Camp Collar', 'Henley', 'Notched Lapels'],
+    recommendedRegex: /\b(crewneck|t-shirt|tee|v-neck|oxford|ocbd|poplin|polo|blazer|trench|overcoat|henley|sweater|turtleneck|blouse)\b/i,
+    avoidRegex: /$^/,
+    howToWearTip: 'Balanced proportions let you wear both crewnecks and structured collars effortlessly — frame the collarbone cleanly with layered collars.'
+  },
+  round: {
+    label: 'Round Face (Elongate & Define)',
+    bestNecklines: ['V-Neck Tees', 'Vertical Placket Henleys', 'Pointed / Straight Collars', 'Single-Breasted Notched Blazers', 'Open Cardigans', 'Long Vertical Trenches'],
+    recommendedRegex: /\b(v-neck|henley|cardigan|blazer|trench|overcoat|wrap|surplice|dress shirt|poplin|oxford|pointed|slingback|tuxedo)\b/i,
+    avoidRegex: /\b(turtleneck|mock-neck|mock neck|choker|heavy cable|chunky boat)\b/i,
+    howToWearTip: 'Leave mid-layers (cardigans, overshirts, blazers) unbuttoned and pick V-necks or open top collar buttons to create a sharp vertical V-line.'
+  },
+  square: {
+    label: 'Square Face (Soften Jaw Angles)',
+    bestNecklines: ['Crewneck Tees', 'Scoop / U-Neck', 'Soft Roll-Collar Knits', 'Shawl-Collar Cardigans', 'Draped Blouses', 'Curved / Round Necklines'],
+    recommendedRegex: /\b(crewneck|scoop|cardigan|shawl|draped|silk|satin|cashmere|sweater|henley|bomber|leather|off-the-shoulder|cowl|curved)\b/i,
+    avoidRegex: /\b(square-neck|boxy mock|rigid stiff collar)\b/i,
+    howToWearTip: 'Soft, rounded necklines (crewnecks, shawl collars, draped knits) balance a strong jawline better than rigid angular collars.'
+  },
+  heart: {
+    label: 'Heart Face (Balance Upper & Lower Width)',
+    bestNecklines: ['Boatneck / Wide Collars', 'Classic Crewnecks', 'Raglan / Camp Collars', 'Textured Mid-Layer Sweaters', 'Structured Peaked Lapels'],
+    recommendedRegex: /\b(crewneck|camp-collar|cuban|sweater|hoodie|denim jacket|chore|turtleneck|blazer|double-breasted)\b/i,
+    avoidRegex: /\b(deep plunge v|narrow steep v)\b/i,
+    howToWearTip: 'Build visual presence along the collarbone and mid-torso with textured knitwear, crewnecks, or double-breasted lapels to balance a narrow chin.'
+  },
+  diamond: {
+    label: 'Diamond / Oblong Face (Widen Forehead & Soften Length)',
+    bestNecklines: ['Horizontal / Wide Spread Collars', 'Mock-Necks & Turtlenecks', 'Crewneck Layering', 'Structured Shoulder Blazers', 'Boatneck & Camp Shirts'],
+    recommendedRegex: /\b(turtleneck|mock-neck|mock neck|crewneck|camp-collar|cuban|sweater|blazer|pea coat|bomber|square-neck)\b/i,
+    avoidRegex: /\b(deep plunge|narrow v-neck)\b/i,
+    howToWearTip: 'Use higher/horizontal necklines (turtlenecks, crewnecks stacked under open shirts/jackets, wide lapels) to add balanced horizontal framing.'
+  }
+};
+
+const BODY_SHAPE_STYLE_RULES = {
+  'inverted-triangle': {
+    label: 'Inverted Triangle (Broad Shoulders · Athletic)',
+    bestClothTypes: ['Natural-shoulder knitwear & raglan layers', 'Unstructured blazers', 'Wide-leg, pleated or straight trousers & relaxed jeans', 'Clean waist anchoring with leather belts'],
+    goodTopRegex: /\b(v-neck|crewneck|t-shirt|tee|henley|sweater|knit|unstructured|cardigan|hoodie|overshirt)\b/i,
+    goodBottomRegex: /\b(straight|relaxed|wide-leg|pleated|chino|cargo|linen trousers|bootcut|flare|jeans)\b/i,
+    howToWearTip: 'Keep shoulders unpadded and smooth (soft knits/unstructured mid-layers), while choosing straight, pleated, or relaxed-leg bottoms for crisp lower-half symmetry.'
+  },
+  rectangle: {
+    label: 'Rectangle / Straight (Dimensional Layering)',
+    bestClothTypes: ['3-layer texture contrast (Tee + Blazer/Overshirt/Sweater + Jacket)', 'Structured shoulders & notched lapels', 'Tapered chinos, cuffed trousers & high-waist bottoms'],
+    goodTopRegex: /\b(blazer|overshirt|shacket|sweater|cardigan|hoodie|bomber|denim jacket|field|chore|trench|peplum|wrap)\b/i,
+    goodBottomRegex: /\b(chino|tapered|slim|trousers|high-waist|midi skirt|mini skirt|a-line)\b/i,
+    howToWearTip: 'Create dimension with contrasting texture and structured Layer 2 pieces (blazers, cable knits, overshirts), worn half-tucked or belted at the waist.'
+  },
+  hourglass: {
+    label: 'Hourglass (Defined Waist · Tailored Flow)',
+    bestClothTypes: ['Fitted crewneck/v-neck tees & bodysuits', 'Tailored waist-skimming blazers & belted trenches', 'High-waist tailored trousers, straight jeans & pencil/bias skirts'],
+    goodTopRegex: /\b(fitted|bodysuit|camisole|wrap|v-neck|blazer|trench|cardigan|cashmere|t-shirt|tee)\b/i,
+    goodBottomRegex: /\b(high-waist|tailored|straight|pencil|midi|bootcut|flare|trousers|slim)\b/i,
+    howToWearTip: 'Follow your natural waist line — tuck your base layer cleanly, pair with tailored/belted outer layers, and avoid shapeless boxy stacking.'
+  },
+  pear: {
+    label: 'Pear / Triangle (Accentuate Upper Frame)',
+    bestClothTypes: ['Statement collars, structured blazers & light/textured upper layers', 'Boxy jackets & cropped mid-layers', 'Dark clean straight-leg or A-line bottoms'],
+    goodTopRegex: /\b(blazer|double-breasted|jacket|bomber|denim jacket|sweater|cardigan|camp|boatneck|off-the-shoulder|trench)\b/i,
+    goodBottomRegex: /\b(straight|a-line|wide-leg|trousers|dark|jeans|skirt)\b/i,
+    howToWearTip: 'Draw attention upward with brighter or structured Top Layer 2/3 pieces (blazers, light knits, statement collars) anchored over clean dark straight bottoms.'
+  },
+  oval: {
+    label: 'Oval / Relaxed (Vertical Lines · Clean Drape)',
+    bestClothTypes: ['Single-breasted vertical coats & open cardigans', 'Fluid open-collar shirts & V-necks', 'Monochrome or tonal column dressing in matte breathable fabrics'],
+    goodTopRegex: /\b(v-neck|single-breasted|cardigan|overcoat|trench|blazer|linen|poplin|oxford|henley|open)\b/i,
+    goodBottomRegex: /\b(straight|tailored|trousers|chino|dark|jeans)\b/i,
+    howToWearTip: 'Wear mid and outer layers open vertically (unbuttoned blazers/overshirts/coats) over monochrome or close-tonal base + bottoms to lengthen your vertical line.'
+  }
+};
+
+const ARCHETYPE_STYLE_RULES = {
+  'quiet-luxury': {
+    name: 'Quiet Luxury',
+    paletteFocus: 'Muted neutrals, warm camel, espresso, navy, cream, tonal contrast',
+    clothFocus: 'Cashmere knits, tailored blazers, wool overcoats, pleated/straight chinos, leather loafers',
+    targetFormalities: ['smart-casual', 'business-casual', 'elevated-casual', 'formal'],
+    keywordRegex: /\b(cashmere|merino|chino|trousers|blazer|loafer|overcoat|trench|knit|cardigan|minimalist|leather|polo|suede)\b/i,
+    preferNeutralRatio: 0.7
+  },
+  executive: {
+    name: 'Executive Precision',
+    paletteFocus: 'High-contrast slate, charcoal, crisp white, midnight navy, oxblood accent',
+    clothFocus: 'Structured blazers, poplin/oxford shirts, trench & wool coats, dress trousers, Oxford/Derby shoes',
+    targetFormalities: ['business-casual', 'formal', 'smart-casual', 'cocktail'],
+    keywordRegex: /\b(blazer|suit|dress|oxford|poplin|trousers|overcoat|trench|derby|watch|tie|pumps|structured)\b/i,
+    preferNeutralRatio: 0.65
+  },
+  minimalist: {
+    name: 'Architectural Minimalist',
+    paletteFocus: 'Monochrome columns, black, charcoal, stone, ivory, muted slate',
+    clothFocus: 'Clean heavyweight tees, boxy overshirts, architectural wool coats, straight trousers, minimalist sneakers/boots',
+    targetFormalities: ['elevated-casual', 'smart-casual', 'casual', 'business-casual'],
+    keywordRegex: /\b(minimalist|crewneck|tee|t-shirt|trousers|overcoat|bomber|chelsea|sneakers|overshirt|monochrome)\b/i,
+    preferNeutralRatio: 0.85
+  },
+  creative: {
+    name: 'Creative Avant-Garde',
+    paletteFocus: 'Rich accent hues, unexpected color-blocking, warm earth + jewel accents',
+    clothFocus: 'Camp-collar/denim shirts, textured knitwear, leather/chore jackets, wide-leg trousers, suede boots',
+    targetFormalities: ['elevated-casual', 'casual', 'smart-casual', 'cocktail'],
+    keywordRegex: /\b(corduroy|flannel|wide-leg|chore|leather|suede|moto|camp|cuban|retro|chunky|oversized|wrap|silk)\b/i,
+    preferNeutralRatio: 0.25
+  },
+  approachable: {
+    name: 'Warm Approachable',
+    paletteFocus: 'Soft earth, sage/olive, sky blue, cream, tan leather & indigo denim',
+    clothFocus: 'Soft crew/henley tees, open cardigans, waffle knits, casual denim/field jackets, jeans & retro trainers',
+    targetFormalities: ['casual', 'elevated-casual', 'smart-casual'],
+    keywordRegex: /\b(henley|cardigan|linen|chambray|denim|jeans|sneakers|trainers|suede|desert|hoodie|flannel)\b/i,
+    preferNeutralRatio: 0.4
+  },
+  'street-edge': {
+    name: 'Urban / Street Edge',
+    paletteFocus: 'Obsidian, washed charcoal, concrete gray, olive drab, bold sneaker/outerwear pops',
+    clothFocus: 'Heavyweight tees, layered hoodies, bomber/leather/denim jackets, cargo/relaxed denim, chunky sneakers or combat boots',
+    targetFormalities: ['casual', 'elevated-casual'],
+    keywordRegex: /\b(hoodie|bomber|leather|moto|denim|cargo|sneakers|combat|oversized|boxy|graphic|utility|puffer|windbreaker|harrington)\b/i,
+    preferNeutralRatio: 0.5
+  },
+  romantic: {
+    name: 'Effortless Romantic / Fluid',
+    paletteFocus: 'Soft ivory, champagne, muted rose/burgundy, navy, warm sand',
+    clothFocus: 'Silk/satin camisoles, draped blouses, fine cardigans, tailored wrap coats, midi skirts, heels/slingbacks/loafers',
+    targetFormalities: ['smart-casual', 'elevated-casual', 'cocktail', 'business-casual'],
+    keywordRegex: /\b(silk|satin|camisole|blouse|midi|wrap|cardigan|trench|cashmere|mule|slingback|ballet|pleated)\b/i,
+    preferNeutralRatio: 0.45
+  }
+};
+
+function getSeasonalAvoidColors(seasonKey) {
+  if (seasonKey === 'spring') return ['#0f172a', '#111827', '#1f2937']; // overly harsh stark jet black washed contrast
+  if (seasonKey === 'summer') return ['#d97706', '#b45309', '#9a3412', '#eab308']; // heavy rust/orange-gold clashes cool soft skin
+  if (seasonKey === 'autumn') return ['#ec4899', '#e879f9', '#38bdf8', '#f43f5e']; // icy pastel pink / neon cyan washes warm olive/earth
+  return ['#ca8a04', '#d97706', '#c29b61', '#a16207']; // muddy mustard/warm khaki dulls high-contrast winter skin
+}
+
+function buildPersonalStyleBlueprint() {
+  const seasonKey = userProfile.palette || 'autumn';
+  const pal = (typeof SEASONAL_PALETTES !== 'undefined' && SEASONAL_PALETTES[seasonKey])
+    ? SEASONAL_PALETTES[seasonKey]
+    : { name: 'Soft Autumn', colors: [], tips: 'Earth & neutral harmony' };
+  const faceKey = userProfile.faceShape || 'oval';
+  const bodyKey = userProfile.bodyShape || 'rectangle';
+  const archKey = userProfile.personaArchetype || 'quiet-luxury';
+  const analysis = userProfile.personalAnalysis || null;
+
+  const faceRule = FACE_SHAPE_STYLE_RULES[faceKey] || FACE_SHAPE_STYLE_RULES.oval;
+  const bodyRule = BODY_SHAPE_STYLE_RULES[bodyKey] || BODY_SHAPE_STYLE_RULES.rectangle;
+  const archRule = ARCHETYPE_STYLE_RULES[archKey] || ARCHETYPE_STYLE_RULES['quiet-luxury'];
+  const impressions = Array.isArray(userProfile.personaImpressions) ? userProfile.personaImpressions : [];
+  const statement = (userProfile.personaStatement || '').trim();
+  const inspoHexes = Array.isArray(userProfile.inspoPalette) ? userProfile.inspoPalette : [];
+
+  return {
+    seasonKey,
+    palette: pal,
+    signatureColors: pal.colors || [],
+    inspoColors: inspoHexes,
+    avoidHexes: getSeasonalAvoidColors(seasonKey),
+    undertoneLabel: (analysis && analysis.undertoneLabel) || (seasonKey === 'spring' || seasonKey === 'autumn' ? 'Warm / Golden' : 'Cool / Rose-Neutral'),
+    contrastLabel: (analysis && analysis.contrastLabel) || (seasonKey === 'winter' || seasonKey === 'spring' ? 'Clear / Medium-High' : 'Soft / Blended'),
+    faceKey,
+    faceRule,
+    bodyKey,
+    bodyRule,
+    archKey,
+    archRule,
+    impressions,
+    statement
+  };
+}
+
+function scoreOutfitPersonalAndStyle(top, midLayer, outer, bottom, shoe, beltItem, accessory, blueprint) {
+  let personalScore = 0;
+  const reasons = [];
+  const topStack = [top, midLayer, outer].filter(Boolean);
+  const allItems = [...topStack, bottom, shoe, beltItem, accessory].filter(Boolean);
+  const sigHexes = blueprint.signatureColors.map(c => c.hex);
+
+  // 1. Personal Image Color Match (heaviest weight near the face: Base Top + Layer 2 + Outer)
+  let topColorMatched = false;
+  let outfitPaletteCount = 0;
+  topStack.forEach((it, idx) => {
+    const faceWeight = idx === 0 ? 32 : (idx === 1 ? 26 : 18);
+    if (isColorNameMatch(it.color, sigHexes)) {
+      personalScore += faceWeight;
+      if (!topColorMatched) {
+        const matchedName = getClosestColorName(
+          parseInt((it.color || '#000000').slice(1, 3), 16) || 0,
+          parseInt((it.color || '#000000').slice(3, 5), 16) || 0,
+          parseInt((it.color || '#000000').slice(5, 7), 16) || 0
+        );
+        reasons.push(`${matchedName} ${it.subType || it.name} illuminates your ${blueprint.palette.name} complexion`);
+        topColorMatched = true;
+      }
+      outfitPaletteCount++;
+    } else if (isNeutralColor(it.color)) {
+      personalScore += 10;
+    }
+    if (isColorNameMatch(it.color, blueprint.avoidHexes)) {
+      personalScore -= (idx <= 1 ? 26 : 14);
+    }
+  });
+  if (bottom && isColorNameMatch(bottom.color, sigHexes)) {
+    personalScore += 14;
+    outfitPaletteCount++;
+  }
+
+  // Skin-tone contrast calibration
+  const topHsl = hexToHSL(top ? top.color : '#888888');
+  const outerHsl = outer ? hexToHSL(outer.color) : (midLayer ? hexToHSL(midLayer.color) : topHsl);
+  const lumContrast = Math.abs(topHsl.l - outerHsl.l);
+  const wantsHighContrast = blueprint.seasonKey === 'winter' || blueprint.contrastLabel.toLowerCase().includes('high');
+  if (wantsHighContrast && lumContrast >= 32) {
+    personalScore += 18;
+  } else if (!wantsHighContrast && lumContrast >= 12 && lumContrast <= 42) {
+    personalScore += 16;
+  }
+
+  // 2. Face Shape Neckline & Collar Cloth Type Match (Layer 1 + Layer 2/3 framing face)
+  let faceAligned = false;
+  topStack.forEach((it, idx) => {
+    const text = ((it.subType || '') + ' ' + (it.name || '')).toLowerCase();
+    if (blueprint.faceRule.recommendedRegex.test(text)) {
+      personalScore += (idx === 0 ? 22 : 16);
+      if (!faceAligned) {
+        reasons.push(`${it.subType || it.name} cut flatters your ${blueprint.faceRule.label}`);
+        faceAligned = true;
+      }
+    }
+    if (blueprint.faceRule.avoidRegex.test(text)) {
+      personalScore -= (idx === 0 ? 20 : 12);
+    }
+  });
+
+  // 3. Body Silhouette Cloth Type & Proportion Balance
+  const topComboText = topStack.map(i => (i.subType || '') + ' ' + (i.name || '')).join(' ').toLowerCase();
+  const botText = bottom ? ((bottom.subType || '') + ' ' + (bottom.name || '')).toLowerCase() : '';
+  if (blueprint.bodyRule.goodTopRegex.test(topComboText)) {
+    personalScore += 24;
+  }
+  if (blueprint.bodyRule.goodBottomRegex.test(botText)) {
+    personalScore += 22;
+  }
+  if (topStack.length >= 2 && (blueprint.bodyKey === 'rectangle' || blueprint.bodyKey === 'pear')) {
+    personalScore += 12; // structured multi-layer depth enhances shoulder/torso balance
+  }
+
+  // 4. Desired Style Decision (Archetype + Impressions + User Style Statement + Inspo Colors)
+  const archRule = blueprint.archRule;
+  const fullText = allItems.map(i => (i.subType || '') + ' ' + (i.name || '')).join(' ').toLowerCase();
+  if (archRule.keywordRegex.test(fullText)) {
+    personalScore += 36;
+  }
+  const neutralRatio = allItems.filter(i => isNeutralColor(i.color)).length / Math.max(1, allItems.length);
+  const neutralFit = 1 - Math.abs(neutralRatio - archRule.preferNeutralRatio);
+  personalScore += Math.round(neutralFit * 22);
+
+  // Desired Impressions chips ("Polished", "Commanding", "Effortless", "Edgy", etc.)
+  const impBoostMap = {
+    'Polished': /\b(blazer|trousers|oxford|poplin|loafer|trench|cashmere|watch|belt)\b/i,
+    'Commanding': /\b(blazer|overcoat|trench|double-breasted|derby|oxford|boots|structured|trousers)\b/i,
+    'Minimalist': /\b(crewneck|t-shirt|tee|trousers|overcoat|sneakers|chelsea|overshirt)\b/i,
+    'Approachable': /\b(t-shirt|henley|cardigan|jeans|chino|sneakers|linen|flannel|hoodie)\b/i,
+    'Sharp': /\b(blazer|oxford|poplin|tapered|slim|chelsea|derby|loafer|trench)\b/i,
+    'Creative': /\b(corduroy|camp|cuban|chore|bomber|suede|wide-leg|retro|wrap|silk)\b/i,
+    'Effortless': /\b(linen|cardigan|t-shirt|tee|jeans|loafers|relaxed|hoodie|overshirt)\b/i,
+    'Edgy': /\b(leather|moto|bomber|denim jacket|combat|boots|hoodie|black)\b/i,
+    'Warm & Friendly': /\b(sweater|cardigan|knit|henley|flannel|chino|suede|earth|tan|brown)\b/i,
+    'Trustworthy': /\b(navy|oxford|chino|sweater|blazer|poplin|loafer|derby|watch)\b/i
+  };
+  let matchedImpressions = 0;
+  blueprint.impressions.forEach(imp => {
+    const rx = impBoostMap[imp];
+    if (matchedImpressions < 3 && rx && rx.test(fullText)) {
+      personalScore += 10;
+      matchedImpressions++;
+    }
+  });
+
+  // Free-text personaStatement alignment
+  if (blueprint.statement) {
+    const words = blueprint.statement.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 4);
+    let hits = 0;
+    words.forEach(w => {
+      if (fullText.includes(w)) hits++;
+    });
+    personalScore += Math.min(18, hits * 9);
+  }
+
+  // Inspiration palette ("how I like to look" uploaded inspo photos)
+  if (blueprint.inspoColors.length > 0) {
+    for (const it of topStack) {
+      if (isColorNameMatch(it.color, blueprint.inspoColors)) {
+        personalScore += 22;
+        reasons.push(`Matches your inspiration style palette`);
+        break;
+      }
+    }
+  }
+
+  return {
+    personalScore,
+    reasons,
+    matchedImpressions,
+    topColorMatched,
+    faceAligned
+  };
+}
+
+function generateHowToWearGuide(outfit, blueprint) {
+  const topName = outfit.top ? outfit.top.name : 'your base top';
+  const midObj = outfit.midLayer || outfit.proposedMidLayer;
+  const outerObj = outfit.outerwear;
+  const botObj = outfit.bottom;
+
+  let whatWhyColor = `<strong>${escapeHtml(blueprint.palette.name)} (${escapeHtml(blueprint.undertoneLabel)})</strong>: `;
+  if (outfit.top && isColorNameMatch(outfit.top.color, blueprint.signatureColors.map(c => c.hex))) {
+    whatWhyColor += `Anchoring near your face with ${escapeHtml(topName)} brings healthy radiance to your skin undertone.`;
+  } else if (midObj && isColorNameMatch(midObj.color, blueprint.signatureColors.map(c => c.hex))) {
+    whatWhyColor += `${escapeHtml(midObj.name)} next to your face locks into your ${escapeHtml(blueprint.palette.name)} palette while neutrals keep it balanced.`;
+  } else {
+    whatWhyColor += `Balanced neutrals harmonized with your ${escapeHtml(blueprint.archRule.name)} direction keep contrast clean around the face.`;
+  }
+
+  let whatWhyCut = `<strong>${escapeHtml(blueprint.faceRule.label)} × ${escapeHtml(blueprint.bodyRule.label)}</strong>: `;
+  whatWhyCut += `${escapeHtml(blueprint.faceRule.howToWearTip)}`;
+
+  // Concrete "How to Wear This Look" step-by-step styling instructions
+  const wearSteps = [];
+  if (isPrimaryBaseTop(outfit.top) && (midObj || outerObj)) {
+    wearSteps.push(`Wear <strong>${escapeHtml(topName)}</strong> smoothly fitted at the waist (neat French-tuck or clean belt line)`);
+  } else if (isShirtBaseTop(outfit.top)) {
+    const collarAction = blueprint.faceKey === 'round' || blueprint.faceKey === 'oval'
+      ? 'leave top 1–2 collar buttons undone to elongate the neckline'
+      : 'keep the collar relaxed and crisp';
+    wearSteps.push(`Tuck <strong>${escapeHtml(topName)}</strong> cleanly and ${collarAction}`);
+  }
+
+  if (midObj && outerObj) {
+    if (isBlazerLike(midObj)) {
+      wearSteps.push(`layer <strong>${escapeHtml(midObj.name)}</strong> neatly over it with sleeves clear, then top with <strong>${escapeHtml(outerObj.name)}</strong> worn open outdoors`);
+    } else if (isHoodieOrSweatshirt(midObj)) {
+      wearSteps.push(`pull the hood cleanly out over the collar of <strong>${escapeHtml(outerObj.name)}</strong> with hem visible just above the belt`);
+    } else {
+      wearSteps.push(`wear <strong>${escapeHtml(midObj.name)}</strong> unbuttoned/relaxed outdoors beneath <strong>${escapeHtml(outerObj.name)}</strong> so all 3 textures frame your torso`);
+    }
+  } else if (midObj) {
+    if (isBlazerLike(midObj) || /\b(cardigan|overshirt|shacket|flannel)\b/i.test((midObj.subType || '') + ' ' + (midObj.name || ''))) {
+      wearSteps.push(`keep <strong>${escapeHtml(midObj.name)}</strong> unfastened for a slim vertical line on Layer 2`);
+    } else {
+      wearSteps.push(`layer <strong>${escapeHtml(midObj.name)}</strong> cleanly over ${escapeHtml(topName)} with base collar just peeking`);
+    }
+  } else if (outerObj) {
+    wearSteps.push(`wear <strong>${escapeHtml(outerObj.name)}</strong> open/partially zipped to show your base color contrast underneath`);
+  }
+
+  if (botObj && outfit.shoe) {
+    wearSteps.push(`finish with clean cuff/break on <strong>${escapeHtml(botObj.name)}</strong> over <strong>${escapeHtml(outfit.shoe.name)}</strong>`);
+  }
+
+  const desiredTone = blueprint.impressions.length
+    ? `${blueprint.archRule.name} · ${blueprint.impressions.slice(0, 3).join(', ')}`
+    : blueprint.archRule.name;
+
+  return {
+    desiredTone,
+    whatWhyColor,
+    whatWhyCut,
+    howToWearText: wearSteps.length ? (wearSteps.join('; ') + '.') : blueprint.bodyRule.howToWearTip
+  };
 }
 
 function getAutoTopLayersFromTemp(wxOverride) {
@@ -6093,23 +6704,32 @@ function quickAddProposedBelt(colorHex, colorName) {
   toast(`🪢 Added "${cleanName}" to My Wardrobe → Accessories!`);
 }
 
-function buildProposedMidLayerFallback(top, bottom, outer) {
+function buildProposedMidLayerFallback(top, bottom, outer, blueprint) {
   const gender = userProfile.styleGender || 'male';
   const topHSL = hexToHSL(top ? top.color : '#f5f5f5');
   const isDarkTop = topHSL.l < 45;
-  const proposedHex = isDarkTop ? '#d6d3d1' : '#374151';
-  const shadeName = isDarkTop ? 'Warm Oatmeal / Heather Gray' : 'Charcoal / Deep Navy';
-  const garmentName = gender === 'female'
-    ? `${shadeName} Cashmere Cardigan or Knit Sweater`
-    : `${shadeName} Merino Crewneck Sweater or Overshirt`;
+  const bp = blueprint || buildPersonalStyleBlueprint();
+  const palColors = bp.signatureColors || [];
+  const chosenPal = palColors.find(c => {
+    const h = hexToHSL(c.hex);
+    return isDarkTop ? h.l >= 48 : h.l <= 45;
+  }) || palColors[0];
+  const proposedHex = chosenPal ? chosenPal.hex : (isDarkTop ? '#d6d3d1' : '#374151');
+  const shadeName = chosenPal ? chosenPal.name : (isDarkTop ? 'Warm Oatmeal' : 'Charcoal / Deep Navy');
+  const formality = getDayFormality() || 'smart-casual';
+  const wantStructured = ['business-casual', 'formal', 'smart-casual', 'cocktail'].includes(formality) || ['executive', 'quiet-luxury'].includes(bp.archKey);
+  const subType = wantStructured
+    ? (gender === 'female' ? 'Cardigan' : 'Blazer')
+    : (['street-edge'].includes(bp.archKey) ? 'Hoodie' : (gender === 'female' ? 'Knit Sweater' : 'Sweater'));
+  const garmentName = `${shadeName} ${subType}`;
   return {
     isProposed: true,
     name: garmentName,
-    subType: gender === 'female' ? 'Cardigan' : 'Sweater',
-    category: 'tops',
+    subType,
+    category: subType === 'Blazer' ? 'outerwear' : 'tops',
     color: proposedHex,
-    formality: getDayFormality() || 'smart-casual',
-    note: 'Suggested Layer 2 mid-layer for 3-layer weather insulation (add a Sweater, Cardigan, Overshirt, or Vest to your wardrobe)'
+    formality,
+    note: `Suggested Layer 2 (${subType}) tailored for your ${bp.palette.name} palette & ${bp.faceRule.label} (add a ${subType}, Sweater, or Hoodie to your wardrobe)`
   };
 }
 
@@ -6226,7 +6846,7 @@ function evaluateOutfitScore(top, bottom, shoe, outer, accessory, opts = {}) {
     const hsl = hexToHSL(it.color || '#555555');
 
     if (itSeason === sInfo.id) {
-      score += 24;
+      score += 18;
       seasonMatchedPieces++;
     } else if (
       (sInfo.id === 'spring' && itSeason === 'spring-summer') ||
@@ -6234,116 +6854,83 @@ function evaluateOutfitScore(top, bottom, shoe, outer, accessory, opts = {}) {
       (sInfo.id === 'autumn' && itSeason === 'autumn-winter') ||
       (sInfo.id === 'winter' && itSeason === 'autumn-winter')
     ) {
-      score += 18;
-      seasonMatchedPieces++;
-    } else if (itSeason === 'all-season') {
-      score += 8;
-    }
-
-    // Check seasonal fabric / garment keyword alignment
-    if (Array.isArray(sInfo.preferredFabrics) && sInfo.preferredFabrics.some(k => subLower.includes(k))) {
       score += 14;
       seasonMatchedPieces++;
+    } else if (itSeason === 'all-season') {
+      score += 6;
     }
 
-    // Seasonal color weight harmony
+    if (Array.isArray(sInfo.preferredFabrics) && sInfo.preferredFabrics.some(k => subLower.includes(k))) {
+      score += 10;
+      seasonMatchedPieces++;
+    }
+
     if (sInfo.id === 'autumn' && ((hsl.h >= 12 && hsl.h <= 55 && hsl.l <= 68) || (hsl.h >= 75 && hsl.h <= 140 && hsl.s <= 55))) {
-      score += 10; // warm earth, camel, rust, olive, burgundy tones in Autumn
+      score += 6;
     } else if (sInfo.id === 'winter' && (hsl.l <= 38 || isNeutralColor(it.color))) {
-      score += 10; // deep navy, charcoal, espresso, obsidian & crisp winter contrast
+      score += 6;
     } else if (sInfo.id === 'spring' && hsl.l >= 50 && hsl.s >= 18) {
-      score += 10; // fresh mid-to-light tones in Spring
+      score += 6;
     } else if (sInfo.id === 'summer' && hsl.l >= 62) {
-      score += 12; // heat-reflecting light tones, linen neutrals & airy shades in Summer
+      score += 8;
     }
   });
 
   const locName = (weather && weather.city) ? weather.city.split(',')[0] : (getSettings().city || 'your location');
   const seasonMsg = `${sInfo.icon} ${sInfo.name} in ${locName} (${sInfo.hemisphereLabel}) — ${sInfo.styleSummary}`;
 
-  // Layering hierarchy check when 3 layers on top are active
-  if (midLayer) {
-    if (isBaseTop(top)) score += 18;
-    if (isMidLayerCandidate(midLayer)) score += 22;
-    // Avoid putting a bulky hoodie under a slim dress shirt
-    const topSub = (top.subType || '').toLowerCase();
-    const midSub = (midLayer.subType || '').toLowerCase();
-    if (/\b(sweater|hoodie|sweatshirt|cardigan)\b/.test(topSub) && /\b(dress shirt|t-shirt|polo|blouse|camisole)\b/.test(midSub)) {
-      score -= 45;
-    }
+  // Strict 3-Tier Top Layering Hierarchy Enforcement
+  // Layer 1 = T-Shirt (short/long) or Base Shirt; Layer 2 = Hoodie / Blazer / Sweater / Cardigan / Overshirt / Vest; Layer 3 = Outer Jacket / Coat
+  if (midLayer || outer) {
+    if (isPrimaryBaseTop(top)) score += 28; // Prefer T-shirts (short or long) / henleys as Layer 1
+    else if (isBaseTop(top)) score += 16;
+    else score -= 120; // Heavy mid-layer/coat should not be worn as Layer 1 under another top
+  } else {
+    if (isBaseTop(top)) score += 12;
   }
 
-  // Mood scoring
+  if (midLayer) {
+    if (isMidLayerCandidate(midLayer)) score += 26;
+    else score -= 140;
+    if (!isLayerPairCompatible(top, midLayer, outer)) score -= 180;
+  }
+
+  if (outer) {
+    if (midLayer) {
+      if (isOuterShellCandidate(outer)) score += 28;
+      else score -= 180; // Do not put Blazer / Hoodie / Sweater on top of Jacket
+    } else {
+      if (isOuterShellCandidate(outer) || isMidLayerCandidate(outer)) score += 20;
+      else score -= 160;
+    }
+    if (!isLayerPairCompatible(top, midLayer, outer)) score -= 180;
+  }
+
+  // PRIMARY DECISION MAKER: Personal Image Blueprint (Best Colors & Cloth Types for Face/Body) + Desired Style
+  const blueprint = opts.blueprint || buildPersonalStyleBlueprint();
+  const personalEval = scoreOutfitPersonalAndStyle(top, midLayer, outer, bottom, shoe, beltItem, accessory, blueprint);
+  score += personalEval.personalScore;
+
+  // Mood scoring (subtle secondary tuning behind Personal & Style Decision)
   items.forEach(it => {
     const hsl = hexToHSL(it.color);
     const subLower = (it.subType || '').toLowerCase();
     if (currentMood === 'energetic') {
-      if (hsl.s > 45 && hsl.l > 25 && hsl.l < 75) score += 15;
+      if (hsl.s > 45 && hsl.l > 25 && hsl.l < 75) score += 8;
     } else if (currentMood === 'calm') {
-      if ((hsl.s <= 40 && hsl.l >= 30) || isNeutralColor(it.color)) score += 15;
+      if ((hsl.s <= 40 && hsl.l >= 30) || isNeutralColor(it.color)) score += 8;
     } else if (currentMood === 'confident') {
-      if (isNeutralColor(it.color) || ['formal','business-casual','smart-casual','cocktail','black-tie'].includes(it.formality)) score += 15;
+      if (isNeutralColor(it.color) || ['formal','business-casual','smart-casual','cocktail','black-tie'].includes(it.formality)) score += 8;
     } else if (currentMood === 'cozy') {
-      if (/\b(sweater|hoodie|jogger|henley|flannel|knit|cardigan|fleece|cashmere|lounge)\b/.test(subLower) || (hsl.h >= 20 && hsl.h <= 55)) score += 20;
+      if (/\b(sweater|hoodie|jogger|henley|flannel|knit|cardigan|fleece|cashmere|lounge)\b/.test(subLower) || (hsl.h >= 20 && hsl.h <= 55)) score += 10;
     } else if (currentMood === 'creative') {
-      if (!isNeutralColor(it.color)) score += 15;
+      if (!isNeutralColor(it.color)) score += 8;
     }
   });
 
-  // Personal Seasonal Color Palette harmony bonus
-  if (userProfile.palette && SEASONAL_PALETTES[userProfile.palette]) {
-    const palColors = SEASONAL_PALETTES[userProfile.palette].colors.map(c => c.hex);
-    for (const it of items) {
-      if (isColorNameMatch(it.color, palColors)) {
-        score += 25;
-        break;
-      }
-    }
-  }
-
-  // Reference-photo palette ("how I like to look") bonus
-  if (Array.isArray(userProfile.inspoPalette) && userProfile.inspoPalette.length) {
-    for (const it of items) {
-      if (isColorNameMatch(it.color, userProfile.inspoPalette)) {
-        score += 15;
-        break;
-      }
-    }
-  }
-
-  // Persona & Style Identity Profile scoring
-  let personaMsg = '';
-  if (userProfile.personaArchetype) {
-    const arch = userProfile.personaArchetype;
-    const aObj = PERSONA_ARCHETYPES.find(a => a.id === arch);
-    const archName = aObj ? aObj.name : 'Curated Persona';
-    const subCombo = (top.subType + ' ' + (midLayer ? midLayer.subType + ' ' : '') + bottom.subType + ' ' + (outer ? outer.subType : '')).toLowerCase();
-
-    if (arch === 'quiet-luxury') {
-      if (isNeutralColor(top.color) && isNeutralColor(bottom.color)) score += 30;
-      if (subCombo.includes('sweater') || subCombo.includes('chino') || subCombo.includes('trousers') || subCombo.includes('polo') || subCombo.includes('cashmere')) score += 20;
-      personaMsg = `🏛️ Tailored to your "${archName}" profile`;
-    } else if (arch === 'executive') {
-      if (outer && /\b(blazer|trench|overcoat|suit|coat)\b/.test((outer.subType||'').toLowerCase())) score += 35;
-      if (['formal','business-casual','smart-casual'].includes(top.formality)) score += 20;
-      personaMsg = `💼 Aligned with your "${archName}" profile`;
-    } else if (arch === 'minimalist') {
-      if (isNeutralColor(top.color) && isNeutralColor(bottom.color)) score += 35;
-      personaMsg = `☕ Reflecting your "${archName}" aesthetic`;
-    } else if (arch === 'creative') {
-      if (!isNeutralColor(top.color) || !isNeutralColor(bottom.color)) score += 30;
-      personaMsg = `🎨 Expressing your "${archName}" energy`;
-    } else if (arch === 'approachable') {
-      if (['linen','henley','cardigan','polo','blouse','chambray'].some(k => subCombo.includes(k))) score += 25;
-      personaMsg = `🌿 Harmonized with your "${archName}" profile`;
-    } else if (arch === 'street-edge') {
-      if (subCombo.includes('sneakers') || subCombo.includes('overshirt') || subCombo.includes('denim') || subCombo.includes('cargo') || subCombo.includes('bomber')) score += 30;
-      personaMsg = `⚡ Styled for your "${archName}" profile`;
-    } else if (arch === 'romantic') {
-      if (subCombo.includes('camisole') || subCombo.includes('skirt') || subCombo.includes('blouse') || subCombo.includes('silk') || subCombo.includes('wrap')) score += 30;
-      personaMsg = `🌸 Styled for your "${archName}" profile`;
-    }
-  }
+  const aObj = PERSONA_ARCHETYPES.find(a => a.id === blueprint.archKey);
+  const archName = aObj ? aObj.name : 'Curated Persona';
+  const personaMsg = `${aObj ? aObj.icon : '✨'} Built for ${archName} · ${blueprint.palette.name} · ${blueprint.faceRule.label.split(' ')[0]} Face × ${blueprint.bodyRule.label.split('(')[0].trim()} Silhouette`;
 
   // Wardrobe Maximizer Anti-Repetition & Rotation Check
   const wearLog = opts.skipWearLog ? [] : getWearLog();
@@ -6352,18 +6939,18 @@ function evaluateOutfitScore(top, bottom, shoe, outer, accessory, opts = {}) {
     const entry = wearLog[i];
     if (entry.topId === top.id && entry.bottomId === bottom.id) {
       isNeverWorn = false;
-      score -= (70 - i * 5); // penalize recent exact pairing
+      score -= (60 - i * 4);
     } else if (entry.topId === top.id) {
-      score -= 25; // penalize wearing same top on consecutive days
+      score -= 18;
     } else if (entry.bottomId === bottom.id) {
-      score -= 20; // penalize wearing same bottom
+      score -= 15;
     }
     if (midLayer && entry.midLayerId === midLayer.id) {
-      score -= 12;
+      score -= 10;
     }
   }
   if (isNeverWorn && !opts.skipWearLog) {
-    score += 40; // High bonus for fresh, unrepeated combinations!
+    score += 28;
   }
 
   // Astral & Natal Chart transit alignment
@@ -6378,7 +6965,7 @@ function evaluateOutfitScore(top, bottom, shoe, outer, accessory, opts = {}) {
         const hDiff = Math.min(Math.abs(itemHSL.h - planetHSL.h), 360 - Math.abs(itemHSL.h - planetHSL.h));
         if (hDiff < 35 || isColorNameMatch(it.color, chart.sun.powerColors) || isColorNameMatch(it.color, chart.rising.powerColors)) {
           astralAligned = true;
-          score += 35;
+          score += 20;
           astralMsg = `✨ Cosmically Aligned with your ${chart.sun.name} Sun & ${chart.planet.name} transit`;
           break;
         }
@@ -6386,7 +6973,7 @@ function evaluateOutfitScore(top, bottom, shoe, outer, accessory, opts = {}) {
     }
   }
 
-  return { score, astralAligned, astralMsg, personaMsg, seasonMsg, seasonInfo: sInfo, isNeverWorn };
+  return { score, astralAligned, astralMsg, personaMsg, seasonMsg, seasonInfo: sInfo, isNeverWorn, blueprint, personalEval };
 }
 
 function shuffle(arr) {
@@ -6408,13 +6995,13 @@ function generateOutfit() {
 
   const targetFormality = getDayFormality();
   const sInfo = getLocationSeasonInfo();
+  const blueprint = buildPersonalStyleBlueprint();
   const byCategory = { tops: [], bottoms: [], shoes: [], outerwear: [], accessories: [] };
 
   wardrobe.forEach(item => {
     if (byCategory[item.category]) {
       byCategory[item.category].push(item);
     } else {
-      // Custom user-defined categories act as versatile finishing/accessory or top pieces based on name
       byCategory.accessories.push(item);
     }
   });
@@ -6436,81 +7023,115 @@ function generateOutfit() {
   const tops = filter(byCategory.tops);
   const bottoms = filter(byCategory.bottoms);
   const shoes = filter(byCategory.shoes);
-  const outerwearItems = filter(byCategory.outerwear);
+  const rawOuterwear = byCategory.outerwear.filter(it => !isItemDisliked(it));
   const nonBeltAccessories = filter(byCategory.accessories.filter(a => !isBeltItem(a)));
 
   const layerInfo = getTargetTopLayers();
   const targetLayers = layerInfo.count; // 1, 2 or 3 layers on top
   const wc = getWeatherCategory();
 
-  // Base tops pool when 3 layers are needed (prefer base shirts/tees/camisoles over bulky sweaters as Layer 1)
-  const baseTopsPool = targetLayers === 3 && tops.some(isBaseTop)
-    ? tops.filter(isBaseTop)
+  // Tier 1 (Base Top): Prefer T-Shirts (short or long sleeve) & Henleys/Camisoles/Bodysuits; allow Shirts/Blouses under tailored mid-layers
+  const allowedTops = byCategory.tops.filter(it => !isItemDisliked(it));
+  const trueBaseTops = tops.filter(isBaseTop);
+  const fallbackBaseTops = allowedTops.filter(isBaseTop);
+  const baseTopsPool = targetLayers >= 2
+    ? (trueBaseTops.length > 0 ? trueBaseTops : (fallbackBaseTops.length > 0 ? fallbackBaseTops : tops))
     : tops;
 
-  // Mid-layer pool (Layer 2 on 3-layer days): sweaters, cardigans, overshirts, flannels, vests, blazers
-  const allMidCandidates = [
-    ...byCategory.tops.filter(it => !isItemDisliked(it) && isMidLayerCandidate(it)),
-    ...byCategory.outerwear.filter(it => !isItemDisliked(it) && isMidLayerCandidate(it))
+  // Tier 2 (Mid-Layer): Hoodie, Blazer, Sweater, Cardigan, Overshirt, Vest, (Flannel/Chambray over a tee)
+  const rawMidCandidates = [
+    ...allowedTops.filter(isMidLayerCandidate),
+    ...rawOuterwear.filter(isMidLayerCandidate)
   ];
-  const fallbackMidCandidates = [
-    ...byCategory.tops.filter(it => !isItemDisliked(it)),
-    ...byCategory.outerwear.filter(it => !isItemDisliked(it))
-  ];
+  const suitableMidCandidates = rawMidCandidates.filter(it => weatherSuitable(it) && formalityMatch(it.formality, targetFormality));
+  const weatherMidCandidates = rawMidCandidates.filter(it => weatherSuitable(it));
+  const formalityMidCandidates = rawMidCandidates.filter(it => formalityMatch(it.formality, targetFormality));
+  const midPoolPreferred = suitableMidCandidates.length > 0 ? suitableMidCandidates
+    : (formalityMidCandidates.length > 0 ? formalityMidCandidates
+    : (weatherMidCandidates.length > 0 ? weatherMidCandidates : rawMidCandidates));
+
+  // Tier 3 (Outer Jacket / Coat): Denim Jacket, Leather Moto, Bomber, Windbreaker, Rain Jacket, Puffer, Overcoat, Trench, Wool Coat
+  const rawOuterShells = rawOuterwear.filter(isOuterShellCandidate);
+  const suitableOuterShells = rawOuterShells.filter(it => weatherSuitable(it) && formalityMatch(it.formality, targetFormality));
+  const weatherOuterShells = rawOuterShells.filter(it => weatherSuitable(it));
+  const formalityOuterShells = rawOuterShells.filter(it => formalityMatch(it.formality, targetFormality));
+  const outerShellPool = suitableOuterShells.length > 0 ? suitableOuterShells
+    : (weatherOuterShells.length > 0 ? weatherOuterShells
+    : (formalityOuterShells.length > 0 ? formalityOuterShells : rawOuterShells));
+
+  const pickCompatibleOuter = (base, mid, shellCandidates) => {
+    const valid = shellCandidates.filter(o => isLayerPairCompatible(base, mid, o));
+    if (valid.length === 0) return null;
+    if (wc.isRain) {
+      const rainGear = valid.filter(it => /\b(rain|windbreaker|trench|parka|overcoat|anorak|waterproof)\b/i.test(it.subType || ''));
+      if (rainGear.length > 0) return pickItem(rainGear);
+    }
+    if (wc.cat === 'cold' || wc.cat === 'very-cold' || sInfo.id === 'winter') {
+      const warmShells = valid.filter(it => /\b(overcoat|topcoat|pea coat|trench|puffer|wool|rain|parka|leather|bomber|shearling|quilted|duffle)\b/i.test(it.subType || ''));
+      if (warmShells.length > 0) return pickItem(warmShells);
+    }
+    return pickItem(valid);
+  };
+
+  // On 2-layer days, alternate between Mid-Layer styling (Hoodie/Blazer/Sweater) and Light Jacket styling across generations
+  const twoLayerModeBias = (targetLayers === 2 && midPoolPreferred.length > 0 && outerShellPool.length > 0)
+    ? (Math.random() < 0.55 ? 'mid' : 'outer')
+    : null;
 
   let bestOutfit = null;
   let highestScore = -Infinity;
 
-  for (let attempt = 0; attempt < 85; attempt++) {
-    const top = pickItem(baseTopsPool);
+  for (let attempt = 0; attempt < 180; attempt++) {
+    // 70% of attempts favor Primary Tees (short or long) when multi-layering; 30% explore collared base shirts too
+    const primaryTees = baseTopsPool.filter(isPrimaryBaseTop);
+    const top = (targetLayers >= 2 && primaryTees.length > 0 && Math.random() < 0.72)
+      ? pickItem(primaryTees)
+      : pickItem(baseTopsPool);
     const bottom = pickItem(bottoms);
     const shoe = pickItem(shoes);
 
     if (!top || !bottom || !shoe) continue;
 
-    // Select Outer Layer (only when targetLayers >= 2)
-    let outer = null;
-    if (targetLayers >= 2 && outerwearItems.length > 0) {
-      if (wc.isRain) {
-        const rainGear = outerwearItems.filter(it =>
-          /\b(rain|windbreaker|trench|parka|overcoat|anorak)\b/.test((it.subType||'').toLowerCase())
-        );
-        outer = pickItem(rainGear.length > 0 ? rainGear : outerwearItems);
-      } else if (targetLayers === 3 && (wc.cat === 'cold' || wc.cat === 'very-cold' || sInfo.id === 'winter')) {
-        const heavyShells = outerwearItems.filter(it =>
-          /\b(overcoat|pea coat|trench|puffer|wool|rain|parka|leather|bomber|windbreaker|shearling|quilted)\b/.test((it.subType||'').toLowerCase())
-        );
-        outer = pickItem(heavyShells.length > 0 ? heavyShells : outerwearItems);
-      } else if (wc.cat === 'hot' || wc.cat === 'warm' || sInfo.id === 'summer') {
-        const acLayers = outerwearItems.filter(it =>
-          /\b(blazer|denim|windbreaker|hoodie|vest|cardigan|kimono|linen|chore|harrington|overshirt)\b/.test((it.subType||'').toLowerCase())
-        );
-        outer = pickItem(acLayers.length > 0 ? acLayers : outerwearItems);
-      } else {
-        outer = pickItem(outerwearItems);
-      }
-    } else if (targetLayers === 2 && outerwearItems.length === 0) {
-      const availSecondLayer = allMidCandidates.filter(it => it.id !== top.id);
-      if (availSecondLayer.length > 0) outer = pickItem(availSecondLayer);
-    }
-
-    // Select Layer 2 (Mid-Layer) when 3 layers on top are needed
     let midLayer = null;
+    let outer = null;
     let proposedMidLayer = null;
-    if (targetLayers === 3) {
-      const usedIds = new Set([top.id, outer ? outer.id : null]);
-      const midPool = allMidCandidates.filter(it => !usedIds.has(it.id) && formalityMatch(it.formality, targetFormality));
-      const midPoolRelaxed = allMidCandidates.filter(it => !usedIds.has(it.id));
-      const midPoolAny = fallbackMidCandidates.filter(it => !usedIds.has(it.id));
 
-      if (midPool.length > 0) {
-        midLayer = pickItem(midPool);
-      } else if (midPoolRelaxed.length > 0) {
-        midLayer = pickItem(midPoolRelaxed);
-      } else if (midPoolAny.length > 0) {
-        midLayer = pickItem(midPoolAny);
+    if (targetLayers === 2) {
+      // On 2-layer days, Layer 2 can be EITHER a Mid-Layer (Hoodie / Blazer / Sweater / Cardigan) OR an Outer Jacket
+      const validMids = midPoolPreferred.filter(m => isLayerPairCompatible(top, m, null));
+      const validOuters = outerShellPool.filter(o => isLayerPairCompatible(top, null, o));
+      const lockedMode = (attempt < 120 || bestOutfit) ? twoLayerModeBias : null;
+      let chooseMidOverShell;
+      if (lockedMode === 'mid') {
+        chooseMidOverShell = validMids.length > 0;
+      } else if (lockedMode === 'outer') {
+        chooseMidOverShell = validMids.length > 0 && validOuters.length === 0;
       } else {
-        proposedMidLayer = buildProposedMidLayerFallback(top, bottom, outer);
+        chooseMidOverShell = validMids.length > 0 && (validOuters.length === 0 || attempt % 2 === 0);
+      }
+      if (chooseMidOverShell) {
+        midLayer = pickItem(validMids);
+      } else if (validOuters.length > 0) {
+        outer = pickCompatibleOuter(top, null, validOuters);
+      } else if (rawMidCandidates.length > 0) {
+        const relaxedMids = rawMidCandidates.filter(m => isLayerPairCompatible(top, m, null));
+        if (relaxedMids.length > 0) midLayer = pickItem(relaxedMids);
+      }
+    } else if (targetLayers === 3) {
+      // On 3-layer days: Layer 1 (Tee/Base) -> Layer 2 (Hoodie/Blazer/Sweater) -> Layer 3 (Jacket/Coat)
+      const validMids = midPoolPreferred.filter(m => isLayerPairCompatible(top, m, null));
+      const relaxedMids = rawMidCandidates.filter(m => isLayerPairCompatible(top, m, null));
+      const midChoices = validMids.length > 0 ? validMids : relaxedMids;
+      if (midChoices.length > 0) {
+        midLayer = pickItem(midChoices);
+      } else {
+        proposedMidLayer = buildProposedMidLayerFallback(top, bottom, null, blueprint);
+      }
+      if (outerShellPool.length > 0) {
+        outer = pickCompatibleOuter(top, midLayer, outerShellPool);
+        if (!outer && rawOuterShells.length > 0) {
+          outer = pickCompatibleOuter(top, midLayer, rawOuterShells);
+        }
       }
     }
 
@@ -6520,13 +7141,12 @@ function generateOutfit() {
 
     if (!outfitColorsHarmonious(mainItems)) continue;
 
-    // Always propose a belt color & match from user's belt accessories
-    const beltRec = proposeBeltForOutfit(shoe, bottom, top, outer, byCategory.accessories);
+    const beltRec = proposeBeltForOutfit(shoe, bottom, top, outer || midLayer, byCategory.accessories);
 
     let accessory = null;
     if (nonBeltAccessories.length > 0 && Math.random() > 0.25) {
       if (wc.isRain) {
-        const umbrellas = nonBeltAccessories.filter(a => (a.subType||'').toLowerCase().includes('umbrella'));
+        const umbrellas = nonBeltAccessories.filter(a => (a.subType || '').toLowerCase().includes('umbrella'));
         accessory = pickItem(umbrellas.length > 0 ? umbrellas : nonBeltAccessories);
       } else {
         accessory = pickItem(nonBeltAccessories);
@@ -6535,12 +7155,13 @@ function generateOutfit() {
 
     const evalResult = evaluateOutfitScore(top, bottom, shoe, outer, accessory, {
       midLayer,
-      beltItem: beltRec.beltItem
+      beltItem: beltRec.beltItem,
+      blueprint
     });
 
     if (evalResult.score > highestScore) {
       highestScore = evalResult.score;
-      bestOutfit = {
+      const candidateOutfit = {
         top,
         midLayer,
         proposedMidLayer,
@@ -6556,8 +7177,11 @@ function generateOutfit() {
         astralAligned: evalResult.astralAligned,
         astralMessage: evalResult.astralMsg,
         personaMessage: evalResult.personaMsg,
-        isNeverWorn: evalResult.isNeverWorn
+        isNeverWorn: evalResult.isNeverWorn,
+        blueprint
       };
+      candidateOutfit.decisionProfile = generateHowToWearGuide(candidateOutfit, blueprint);
+      bestOutfit = candidateOutfit;
     }
   }
 
@@ -6566,19 +7190,25 @@ function generateOutfit() {
   const fallbackTop = pickItem(baseTopsPool) || pickItem(tops);
   const fallbackBottom = pickItem(bottoms);
   const fallbackShoe = pickItem(shoes);
-  const fallbackOuter = targetLayers >= 2 && outerwearItems.length > 0 ? pickItem(outerwearItems) : null;
   let fallbackMid = null;
+  let fallbackOuter = null;
   let fallbackProposedMid = null;
-  if (targetLayers === 3) {
-    const used = new Set([fallbackTop ? fallbackTop.id : null, fallbackOuter ? fallbackOuter.id : null]);
-    const availMid = allMidCandidates.filter(it => !used.has(it.id));
-    if (availMid.length > 0) fallbackMid = pickItem(availMid);
-    else fallbackProposedMid = buildProposedMidLayerFallback(fallbackTop, fallbackBottom, fallbackOuter);
-  }
-  const fallbackBeltRec = proposeBeltForOutfit(fallbackShoe, fallbackBottom, fallbackTop, fallbackOuter, byCategory.accessories);
-  const locName = (weather && weather.city) ? weather.city.split(',')[0] : (getSettings().city || 'your location');
 
-  return {
+  if (targetLayers === 2) {
+    const validMids = rawMidCandidates.filter(m => isLayerPairCompatible(fallbackTop, m, null));
+    const validOuters = rawOuterShells.filter(o => isLayerPairCompatible(fallbackTop, null, o));
+    if (validMids.length > 0) fallbackMid = pickItem(validMids);
+    else if (validOuters.length > 0) fallbackOuter = pickItem(validOuters);
+  } else if (targetLayers === 3) {
+    const validMids = rawMidCandidates.filter(m => isLayerPairCompatible(fallbackTop, m, null));
+    if (validMids.length > 0) fallbackMid = pickItem(validMids);
+    else fallbackProposedMid = buildProposedMidLayerFallback(fallbackTop, fallbackBottom, null, blueprint);
+    fallbackOuter = pickCompatibleOuter(fallbackTop, fallbackMid, rawOuterShells);
+  }
+
+  const fallbackBeltRec = proposeBeltForOutfit(fallbackShoe, fallbackBottom, fallbackTop, fallbackOuter || fallbackMid, byCategory.accessories);
+  const locName = (weather && weather.city) ? weather.city.split(',')[0] : (getSettings().city || 'your location');
+  const fallbackOutfit = {
     top: fallbackTop,
     midLayer: fallbackMid,
     proposedMidLayer: fallbackProposedMid,
@@ -6591,8 +7221,11 @@ function generateOutfit() {
     layerReason: layerInfo.reason,
     seasonMessage: `${sInfo.icon} ${sInfo.name} in ${locName} (${sInfo.hemisphereLabel}) — ${sInfo.styleSummary}`,
     seasonInfo: sInfo,
-    isNeverWorn: true
+    isNeverWorn: true,
+    blueprint
   };
+  fallbackOutfit.decisionProfile = generateHowToWearGuide(fallbackOutfit, blueprint);
+  return fallbackOutfit;
 }
 
 /* ================================================================
@@ -7051,31 +7684,32 @@ function renderOutfit() {
   let stepNum = 1;
   let items = '';
 
-  // 1. TOP LAYER 1 (Base Top — Next to Skin)
+  // 1. TOP LAYER 1 (Base Layer — T-Shirt short/long, Henley, Camisole, Bodysuit, or Shirt)
   const top1Label = targetLayers === 1
     ? 'Single Top Layer · Breathable Base Top'
-    : `Top Layer 1 of ${targetLayers} · Base Top (Next to Skin)`;
+    : `Top Layer 1 of ${targetLayers} · Base Top (T-Shirt / Base Layer)`;
   items += renderOutfitItem(outfit.top, top1Label, `⬆️ #${stepNum++} · Top Layer 1`);
 
-  // 2. TOP LAYER 2 (Mid-Layer on 3-layer days, or Second Layer on 2-layer days)
-  if (targetLayers === 3) {
+  // 2. TOP LAYER 2 (Mid-Layer: Hoodie / Blazer / Sweater / Cardigan / Overshirt / Vest)
+  if (targetLayers >= 2) {
     if (outfit.midLayer) {
-      items += renderOutfitItem(
-        outfit.midLayer,
-        'Top Layer 2 of 3 · Mid-Layer (Sweater / Cardigan / Overshirt) 🧶',
-        `⬆️ #${stepNum++} · Top Layer 2`
-      );
-    } else if (outfit.proposedMidLayer) {
+      const midLabel = targetLayers === 3
+        ? 'Top Layer 2 of 3 · Mid-Layer (Hoodie / Blazer / Sweater) 🧶'
+        : 'Top Layer 2 of 2 · Second Layer (Hoodie / Blazer / Sweater) 🧶';
+      items += renderOutfitItem(outfit.midLayer, midLabel, `⬆️ #${stepNum++} · Top Layer 2`);
+    } else if (targetLayers === 3 && outfit.proposedMidLayer) {
       items += renderProposedMidLayerRow(outfit.proposedMidLayer, `⬆️ #${stepNum++} · Top Layer 2`);
     }
   }
 
-  // 3. TOP LAYER 3 (or Top Layer 2 on 2-layer days): Outer Coat / Jacket / AC Layer
+  // 3. TOP LAYER 3 (or Top Layer 2 on 2-layer days when using an outer jacket): Outer Jacket / Coat
   if (targetLayers >= 2 && outfit.outerwear) {
-    const outerStep = targetLayers === 3 ? `⬆️ #${stepNum++} · Top Layer 3` : `⬆️ #${stepNum++} · Top Layer 2`;
-    const outerLabel = targetLayers === 3
-      ? (wc.isRain ? 'Top Layer 3 of 3 · Weather / Rain Shell ☔🧥' : 'Top Layer 3 of 3 · Outer Coat / Jacket 🧥')
-      : (isAc ? 'Top Layer 2 of 2 · Indoor AC / Light Layer ❄️🏢' : 'Top Layer 2 of 2 · Outerwear / Jacket 🧥');
+    const outerStep = (targetLayers === 3 || outfit.midLayer || outfit.proposedMidLayer)
+      ? `⬆️ #${stepNum++} · Top Layer 3`
+      : `⬆️ #${stepNum++} · Top Layer 2`;
+    const outerLabel = (targetLayers === 3 || outfit.midLayer || outfit.proposedMidLayer)
+      ? (wc.isRain ? 'Top Layer 3 of 3 · Weather / Rain Shell ☔🧥' : 'Top Layer 3 of 3 · Outer Jacket / Coat 🧥')
+      : (isAc ? 'Top Layer 2 of 2 · Indoor AC / Light Jacket ❄️🏢' : 'Top Layer 2 of 2 · Outer Jacket / Coat 🧥');
     items += renderOutfitItem(outfit.outerwear, outerLabel, outerStep);
   }
 
@@ -7167,6 +7801,28 @@ function renderOutfit() {
   const outerIdArg = outfit.outerwear ? `'${outfit.outerwear.id}'` : 'null';
   const beltIdArg = outfit.beltRec && outfit.beltRec.beltItem ? `'${outfit.beltRec.beltItem.id}'` : 'null';
 
+  const dp = outfit.decisionProfile || generateHowToWearGuide(outfit, outfit.blueprint || buildPersonalStyleBlueprint());
+  const decisionCardHtml = `
+    <div class="outfit-decision-card" id="outfit-decision-card">
+      <div class="outfit-decision-title">
+        <span>🧬 Why These Colors, Cuts &amp; How to Wear It · ${escapeHtml(dp.desiredTone)}</span>
+      </div>
+      <div class="outfit-decision-grid">
+        <div class="outfit-decision-cell">
+          <strong>🎨 Complexion &amp; Color Harmony</strong>
+          <div>${dp.whatWhyColor}</div>
+        </div>
+        <div class="outfit-decision-cell">
+          <strong>📐 Face &amp; Body Cloth Type Fit</strong>
+          <div>${dp.whatWhyCut}</div>
+        </div>
+        <div class="outfit-decision-cell">
+          <strong>✨ How to Wear This Look</strong>
+          <div>${dp.howToWearText}</div>
+        </div>
+      </div>
+    </div>`;
+
   section.innerHTML = `
     <div class="outfit-display">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
@@ -7181,9 +7837,10 @@ function renderOutfit() {
         </div>
       </div>
       ${outfit.seasonMessage ? `<div style="margin-bottom:8px;"><span class="badge" style="background:${sInfo.badgeBg}; color:${sInfo.badgeText}; font-weight:600; font-size:0.76rem; padding:5px 12px; border-radius:14px; border:1px solid ${sInfo.badgeBorder}; display:inline-block;">${escapeHtml(outfit.seasonMessage)}</span></div>` : ''}
-      ${outfit.personaMessage ? `<div style="margin-bottom:8px;"><span class="badge" style="background:#e8f4ec; color:#2e6945; font-weight:600; font-size:0.78rem; padding:4px 12px; border-radius:14px; border:1px solid #cce5d4;">${outfit.personaMessage}</span></div>` : ''}
+      ${outfit.personaMessage ? `<div style="margin-bottom:8px;"><span class="badge" style="background:#e8f4ec; color:#2e6945; font-weight:600; font-size:0.78rem; padding:4px 12px; border-radius:14px; border:1px solid #cce5d4;">${escapeHtml(outfit.personaMessage)}</span></div>` : ''}
       ${outfit.astralAligned && outfit.astralMessage ? `<div style="margin-bottom:10px;"><span class="astral-outfit-badge">${outfit.astralMessage}</span></div>` : ''}
       <div class="outfit-items">${items}</div>
+      ${decisionCardHtml}
       <div class="outfit-actions">
         <button class="btn btn-primary" onclick="shuffleOutfit()">
           <span id="shuffle-icon">🔀</span> Shuffle Outfit
@@ -7269,8 +7926,14 @@ function renderWardrobe() {
     return `
       <div class="clothing-card" style="animation-delay:${idx * 0.04}s">
         <div class="card-actions">
-          <button class="icon-btn icon-btn-edit" onclick="openEditModal('${item.id}')" title="Edit">✏️</button>
-          <button class="icon-btn icon-btn-delete" onclick="deleteItem('${item.id}')" title="Delete">✕</button>
+          <div class="card-actions-left">
+            <span class="card-actions-swatch" style="background:${item.color}" title="Color"></span>
+            <span class="card-actions-cat">${escapeHtml(getCategoryLabel(item.category))}</span>
+          </div>
+          <div class="card-actions-btns">
+            <button type="button" class="icon-btn icon-btn-edit" onclick="event.stopPropagation(); openEditModal('${item.id}')" title="Edit ${escapeHtml(item.name)}" aria-label="Edit">✏️</button>
+            <button type="button" class="icon-btn icon-btn-delete" onclick="event.stopPropagation(); deleteItem('${item.id}')" title="Delete ${escapeHtml(item.name)}" aria-label="Delete">✕</button>
+          </div>
         </div>
         ${visualContent}
         <div class="card-name">${escapeHtml(item.name)}</div>
@@ -7295,6 +7958,7 @@ const COLOR_NAME_PALETTE = [
   { name: 'Jet Black', r: 12, g: 12, b: 14 },
   { name: 'Charcoal', r: 55, g: 65, b: 81 },
   { name: 'Slate Gray', r: 100, g: 116, b: 139 },
+  { name: 'Medium Gray', r: 136, g: 142, b: 150 },
   { name: 'Heather Gray', r: 156, g: 163, b: 175 },
   { name: 'Silver Gray', r: 203, g: 213, b: 225 },
   { name: 'Light Gray', r: 218, g: 222, b: 228 },
@@ -7353,12 +8017,15 @@ const COLOR_NAME_PALETTE = [
 function getClosestColorName(r, g, b) {
   let closest = 'Neutral';
   let minDiff = Infinity;
+  const srcSpread = Math.max(r, g, b) - Math.min(r, g, b);
   for (const c of COLOR_NAME_PALETTE) {
-    // Weighted perceptual RGB distance
+    // Weighted perceptual RGB distance + neutrality guard so cool grays don't drift into green/olive
     const dr = r - c.r;
     const dg = g - c.g;
     const db = b - c.b;
-    const diff = Math.sqrt(dr * dr * 0.3 + dg * dg * 0.59 + db * db * 0.11) * 1.4 + Math.hypot(dr, dg, db) * 0.5;
+    const candSpread = Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b);
+    const neutralPenalty = (srcSpread <= 20 && candSpread >= 24 && Math.abs(c.g - c.b) >= 16) ? 18 : 0;
+    const diff = Math.sqrt(dr * dr * 0.3 + dg * dg * 0.59 + db * db * 0.11) * 1.4 + Math.hypot(dr, dg, db) * 0.5 + neutralPenalty;
     if (diff < minDiff) {
       minDiff = diff;
       closest = c.name;
@@ -7370,6 +8037,280 @@ function getClosestColorName(r, g, b) {
 /* ================================================================
    IMAGE PREPARATION & HIGH-PRECISION COMPUTER-VISION IDENTIFIER
    ================================================================ */
+
+/* ================================================================
+   IMAGE PREPARATION & REAL FOREGROUND SEGMENTATION (Original Photo Preserved)
+   ================================================================ */
+
+function segmentGarmentForAnalysis(ctx, w, h) {
+  // Downsample to <=160px grid for sub-5ms edge-guarded flood-fill & connected component analysis
+  const maxS = 160;
+  let sw = w, sh = h;
+  if (sw > maxS || sh > maxS) {
+    if (sw > sh) { sh = Math.max(24, Math.round((sh * maxS) / sw)); sw = maxS; }
+    else { sw = Math.max(24, Math.round((sw * maxS) / sh)); sh = maxS; }
+  }
+  const scCanvas = document.createElement('canvas');
+  scCanvas.width = sw;
+  scCanvas.height = sh;
+  const sCtx = scCanvas.getContext('2d');
+  sCtx.drawImage(ctx.canvas, 0, 0, w, h, 0, 0, sw, sh);
+  const px = sCtx.getImageData(0, 0, sw, sh).data;
+  const nPix = sw * sh;
+
+  // Luminance & Gradient magnitude for Sobel-like barrier
+  const lum = new Float32Array(nPix);
+  const grad = new Float32Array(nPix);
+  for (let i = 0; i < nPix; i++) {
+    const o = i * 4;
+    lum[i] = px[o] * 0.299 + px[o + 1] * 0.587 + px[o + 2] * 0.114;
+  }
+  for (let y = 1; y < sh - 1; y++) {
+    for (let x = 1; x < sw - 1; x++) {
+      const i = y * sw + x;
+      const dx = Math.abs(lum[i + 1] - lum[i - 1]);
+      const dy = Math.abs(lum[i + sw] - lum[i - sw]);
+      const cdx = Math.abs(px[(i + 1) * 4] - px[(i - 1) * 4]) + Math.abs(px[(i + 1) * 4 + 2] - px[(i - 1) * 4 + 2]);
+      const cdy = Math.abs(px[(i + sw) * 4] - px[(i - sw) * 4]) + Math.abs(px[(i + sw) * 4 + 2] - px[(i - sw) * 4 + 2]);
+      grad[i] = (dx + dy) * 0.75 + (cdx + cdy) * 0.35;
+    }
+  }
+
+  // Cluster 3px border ring pixels into dominant background colors
+  const borderBins = new Map();
+  let borderR = 0, borderG = 0, borderB = 0, borderN = 0;
+  for (let y = 0; y < sh; y++) {
+    for (let x = 0; x < sw; x++) {
+      if (x < 3 || x >= sw - 3 || y < 3 || y >= sh - 3) {
+        const i = (y * sw + x) * 4;
+        if (px[i + 3] < 40) continue;
+        const r = px[i], g = px[i + 1], b = px[i + 2];
+        borderR += r; borderG += g; borderB += b; borderN++;
+        const k = `${r >> 5}_${g >> 5}_${b >> 5}`;
+        const cur = borderBins.get(k) || { c: 0, r: 0, g: 0, b: 0 };
+        cur.c++; cur.r += r; cur.g += g; cur.b += b;
+        borderBins.set(k, cur);
+      }
+    }
+  }
+  const bgClusters = Array.from(borderBins.values())
+    .sort((a, b) => b.c - a.c)
+    .slice(0, 3)
+    .map(c => ({ r: c.r / c.c, g: c.g / c.c, b: c.b / c.c }));
+  if (bgClusters.length === 0) bgClusters.push({ r: 245, g: 245, b: 245 });
+
+  const bgDist = (idx) => {
+    const o = idx * 4;
+    if (px[o + 3] < 40) return 0; // transparent alpha is background
+    const r = px[o], g = px[o + 1], b = px[o + 2];
+    let best = Infinity;
+    for (const c of bgClusters) {
+      const d = Math.abs(r - c.r) * 0.32 + Math.abs(g - c.g) * 0.42 + Math.abs(b - c.b) * 0.26;
+      if (d < best) best = d;
+    }
+    return best;
+  };
+
+  // Edge-guarded BFS flood-fill from border
+  const runFloodFill = (bgTol, stepTol, edgeTol) => {
+    const bgMask = new Uint8Array(nPix);
+    const q = new Int32Array(nPix);
+    let head = 0, tail = 0;
+    for (let y = 0; y < sh; y++) {
+      for (let x = 0; x < sw; x++) {
+        if (x === 0 || x === sw - 1 || y === 0 || y === sh - 1) {
+          const i = y * sw + x;
+          if (bgDist(i) <= bgTol + 8) {
+            bgMask[i] = 1;
+            q[tail++] = i;
+          }
+        }
+      }
+    }
+    while (head < tail) {
+      const curr = q[head++];
+      const cx = curr % sw, cy = (curr / sw) | 0;
+      const co = curr * 4;
+      const nb = [
+        cx > 0 ? curr - 1 : -1,
+        cx < sw - 1 ? curr + 1 : -1,
+        cy > 0 ? curr - sw : -1,
+        cy < sh - 1 ? curr + sw : -1
+      ];
+      for (let k = 0; k < 4; k++) {
+        const ni = nb[k];
+        if (ni < 0 || bgMask[ni]) continue;
+        const no = ni * 4;
+        if (px[no + 3] < 40) {
+          bgMask[ni] = 1;
+          q[tail++] = ni;
+          continue;
+        }
+        if (grad[ni] > edgeTol) continue;
+        const stepDiff = (Math.abs(px[no] - px[co]) + Math.abs(px[no + 1] - px[co + 1]) + Math.abs(px[no + 2] - px[co + 2])) / 3;
+        if (bgDist(ni) <= bgTol || (stepDiff <= stepTol && bgDist(ni) <= bgTol * 1.9)) {
+          bgMask[ni] = 1;
+          q[tail++] = ni;
+        }
+      }
+    }
+    const fg = new Uint8Array(nPix);
+    let fgCount = 0;
+    for (let i = 0; i < nPix; i++) {
+      if (!bgMask[i] && px[i * 4 + 3] >= 40) { fg[i] = 1; fgCount++; }
+    }
+    return { fg, fgRatio: fgCount / nPix };
+  };
+
+  let seg = runFloodFill(26, 13, 38);
+  // If flood fill swallowed almost the whole faint white garment, tighten thresholds
+  if (seg.fgRatio < 0.06) {
+    seg = runFloodFill(14, 7, 22);
+  }
+  // If cluttered/touching borders made foreground huge (>84%), run center-vs-border saliency segmentation
+  if (seg.fgRatio > 0.84 || seg.fgRatio < 0.04) {
+    const fgSal = new Uint8Array(nPix);
+    let salCount = 0;
+    for (let y = 0; y < sh; y++) {
+      for (let x = 0; x < sw; x++) {
+        const i = y * sw + x;
+        const dx = (x / sw - 0.5) * 2;
+        const dy = (y / sh - 0.5) * 2;
+        const radialPenalty = (dx * dx + dy * dy) * 8;
+        const dBg = bgDist(i) + (grad[i] > 28 ? 14 : 0);
+        if (dBg - radialPenalty > 18) {
+          fgSal[i] = 1;
+          salCount++;
+        }
+      }
+    }
+    if (salCount / nPix >= 0.06 && salCount / nPix <= 0.85) {
+      seg = { fg: fgSal, fgRatio: salCount / nPix };
+    }
+  }
+
+  // Punch out enclosed background holes (e.g., coiled belts, bag straps, arm-to-torso gaps)
+  // while protecting white-on-white garments (which fill >=80% of foreground area).
+  let segFgCount = 0;
+  const candHole = new Uint8Array(nPix);
+  for (let i = 0; i < nPix; i++) {
+    if (seg.fg[i]) {
+      segFgCount++;
+      if (bgDist(i) <= 18) candHole[i] = 1;
+    }
+  }
+  const holeSeen = new Uint8Array(nPix);
+  const holeQueue = new Int32Array(nPix);
+  for (let i = 0; i < nPix; i++) {
+    if (!candHole[i] || holeSeen[i]) continue;
+    let hHead = 0, hTail = 0;
+    holeSeen[i] = 1;
+    holeQueue[hTail++] = i;
+    let ringBgSum = 0, ringCnt = 0;
+    while (hHead < hTail) {
+      const cur = holeQueue[hHead++];
+      const cx = cur % sw, cy = (cur / sw) | 0;
+      const nb = [cx > 0 ? cur - 1 : -1, cx < sw - 1 ? cur + 1 : -1, cy > 0 ? cur - sw : -1, cy < sh - 1 ? cur + sw : -1];
+      for (let k = 0; k < 4; k++) {
+        const ni = nb[k];
+        if (ni < 0) continue;
+        if (candHole[ni]) {
+          if (!holeSeen[ni]) {
+            holeSeen[ni] = 1;
+            holeQueue[hTail++] = ni;
+          }
+        } else if (seg.fg[ni]) {
+          ringBgSum += bgDist(ni);
+          ringCnt++;
+        }
+      }
+    }
+    const ringAvg = ringCnt > 0 ? ringBgSum / ringCnt : 0;
+    if (hTail >= 16 && hTail <= segFgCount * 0.78 && ringAvg >= 28) {
+      for (let k = 0; k < hTail; k++) seg.fg[holeQueue[k]] = 0;
+    }
+  }
+
+  // Connected component analysis: keep primary object + paired object (e.g. two shoes >= 12% of main component)
+  const labels = new Int32Array(nPix);
+  const compSizes = [0];
+  let compId = 0;
+  const bfsQ = new Int32Array(nPix);
+  for (let i = 0; i < nPix; i++) {
+    if (!seg.fg[i] || labels[i]) continue;
+    compId++;
+    let size = 0, hPtr = 0, tPtr = 0;
+    labels[i] = compId;
+    bfsQ[tPtr++] = i;
+    while (hPtr < tPtr) {
+      const cur = bfsQ[hPtr++];
+      size++;
+      const cx = cur % sw, cy = (cur / sw) | 0;
+      const nb = [cx > 0 ? cur - 1 : -1, cx < sw - 1 ? cur + 1 : -1, cy > 0 ? cur - sw : -1, cy < sh - 1 ? cur + sw : -1];
+      for (let k = 0; k < 4; k++) {
+        const ni = nb[k];
+        if (ni >= 0 && seg.fg[ni] && !labels[ni]) {
+          labels[ni] = compId;
+          bfsQ[tPtr++] = ni;
+        }
+      }
+    }
+    compSizes[compId] = size;
+  }
+
+  let maxCompSize = 0;
+  for (let c = 1; c <= compId; c++) if (compSizes[c] > maxCompSize) maxCompSize = compSizes[c];
+  const validComp = new Uint8Array(compId + 1);
+  let componentCount = 0;
+  for (let c = 1; c <= compId; c++) {
+    if (compSizes[c] >= Math.max(Math.round(nPix * 0.012), Math.round(maxCompSize * 0.14))) {
+      validComp[c] = 1;
+      componentCount++;
+    }
+  }
+
+  // Fallback cleanly if segmentation filtered everything out
+  if (componentCount === 0) {
+    const fullMask = new Uint8Array(w * h);
+    const minX = Math.floor(w * 0.1), minY = Math.floor(h * 0.1);
+    const maxX = Math.ceil(w * 0.9), maxY = Math.ceil(h * 0.9);
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) fullMask[y * w + x] = 1;
+    }
+    return { fgMask: fullMask, bbox: { minX, minY, maxX, maxY }, componentCount: 1, fgRatio: 0.64 };
+  }
+
+  // Upsample clean foreground mask to full analysis resolution w x h and extract tight bbox
+  const fgMask = new Uint8Array(w * h);
+  let minX = w, minY = h, maxX = 0, maxY = 0, keptPixels = 0;
+  for (let y = 0; y < h; y++) {
+    const sy = Math.min(sh - 1, Math.floor((y * sh) / h));
+    for (let x = 0; x < w; x++) {
+      const sx = Math.min(sw - 1, Math.floor((x * sw) / w));
+      const c = labels[sy * sw + sx];
+      if (c > 0 && validComp[c]) {
+        fgMask[y * w + x] = 1;
+        keptPixels++;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  if (maxX - minX < 8 || maxY - minY < 8) {
+    minX = Math.floor(w * 0.1); minY = Math.floor(h * 0.1);
+    maxX = Math.ceil(w * 0.9); maxY = Math.ceil(h * 0.9);
+  }
+
+  return {
+    fgMask,
+    bbox: { minX, minY, maxX, maxY },
+    componentCount,
+    fgRatio: keptPixels / Math.max(1, w * h)
+  };
+}
 
 function preparePhotoForAnalysis(img) {
   const maxWorkDim = 480;
@@ -7391,6 +8332,7 @@ function preparePhotoForAnalysis(img) {
   const ctx = workCanvas.getContext('2d');
   ctx.drawImage(img, 0, 0, w, h);
 
+  // Original photo stays 100% unaltered in dataUrl; segmentation is purely for accurate CV vision analysis
   let dataUrl = '';
   try {
     dataUrl = workCanvas.toDataURL('image/jpeg', 0.88);
@@ -7398,13 +8340,16 @@ function preparePhotoForAnalysis(img) {
     dataUrl = img.src;
   }
 
+  const seg = segmentGarmentForAnalysis(ctx, w, h);
+
   return {
     dataUrl,
     ctx,
     width: w,
     height: h,
-    fgMask: null,
-    bbox: { minX: Math.floor(w * 0.1), minY: Math.floor(h * 0.1), maxX: Math.ceil(w * 0.9), maxY: Math.ceil(h * 0.9) }
+    fgMask: seg.fgMask,
+    bbox: seg.bbox,
+    componentCount: seg.componentCount
   };
 }
 
@@ -7412,49 +8357,84 @@ function preparePhotoForAnalysis(img) {
    HIGH-PRECISION COMPUTER-VISION GARMENT IDENTIFIER
    ================================================================ */
 
-function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName) {
+function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName, componentCount = 1) {
   const imgData = ctx.getImageData(0, 0, w, h).data;
-  const minX = bbox ? bbox.minX : Math.floor(w * 0.15);
-  const maxX = bbox ? bbox.maxX : Math.ceil(w * 0.85);
-  const minY = bbox ? bbox.minY : Math.floor(h * 0.15);
-  const maxY = bbox ? bbox.maxY : Math.ceil(h * 0.85);
+  const minX = bbox ? bbox.minX : Math.floor(w * 0.12);
+  const maxX = bbox ? bbox.maxX : Math.ceil(w * 0.88);
+  const minY = bbox ? bbox.minY : Math.floor(h * 0.12);
+  const maxY = bbox ? bbox.maxY : Math.ceil(h * 0.88);
   const bboxW = Math.max(8, maxX - minX + 1);
   const bboxH = Math.max(8, maxY - minY + 1);
 
-  // 1. Dominant Foreground Color Clustering (ignores background, specular glare & deep shadows)
+  const isSkinTonePixel = (r, g, b) => {
+    const cr = 128 + 0.5 * r - 0.4187 * g - 0.0813 * b;
+    const cb = 128 - 0.1687 * r - 0.3313 * g + 0.5 * b;
+    return cr >= 134 && cr <= 176 && cb >= 78 && cb <= 128 && r > 78 && r > g && g >= b * 0.85;
+  };
+
+  // First pass: check if human skin appears mostly in upper head/neck zone (person wearing item vs tan fabric)
+  let upperSkinCount = 0, totalFgCount = 0, nonSkinCount = 0;
+  for (let y = minY; y <= maxY; y += 2) {
+    for (let x = minX; x <= maxX; x += 2) {
+      const pIdx = y * w + x;
+      if (fgMask && !fgMask[pIdx]) continue;
+      const o = pIdx * 4;
+      if (imgData[o + 3] < 120) continue;
+      totalFgCount++;
+      const r = imgData[o], g = imgData[o + 1], b = imgData[o + 2];
+      if (isSkinTonePixel(r, g, b)) {
+        if ((y - minY) / bboxH < 0.24) upperSkinCount++;
+      } else {
+        nonSkinCount++;
+      }
+    }
+  }
+  const ignoreHumanSkin = upperSkinCount >= 18 && nonSkinCount >= totalFgCount * 0.35;
+
+  // 1. Dominant Foreground Color Clustering (preserves true crisp white garments while skipping background)
   const colorBins = new Map();
   let rFallbackSum = 0, gFallbackSum = 0, bFallbackSum = 0, fallbackCount = 0;
-  let texVarianceSum = 0, texSamples = 0;
+  let whiteFgCount = 0, darkFgCount = 0;
+  let texVarianceSum = 0, texTrimSum = 0, texWeaveCount = 0, texSamples = 0;
 
   for (let y = minY; y <= maxY; y += 2) {
     for (let x = minX; x <= maxX; x += 2) {
       const pIdx = y * w + x;
       if (fgMask && !fgMask[pIdx]) continue;
-      // Weight core garment interior higher than outer fringe
-      const relX = (x - minX) / bboxW;
-      const relY = (y - minY) / bboxH;
-      const isCore = relX > 0.15 && relX < 0.85 && relY > 0.15 && relY < 0.85;
-      const weight = isCore ? 2 : 1;
 
       const dIdx = pIdx * 4;
       const r = imgData[dIdx], g = imgData[dIdx + 1], b = imgData[dIdx + 2], a = imgData[dIdx + 3];
       if (a < 120) continue;
+      if (ignoreHumanSkin && isSkinTonePixel(r, g, b)) continue;
 
-      rFallbackSum += r; gFallbackSum += g; bFallbackSum += b; fallbackCount++;
+      const relX = (x - minX) / bboxW;
+      const relY = (y - minY) / bboxH;
+      const isCore = relX > 0.16 && relX < 0.84 && relY > 0.16 && relY < 0.84;
+      const weight = isCore ? 2 : 1;
 
-      // Local texture contrast measurement
-      if (x + 2 <= maxX && (!fgMask || fgMask[pIdx + 2])) {
-        const nIdx = (pIdx + 2) * 4;
-        texVarianceSum += Math.abs(r - imgData[nIdx]) + Math.abs(g - imgData[nIdx + 1]) + Math.abs(b - imgData[nIdx + 2]);
+      rFallbackSum += r * weight; gFallbackSum += g * weight; bFallbackSum += b * weight; fallbackCount += weight;
+      if (r >= 225 && g >= 225 && b >= 220) whiteFgCount++;
+      if (r <= 48 && g <= 48 && b <= 52) darkFgCount++;
+
+      // Local 1px-step H+V texture contrast measurement (excluding stark lapel/button jumps > 55)
+      if (x + 1 <= maxX && (!fgMask || fgMask[pIdx + 1])) {
+        const nIdx = (pIdx + 1) * 4;
+        const hDiff = Math.abs(r - imgData[nIdx]) + Math.abs(g - imgData[nIdx + 1]) + Math.abs(b - imgData[nIdx + 2]);
+        texVarianceSum += hDiff;
+        if (hDiff <= 55) { texTrimSum += hDiff; if (hDiff >= 8) texWeaveCount++; }
+        texSamples++;
+      }
+      if (y + 1 <= maxY && (!fgMask || fgMask[(y + 1) * w + x])) {
+        const vIdx = ((y + 1) * w + x) * 4;
+        const vDiff = Math.abs(r - imgData[vIdx]) + Math.abs(g - imgData[vIdx + 1]) + Math.abs(b - imgData[vIdx + 2]);
+        texVarianceSum += vDiff;
+        if (vDiff <= 55) { texTrimSum += vDiff; if (vDiff >= 8) texWeaveCount++; }
         texSamples++;
       }
 
-      // Skip extreme glare highlights if non-glare pixels exist
-      if (r > 249 && g > 249 && b > 249) continue;
-
-      const qr = Math.floor(r / 24);
-      const qg = Math.floor(g / 24);
-      const qb = Math.floor(b / 24);
+      const qr = Math.floor(r / 20);
+      const qg = Math.floor(g / 20);
+      const qb = Math.floor(b / 20);
       const key = `${qr}_${qg}_${qb}`;
       const bin = colorBins.get(key) || { count: 0, rSum: 0, gSum: 0, bSum: 0 };
       bin.count += weight;
@@ -7476,11 +8456,10 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName) {
     const pR = primary.rSum / primary.count;
     const pG = primary.gSum / primary.count;
     const pB = primary.bSum / primary.count;
-    // Merge adjacent shade bins for smooth accurate garment color
-    for (let i = 1; i < Math.min(4, sortedBins.length); i++) {
+    for (let i = 1; i < Math.min(5, sortedBins.length); i++) {
       const b = sortedBins[i];
       const br = b.rSum / b.count, bg = b.gSum / b.count, bb = b.bSum / b.count;
-      if (Math.hypot(br - pR, bg - pG, bb - pB) < 42) {
+      if (Math.hypot(br - pR, bg - pG, bb - pB) < 40) {
         rAcc += b.rSum; gAcc += b.gSum; bAcc += b.bSum; cAcc += b.count;
       }
     }
@@ -7493,9 +8472,11 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName) {
   const colorName = getClosestColorName(domR, domG, domB);
   const hsl = hexToHSL(hex);
   const avgTexture = texSamples > 0 ? texVarianceSum / texSamples : 12;
+  const trimmedTexture = texSamples > 0 ? texTrimSum / texSamples : 6;
+  const weaveRatio = texSamples > 0 ? texWeaveCount / texSamples : 0.1;
 
-  // 2. Build 32x32 Normalized Silhouette Grid from Foreground Bounding Box
-  const G = 32;
+  // 2. Build 40x40 Normalized Silhouette Grid inside tight foreground bbox
+  const G = 40;
   const grid = new Uint8Array(G * G);
   const rowWidths = new Float32Array(G);
   const rowLeft = new Int32Array(G);
@@ -7527,87 +8508,149 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName) {
     rowFill[gy] = filled / G;
   }
 
-  const aspect = bboxH / Math.max(1, bboxW); // >1.25 = tall, <0.82 = wide
-
-  const avgSlice = (arr, startRow, endRow) => {
+  const aspect = bboxH / Math.max(1, bboxW);
+  const avgSlice = (arr, r0, r1) => {
     let s = 0, c = 0;
-    for (let r = startRow; r <= endRow; r++) {
-      if (r >= 0 && r < G) { s += arr[r]; c++; }
-    }
+    for (let r = r0; r <= r1; r++) if (r >= 0 && r < G) { s += arr[r]; c++; }
     return c > 0 ? s / c : 0;
   };
 
-  const topWidth = avgSlice(rowWidths, 2, 11);
-  const midWidth = avgSlice(rowWidths, 12, 21);
-  const botWidth = avgSlice(rowWidths, 22, 30);
-  const totalFill = avgSlice(rowFill, 0, 31);
+  const topWidth = avgSlice(rowWidths, 3, 13);
+  const midWidth = avgSlice(rowWidths, 15, 25);
+  const botWidth = avgSlice(rowWidths, 28, 37);
+  const totalFill = avgSlice(rowFill, 0, G - 1);
 
-  // Detect Lower-Half Vertical Split (two pant/short legs separated by a central gap)
+  // Detect true Lower-Half Leg Split (crotch gap in pants/jeans/shorts vs solid center in tops)
   let legSplitRows = 0, checkedLegRows = 0;
-  for (let gy = 16; gy <= 30; gy++) {
+  for (let gy = 20; gy <= 37; gy++) {
     if (rowWidths[gy] < 0.25) continue;
     checkedLegRows++;
-    // Look for FG on left (cols 3..12), BG gap in middle (cols 13..18), FG on right (cols 19..28)
     let leftFg = 0, midBg = 0, rightFg = 0;
-    for (let gx = 3; gx <= 12; gx++) if (grid[gy * G + gx]) leftFg++;
-    for (let gx = 13; gx <= 18; gx++) if (!grid[gy * G + gx]) midBg++;
-    for (let gx = 19; gx <= 28; gx++) if (grid[gy * G + gx]) rightFg++;
-    if (leftFg >= 2 && midBg >= 2 && rightFg >= 2) {
-      legSplitRows++;
-    }
+    for (let gx = 4; gx <= 15; gx++) if (grid[gy * G + gx]) leftFg++;
+    for (let gx = 16; gx <= 23; gx++) if (!grid[gy * G + gx]) midBg++;
+    for (let gx = 24; gx <= 35; gx++) if (grid[gy * G + gx]) rightFg++;
+    if (leftFg >= 3 && midBg >= 2 && rightFg >= 3) legSplitRows++;
   }
   const legSplitScore = checkedLegRows > 0 ? legSplitRows / checkedLegRows : 0;
 
-  // Detect Upper-Half Sleeve Wings (shoulders/sleeves extending wider than lower waist)
-  const maxUpperWidth = Math.max(...Array.from(rowWidths.slice(3, 16)), 0);
-  const waistWidth = avgSlice(rowWidths, 18, 28);
-  const sleeveWingRatio = waistWidth > 0.1 ? maxUpperWidth / waistWidth : 1.0;
-
-  // Measure how far down outer sleeve columns (cols 0..6 and 25..31) stay occupied
-  let outerSleeveBottomRow = 0;
-  for (let gy = 4; gy < 30; gy++) {
-    let outerOccupied = 0;
-    for (let gx = 0; gx <= 5; gx++) if (grid[gy * G + gx]) outerOccupied++;
-    for (let gx = 26; gx <= 31; gx++) if (grid[gy * G + gx]) outerOccupied++;
-    if (outerOccupied >= 2) outerSleeveBottomRow = gy;
+  // Detect Upper Waistband Bridge in rows 2..14 & Bottom Ring Closure in rows 30..38
+  let topBridgeRows = 0, checkedTopRows = 0, botBridgeRows = 0, checkedBotRows = 0;
+  for (let gy = 2; gy <= 14; gy++) {
+    if (rowWidths[gy] < 0.20) continue;
+    checkedTopRows++;
+    let centerFg = 0;
+    for (let gx = 15; gx <= 24; gx++) if (grid[gy * G + gx]) centerFg++;
+    if (centerFg >= 4) topBridgeRows++;
   }
-  const sleeveDropRatio = outerSleeveBottomRow / G; // >0.68 = long sleeve, 0.28..0.64 = short sleeve, <0.28 = sleeveless
+  for (let gy = 30; gy <= 38; gy++) {
+    if (rowWidths[gy] < 0.20) continue;
+    checkedBotRows++;
+    let centerFg = 0;
+    for (let gx = 15; gx <= 24; gx++) if (grid[gy * G + gx]) centerFg++;
+    if (centerFg >= 4) botBridgeRows++;
+  }
+  const topBridgeScore = checkedTopRows > 0 ? topBridgeRows / checkedTopRows : 0;
+  const botBridgeScore = checkedBotRows > 0 ? botBridgeRows / checkedBotRows : 0;
 
-  // Detect Upper-Center Collar Dip / Neckline Opening
-  let neckDipRows = 0;
-  for (let gy = 0; gy <= 5; gy++) {
-    let leftShoulder = 0, centerNeckGap = 0, rightShoulder = 0;
-    for (let gx = 6; gx <= 12; gx++) if (grid[gy * G + gx]) leftShoulder++;
-    for (let gx = 13; gx <= 18; gx++) if (!grid[gy * G + gx]) centerNeckGap++;
-    for (let gx = 19; gx <= 25; gx++) if (grid[gy * G + gx]) rightShoulder++;
-    if (leftShoulder >= 1 && centerNeckGap >= 2 && rightShoulder >= 1) neckDipRows++;
+  // Detect Underarm Sleeve Gap (hanging long/mid sleeves outside central torso in rows 16..33 while center 15..24 is SOLID)
+  let underarmGapRows = 0;
+  for (let gy = 16; gy <= 32; gy++) {
+    let leftWing = 0, leftGap = 0, torsoCore = 0, rightGap = 0, rightWing = 0;
+    for (let gx = 0; gx <= 9; gx++) if (grid[gy * G + gx]) leftWing++;
+    for (let gx = 9; gx <= 13; gx++) if (!grid[gy * G + gx]) leftGap++;
+    for (let gx = 14; gx <= 25; gx++) if (grid[gy * G + gx]) torsoCore++;
+    for (let gx = 26; gx <= 30; gx++) if (!grid[gy * G + gx]) rightGap++;
+    for (let gx = 30; gx <= 39; gx++) if (grid[gy * G + gx]) rightWing++;
+    if (torsoCore >= 7 && ((leftWing >= 2 && leftGap >= 2) || (rightWing >= 2 && rightGap >= 2))) {
+      underarmGapRows++;
+    }
+  }
+  const underarmGapScore = underarmGapRows / 17;
+
+  // Measure vertical center seam/inseam shadow (distinguishes straight trousers laid close together!)
+  let lowerCenterSeam = 0;
+  const cx = Math.floor(minX + bboxW * 0.5);
+  for (let y = Math.floor(minY + bboxH * 0.52); y < Math.floor(minY + bboxH * 0.94); y += 2) {
+    if (cx > 2 && cx < w - 3) {
+      const iC = (y * w + cx) * 4;
+      const iL = (y * w + Math.max(0, cx - 4)) * 4;
+      const lumC = imgData[iC] * 0.3 + imgData[iC + 1] * 0.59 + imgData[iC + 2] * 0.11;
+      const lumL = imgData[iL] * 0.3 + imgData[iL + 1] * 0.59 + imgData[iL + 2] * 0.11;
+      if (lumL - lumC > 12 || Math.abs(imgData[iC] - imgData[iL]) > 18) lowerCenterSeam++;
+    }
+  }
+  const lowerSeamScore = lowerCenterSeam / Math.max(1, (bboxH * 0.42) / 2);
+
+  // Measure outer sleeve wings (upper rows 3..16 vs lower rows 18..36)
+  let upperOuterFill = 0, lowerOuterFill = 0, lastWingRow = 0;
+  for (let gy = 3; gy < 37; gy++) {
+    let wing = 0;
+    for (let gx = 0; gx <= 7; gx++) if (grid[gy * G + gx]) wing++;
+    for (let gx = 32; gx <= 39; gx++) if (grid[gy * G + gx]) wing++;
+    if (gy <= 17) upperOuterFill += wing;
+    else lowerOuterFill += wing;
+    if (wing >= 3) lastWingRow = gy;
+  }
+  const sleeveDropRatio = lastWingRow / G;
+  const maxUpperWidth = Math.max(...Array.from(rowWidths.slice(3, 17)), 0);
+  const sleeveWingRatio = botWidth > 0.1 ? maxUpperWidth / botWidth : 1.0;
+
+  // Detect Neck Dip vs Hoodie Hood Crown in rows 0..7
+  let neckDipRows = 0, hoodCrownRows = 0;
+  for (let gy = 0; gy <= 6; gy++) {
+    let lShoulder = 0, centerGap = 0, rShoulder = 0, centerSolid = 0, sideEmpty = 0;
+    for (let gx = 7; gx <= 14; gx++) { if (grid[gy * G + gx]) lShoulder++; }
+    for (let gx = 15; gx <= 24; gx++) { if (!grid[gy * G + gx]) centerGap++; else centerSolid++; }
+    for (let gx = 25; gx <= 32; gx++) { if (grid[gy * G + gx]) rShoulder++; }
+    for (let gx = 3; gx <= 11; gx++) { if (!grid[gy * G + gx]) sideEmpty++; }
+    for (let gx = 28; gx <= 36; gx++) { if (!grid[gy * G + gx]) sideEmpty++; }
+    if (lShoulder >= 2 && centerGap >= 3 && rShoulder >= 2) neckDipRows++;
+    if (gy <= 3 && centerSolid >= 5 && sideEmpty >= 10) hoodCrownRows++;
   }
 
-  // Detect Vertical Center Front Placket / Zipper / Open Lapel Contrast (for Outerwear & Button-Up Shirts)
-  let centerVerticalEdgeSum = 0;
-  for (let y = Math.floor(minY + bboxH * 0.2); y < Math.floor(minY + bboxH * 0.85); y += 3) {
-    const cx = Math.floor(minX + bboxW * 0.5);
+  // Detect Center Front Placket / Zipper / Lapel Contrast in upper torso
+  let centerVerticalEdgeSum = 0, centerSteps = 0;
+  for (let y = Math.floor(minY + bboxH * 0.18); y < Math.floor(minY + bboxH * 0.85); y += 2) {
     if (cx > 2 && cx < w - 3) {
       const idxL = (y * w + (cx - 2)) * 4;
       const idxR = (y * w + (cx + 2)) * 4;
       centerVerticalEdgeSum += Math.abs(imgData[idxL] - imgData[idxR]) + Math.abs(imgData[idxL + 1] - imgData[idxR + 1]) + Math.abs(imgData[idxL + 2] - imgData[idxR + 2]);
+      centerSteps++;
     }
   }
-  const centerPlacketScore = centerVerticalEdgeSum / Math.max(1, bboxH / 3);
+  const centerPlacketScore = centerVerticalEdgeSum / Math.max(1, centerSteps);
 
-  // Detect Central Hole (e.g. coiled belt, watch ring, sunglasses frame)
+  // Detect Puffer horizontal quilted baffles across torso center
+  let horizontalEdgeCount = 0, rowSteps = 0;
+  const xMid0 = Math.floor(minX + bboxW * 0.35), xMid1 = Math.floor(minX + bboxW * 0.65);
+  for (let y = Math.floor(minY + bboxH * 0.22); y < Math.floor(minY + bboxH * 0.82) - 2; y += 2) {
+    let diff = 0, n = 0;
+    for (let x = xMid0; x <= xMid1; x += 4) {
+      const i1 = (y * w + x) * 4, i2 = ((y + 2) * w + x) * 4;
+      diff += Math.abs(imgData[i1] - imgData[i2]);
+      n++;
+    }
+    if (n > 0 && diff / n > 14) horizontalEdgeCount++;
+    rowSteps++;
+  }
+  const horizontalBaffleRatio = horizontalEdgeCount / Math.max(1, rowSteps);
+
+  // Detect Central Hole (Belt coiled / Ring / Watch) & Flat Bottom Sole (Shoes)
   let centerHoleEmpty = 0;
-  for (let gy = 11; gy <= 20; gy++) {
-    for (let gx = 11; gx <= 20; gx++) {
+  for (let gy = 13; gy <= 26; gy++) {
+    for (let gx = 13; gx <= 26; gx++) {
       if (!grid[gy * G + gx]) centerHoleEmpty++;
     }
   }
-  const hasCentralHole = centerHoleEmpty >= 28 && topWidth > 0.35 && botWidth > 0.35;
+  const hasCentralHole = centerHoleEmpty >= 55 && topWidth > 0.35 && botWidth > 0.35 && topBridgeScore >= 0.30 && botBridgeScore >= 0.30;
+  const topHalfFill = avgSlice(rowFill, 2, 18);
+  const botHalfFill = avgSlice(rowFill, 21, 37);
 
-  // Detect Denim Indigo / Chambray signature
-  const isDenimTone = (hsl.h >= 198 && hsl.h <= 242 && hsl.s >= 16 && hsl.l >= 18 && hsl.l <= 76 && avgTexture >= 9);
+  // Denim / Indigo signature (requires true fabric grain/weave & mid-blue range; smooth deep navy wool is tailoring, not denim)
+  const hasFabricGrain = trimmedTexture >= 2.8 || weaveRatio >= 0.08;
+  const isDenimTone = (hsl.h >= 198 && hsl.h <= 242 && hsl.s >= 18 && hsl.l >= 23 && hsl.l <= 76 && hasFabricGrain);
 
-  // 3. Combine Filename Hints (if descriptive) + Vision Silhouette Classification
+  // Filename hints check (used only when filename carries explicit garment nouns!)
   const inferredFromText = inferGarmentFromPhotoContext(fileName, w, h, domR, domG, domB);
   const rawName = String(fileName || '').replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
   const hasExplicitFilenameKeyword = !inferredFromText.autoNamed &&
@@ -7626,159 +8669,165 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName) {
     return avail[0] || (subMap[cat] && subMap[cat][0]) || 'Item';
   };
 
-  let category = inferredFromText.category;
-  let subType = inferredFromText.subType;
-  let length = inferredFromText.length;
-  let formality = inferredFromText.formality;
-  let visionNote = 'Filename & color match';
+  if (hasExplicitFilenameKeyword) {
+    const season = inferItemSeasonSuitability({ category: inferredFromText.category, subType: inferredFromText.subType, length: inferredFromText.length, name: rawName });
+    return {
+      category: inferredFromText.category,
+      subType: inferredFromText.subType,
+      length: inferredFromText.length || getDefaultLengthForPiece(inferredFromText.category, inferredFromText.subType),
+      formality: inferredFromText.formality,
+      season,
+      r: domR, g: domG, b: domB, hex, colorName,
+      name: inferredFromText.name,
+      autoNamed: inferredFromText.autoNamed,
+      visionNote: 'Filename & extracted garment color',
+      alternatives: []
+    };
+  }
 
-  if (!hasExplicitFilenameKeyword) {
-    // Pure Visual Silhouette & Texture Classification
-    if (hasCentralHole && aspect >= 0.65 && aspect <= 1.45) {
-      category = 'accessories';
-      if (hsl.h >= 15 && hsl.h <= 48 && hsl.l < 65) {
-        subType = pickSub('accessories', ['Leather Belt', 'Braided Belt', 'Belt']);
-      } else {
-        subType = pickSub('accessories', ['Leather Belt', 'Belt', 'Dress Watch', 'Watch']);
-      }
-      length = '';
-      formality = 'smart-casual';
-      visionNote = 'Ring/strap contour → Accessory';
-    } else if (aspect < 0.76 || (aspect < 0.92 && botWidth > topWidth * 1.28 && legSplitScore < 0.15)) {
-      // Wide / horizontal L-shape profile → Footwear
-      category = 'shoes';
-      length = '';
-      if (hsl.l >= 78 && hsl.s <= 18) {
-        subType = pickSub('shoes', ['White Court Sneakers', 'White Sneakers', 'Leather Sneakers', 'Sneakers']);
-        formality = 'casual';
-      } else if (hsl.l <= 24) {
-        subType = pickSub('shoes', isFemale ? ['Ankle Boots', 'Leather Loafers', 'Heeled Pumps'] : ['Chelsea Boots', 'Oxford Shoes', 'Leather Loafers']);
-        formality = 'smart-casual';
-      } else if (hsl.h >= 14 && hsl.h <= 46 && hsl.s >= 18) {
-        subType = pickSub('shoes', isFemale ? ['Ankle Boots', 'Suede Loafers', 'Block Heels'] : ['Leather Loafers', 'Suede Loafers', 'Derby Shoes', 'Chelsea Boots']);
-        formality = 'smart-casual';
-      } else {
-        subType = pickSub('shoes', ['Leather Sneakers', 'Running Trainers', 'Loafers', 'Sneakers']);
-        formality = 'casual';
-      }
-      visionNote = 'Horizontal footwear contour → Shoes';
-    } else if (legSplitScore >= 0.20 || (aspect >= 1.28 && sleeveWingRatio < 1.12 && topWidth <= midWidth * 1.08)) {
-      // Twin-leg split or columnar lower-body silhouette → Bottoms
-      category = 'bottoms';
-      if (aspect < 1.12) {
-        // Shorts or Mini Skirt
-        if (legSplitScore >= 0.18) {
-          length = 'shorts';
-          subType = isDenimTone
-            ? pickSub('bottoms', ['Denim Shorts', 'Chino Shorts', 'Shorts'])
-            : pickSub('bottoms', ['Chino Shorts', 'Linen Shorts', 'Tailored Bermuda Shorts', 'Shorts']);
-          formality = 'casual';
-          visionNote = 'Short split-leg silhouette → Shorts';
-        } else {
-          length = 'shorts';
-          subType = pickSub('bottoms', isFemale ? ['Mini Skirt', 'A-Line Skirt', 'Tailored Shorts'] : ['Chino Shorts', 'Tailored Bermuda Shorts']);
-          formality = 'casual';
-          visionNote = 'Compact lower silhouette → Shorts/Skirt';
-        }
-      } else {
-        // Long Pants / Jeans / Chinos / Trousers / Midi Skirt
-        length = 'long';
-        if (legSplitScore < 0.12 && isFemale && botWidth > topWidth * 1.18) {
-          subType = pickSub('bottoms', ['Midi Skirt', 'Pleated Skirt', 'Satin Slip Skirt']);
-          formality = 'smart-casual';
-          visionNote = 'A-line flared silhouette → Skirt';
-        } else if (isDenimTone) {
-          subType = pickSub('bottoms', isFemale ? ['High-Waist Jeans', 'Straight-Leg Jeans', 'Wide-Leg Jeans'] : ['Straight-Leg Jeans', 'Slim Jeans', 'Dark Wash Jeans', 'Jeans']);
-          formality = 'casual';
-          visionNote = 'Split-leg + indigo denim texture → Jeans';
-        } else if (hsl.h >= 24 && hsl.h <= 56 && hsl.s >= 15 && hsl.l >= 42) {
-          subType = pickSub('bottoms', ['Chinos', 'Linen Trousers', 'Pleated Trousers']);
-          formality = 'smart-casual';
-          visionNote = 'Split-leg + earth/khaki tone → Chinos';
-        } else if (hsl.l <= 28 || hsl.s <= 14) {
-          subType = pickSub('bottoms', isFemale ? ['Tailored Trousers', 'Wide-Leg Trousers', 'Cigarette Pants'] : ['Dress Pants', 'Tailored Trousers', 'Wool Trousers', 'Chinos']);
-          formality = 'formal';
-          visionNote = 'Split-leg + tailored neutral tone → Trousers';
-        } else {
-          subType = pickSub('bottoms', ['Chinos', 'Tailored Trousers', 'Straight-Leg Jeans']);
-          formality = 'smart-casual';
-          visionNote = 'Split-leg silhouette → Pants';
-        }
-      }
-    } else if (centerPlacketScore >= 36 && sleeveDropRatio >= 0.62 && aspect >= 0.92) {
-      // Strong center-front opening/lapel + long sleeves → Outerwear or Button-Up Shirt
-      if (totalFill >= 0.62 && (hsl.l <= 45 || avgTexture >= 16 || (hsl.h >= 22 && hsl.h <= 52))) {
-        category = 'outerwear';
-        length = '';
-        if (isDenimTone) {
-          subType = pickSub('outerwear', ['Denim Trucker Jacket', 'Denim Jacket', 'Chore Coat']);
-          formality = 'casual';
-        } else if (hsl.l <= 28) {
-          subType = pickSub('outerwear', isFemale ? ['Tailored Blazer', 'Leather Moto Jacket', 'Wool Coat'] : ['Tailored Blazer', 'Single-Breasted Blazer', 'Leather Biker Jacket', 'Overcoat']);
-          formality = 'formal';
-        } else if (hsl.h >= 25 && hsl.h <= 52 && aspect >= 1.18) {
-          subType = pickSub('outerwear', ['Trench Coat', 'Camel Overcoat', 'Wool Coat']);
-          formality = 'smart-casual';
-        } else {
-          subType = pickSub('outerwear', ['Tailored Blazer', 'Bomber Jacket', 'Harrington Jacket', 'Windbreaker']);
-          formality = 'smart-casual';
-        }
-        visionNote = 'Lapel/front-split + long sleeves → Outerwear';
-      } else {
-        category = 'tops';
-        length = sleeveDropRatio >= 0.60 ? 'long' : 'short';
-        subType = pickSub('tops', isFemale ? ['Button-Up Shirt', 'Silk Blouse', 'Poplin Shirt', 'Linen Shirt'] : ['Oxford Shirt', 'Dress Shirt', 'Poplin Shirt', 'Linen Shirt']);
-        formality = 'smart-casual';
-        visionNote = 'Collar/placket + sleeves → Button-Up Shirt';
-      }
+  // 3. Multi-Hypothesis Scoring across Categories & Garment Types
+  const hypotheses = [];
+  const pushHyp = (conf, category, candidates, length, formality, reason) => {
+    hypotheses.push({ conf, category, subType: pickSub(category, candidates), length, formality, reason });
+  };
+
+  // Hypothesis A: Footwear (2 separate shoe components without waistband bridge, wide L-profile, bottom-heavy horizontal geometry)
+  let shoeConf = 0;
+  if (componentCount >= 2 && aspect < 1.25 && topBridgeScore < 0.35) shoeConf += 52;
+  else if (componentCount === 1 && aspect < 0.85 && legSplitScore < 0.30 && !hasCentralHole) shoeConf += 36;
+  if (aspect < 0.78 && topBridgeScore < 0.45) shoeConf += 40;
+  else if (aspect < 0.96 && topBridgeScore < 0.45 && botHalfFill > topHalfFill * 1.15) shoeConf += 28;
+  if (shoeConf >= 35) {
+    if (hsl.l >= 78 && hsl.s <= 20) {
+      pushHyp(shoeConf + 10, 'shoes', ['Minimalist White Leather Sneakers', 'White Sneakers', 'Sneakers'], '', 'casual', 'Horizontal footwear silhouette + bright white tone');
+    } else if (hsl.l <= 24) {
+      pushHyp(shoeConf + 8, 'shoes', isFemale ? ['Ankle Boots', 'Loafers', 'Heeled Pumps'] : ['Chelsea Boots', 'Oxford Shoes', 'Loafers'], '', 'smart-casual', 'Horizontal footwear silhouette + dark leather tone');
+    } else if (hsl.h >= 14 && hsl.h <= 48 && hsl.s >= 18) {
+      pushHyp(shoeConf + 8, 'shoes', isFemale ? ['Ankle Boots', 'Loafers', 'Strappy Sandals'] : ['Penny Loafers', 'Suede Derby Shoes', 'Chelsea Boots'], '', 'smart-casual', 'Horizontal footwear silhouette + leather tan/brown');
     } else {
-      // Tops (T-Shirt, Polo, Sweater, Knitwear, Camisole, Tank, Hoodie)
-      category = 'tops';
-      if (sleeveDropRatio < 0.28 && topWidth < 0.58) {
-        length = 'sleeveless';
-        subType = pickSub('tops', isFemale ? ['Silk Camisole', 'Ribbed Tank Top', 'Halter Top'] : ['Tank Top', 'Sleeveless Tee', 'Sweater Vest']);
-        formality = isFemale ? 'smart-casual' : 'casual';
-        visionNote = 'Narrow strap upper silhouette → Sleeveless Top';
-      } else if (sleeveDropRatio >= 0.64 || (aspect >= 1.05 && topWidth >= 0.68)) {
-        length = 'long';
-        if (avgTexture >= 17 || (hsl.s <= 35 && totalFill >= 0.64 && neckDipRows <= 1)) {
-          subType = pickSub('tops', isFemale ? ['Cashmere Sweater', 'Knit Sweater', 'Cardigan', 'Ribbed Knit Top'] : ['Crewneck Sweater', 'Merino Wool Sweater', 'Cable-Knit Sweater', 'Cardigan']);
-          formality = 'smart-casual';
-          visionNote = 'Long-sleeve knit silhouette → Sweater';
-        } else if (centerPlacketScore >= 24 || neckDipRows >= 2) {
-          subType = pickSub('tops', isFemale ? ['Button-Up Shirt', 'Blouse', 'Wrap Top'] : ['Oxford Shirt', 'Dress Shirt', 'Flannel Shirt', 'Overshirt']);
-          formality = 'smart-casual';
-          visionNote = 'Collar + long-sleeve silhouette → Shirt';
-        } else {
-          subType = pickSub('tops', ['Long-Sleeve Tee', 'Henley', 'Crewneck Sweatshirt', 'Hoodie']);
-          formality = 'casual';
-          visionNote = 'Long-sleeve torso silhouette → Long-Sleeve Top';
-        }
-      } else {
-        length = 'short';
-        if (neckDipRows >= 2 || centerPlacketScore >= 22) {
-          subType = pickSub('tops', isFemale ? ['Blouse', 'Short-Sleeve Shirt', 'Polo Top'] : ['Polo Shirt', 'Knitted Polo', 'Camp Collar Shirt', 'Short-Sleeve Button-Down']);
-          formality = 'smart-casual';
-          visionNote = 'Short-sleeve collared silhouette → Polo / Short-Sleeve Shirt';
-        } else {
-          subType = pickSub('tops', isFemale ? ['Crewneck T-Shirt', 'Fitted Baby Tee', 'Bodysuit', 'Blouse'] : ['Crewneck T-Shirt', 'T-Shirt', 'V-Neck T-Shirt', 'Henley']);
-          formality = 'casual';
-          visionNote = 'Short-sleeve T-silhouette → T-Shirt';
-        }
-      }
+      pushHyp(shoeConf, 'shoes', ['Retro Suede Trainers', 'Sneakers', 'Loafers'], '', 'casual', 'Horizontal footwear contour');
     }
   }
 
-  const season = inferItemSeasonSuitability({ category, subType, length, name: rawName });
-  const finalName = !inferredFromText.autoNamed
-    ? inferredFromText.name
-    : `${colorName} ${subType}`;
+  // Hypothesis B: Accessories (Belt ring/strap, sunglasses wide 2-lens, watch vertical strap)
+  if (hasCentralHole && aspect >= 0.55 && aspect <= 1.55 && totalFill < 0.62) {
+    const accCands = (hsl.h >= 12 && hsl.h <= 50) ? ['Dress Leather Belt', 'Belt'] : ['Belt', 'Watch', 'Sunglasses'];
+    pushHyp(86, 'accessories', accCands, '', 'smart-casual', 'Circular strap/ring contour');
+  } else if (aspect < 0.45 && totalFill < 0.48 && componentCount === 1) {
+    pushHyp(76, 'accessories', ['Wayfarer / Acetate Sunglasses', 'Sunglasses', 'Belt'], '', 'casual', 'Slender horizontal accessory profile');
+  }
+
+  // Hypothesis C: Bottoms (Jeans, Chinos, Trousers, Shorts, Skirts — require connected waist bridge & solid interior!)
+  const isWideSkirtOrShorts = !hasCentralHole && componentCount === 1 && aspect < 1.15 && legSplitScore < 0.16 && underarmGapScore < 0.18 && topWidth < botWidth * 1.05;
+  const splitPantsStrong = !hasCentralHole && componentCount === 1 && topBridgeScore >= 0.35 && legSplitScore >= 0.22 && underarmGapScore < 0.25;
+  const slimPantsTall = !hasCentralHole && componentCount === 1 && aspect >= 1.25 && underarmGapScore < 0.18 && sleeveWingRatio < 1.12 && (legSplitScore >= 0.12 || lowerSeamScore >= 0.28);
+
+  if (splitPantsStrong || slimPantsTall) {
+    if (aspect < 1.08 && legSplitScore >= 0.18) {
+      const shConf = 68 + Math.round(legSplitScore * 30);
+      const cands = isDenimTone ? ['Denim Shorts', 'Shorts'] : ['Tailored Chino Shorts', 'Chino Shorts', 'Shorts'];
+      pushHyp(shConf, 'bottoms', cands, 'shorts', 'casual', 'Short split-leg silhouette');
+    } else {
+      const pConf = 66 + Math.round(Math.max(legSplitScore, lowerSeamScore) * 35);
+      if (isDenimTone) {
+        pushHyp(pConf + 8, 'bottoms', isFemale ? ['High-Waist Jeans', 'Straight-Leg Vintage Jeans'] : ['Dark Indigo Jeans', 'Slim-Fit Jeans', 'Jeans'], 'long', 'casual', 'Twin-leg silhouette + indigo denim texture');
+      } else if (hsl.h >= 24 && hsl.h <= 58 && hsl.s >= 14 && hsl.l >= 40) {
+        pushHyp(pConf + 5, 'bottoms', ['Chinos', 'Linen Trousers', 'Tailored Stretch Chinos'], 'long', 'smart-casual', 'Twin-leg silhouette + warm khaki/earth tone');
+      } else {
+        pushHyp(pConf, 'bottoms', isFemale ? ['Tailored Trousers', 'Wide-Leg Pleated Trousers'] : ['Dress Pants', 'Tailored Wool Dress Trousers', 'Chinos'], 'long', hsl.l <= 30 ? 'formal' : 'smart-casual', 'Twin-leg trouser silhouette');
+      }
+    }
+  } else if (isWideSkirtOrShorts && isFemale && botWidth >= topWidth * 1.15) {
+    pushHyp(62, 'bottoms', aspect >= 1.0 ? ['Midi Skirt', 'Pleated Midi Skirt'] : ['Mini Skirt', 'A-Line Mini Skirt'], aspect >= 1.0 ? 'long' : 'shorts', 'smart-casual', 'Flared lower silhouette');
+  }
+
+  const isPairedShoeShape = componentCount >= 2 && topBridgeScore < 0.35;
+
+  // Hypothesis D: Outerwear (Blazers, Coats, Jackets, Puffers)
+  let outerConf = 0;
+  if (!hasCentralHole && !isPairedShoeShape) {
+    if (underarmGapScore >= 0.14 || sleeveDropRatio >= 0.56) outerConf += 22;
+    if (centerPlacketScore >= 26) outerConf += 28;
+    if (horizontalBaffleRatio >= 0.18) outerConf += 24;
+    if (totalFill >= 0.55) outerConf += 12;
+    if (isDenimTone && aspect >= 0.85 && legSplitScore < 0.18) outerConf += 18;
+    if (aspect >= 1.18 && underarmGapScore >= 0.12 && legSplitScore < 0.2) outerConf += 16; // long trench/overcoat
+  }
+  if (outerConf >= 50 && legSplitScore < 0.28) {
+    if (horizontalBaffleRatio >= 0.18) {
+      pushHyp(outerConf + 16, 'outerwear', ['Puffer Jacket', 'Quilted Liner Jacket', 'Windbreaker'], '', 'casual', 'Quilted horizontal baffles + sleeve profile');
+    } else if (isDenimTone) {
+      pushHyp(outerConf + 14, 'outerwear', ['Denim Jacket', 'Chore / Workwear Jacket'], '', 'casual', 'Indigo denim weave + jacket placket');
+    } else if (aspect >= 1.18 && (hsl.h >= 24 && hsl.h <= 52 || hsl.l <= 34)) {
+      pushHyp(outerConf + 14, 'outerwear', ['Trench Coat', 'Single-Breasted Wool Overcoat', 'Overcoat', 'Wool Coat'], '', 'smart-casual', 'Long coat silhouette + lapel structure');
+    } else if (hsl.l <= 32 || (hsl.h >= 195 && hsl.h <= 245 && hsl.l <= 45)) {
+      pushHyp(outerConf + 18, 'outerwear', isFemale ? ['Tailored Blazer', 'Leather Moto Jacket', 'Wool Coat'] : ['Blazer', 'Single-Breasted Navy / Wool Blazer', 'Leather Moto Jacket', 'Bomber Jacket'], '', 'smart-casual', 'Structured lapel/placket + dark tailoring tone');
+    } else {
+      pushHyp(outerConf + 10, 'outerwear', ['Bomber Jacket', 'Harrington Jacket', 'Blazer', 'Windbreaker'], '', 'smart-casual', 'Open front placket + long sleeves');
+    }
+  }
+
+  // Hypothesis E: Tops — Short-Sleeve T-Shirt / Polo vs Long-Sleeve T-Shirt / Sweater / Hoodie / Shirt / Sleeveless
+  const topConfBase = (hasCentralHole || isPairedShoeShape || legSplitScore >= 0.25) ? 28 : 58;
+  if (sleeveDropRatio < 0.28 && topWidth < 0.58 && neckDipRows >= 2) {
+    pushHyp(topConfBase + 22, 'tops', isFemale ? ['Silk Camisole', 'Tank Top', 'Bodysuit'] : ['Tank Top', 'Knitted Sweater Vest / Gilet'], 'sleeveless', 'casual', 'Sleeveless narrow strap upper contour');
+  } else if (hoodCrownRows >= 2) {
+    pushHyp(topConfBase + 28, 'tops', isFemale ? ['Pullover Hoodie', 'Crewneck Sweatshirt'] : ['Hoodie', 'Zip-Up Hoodie'], 'long', 'casual', 'Hood dome silhouette above shoulders');
+  } else if (sleeveDropRatio >= 0.62 || underarmGapScore >= 0.16) {
+    // Long-sleeve top (Sweater vs Shirt vs Long-Sleeve Tee)
+    if (centerPlacketScore >= 24 || (neckDipRows >= 2 && avgTexture < 18)) {
+      pushHyp(topConfBase + 20, 'tops', isFemale ? ['Button-Up Shirt', 'Silk Button-Up Blouse'] : ['Oxford Button-Down Shirt (OCBD)', 'Dress Shirt', 'Linen Shirt', 'Flannel Shirt'], 'long', 'smart-casual', 'Long sleeves + front button placket / collar');
+    }
+    if (avgTexture >= 15 || (hsl.s <= 35 && totalFill >= 0.52)) {
+      pushHyp(topConfBase + 21, 'tops', isFemale ? ['Cashmere Crewneck Sweater', 'Knit Sweater', 'Cardigan'] : ['Merino Wool Crewneck Sweater', 'Sweater', 'Cardigan'], 'long', 'smart-casual', 'Long sleeves + knit texture depth');
+    }
+    pushHyp(topConfBase + 16, 'tops', isFemale ? ['Long-Sleeve Ribbed Top', 'Long-Sleeve Fitted Bodysuit'] : ['Long-Sleeve T-Shirt', 'Long-Sleeve Henley', 'Crewneck Sweatshirt'], 'long', 'casual', 'Long-sleeve upper garment contour');
+  } else {
+    // Short-sleeve Tee vs Polo vs Short-sleeve Blouse/Shirt
+    if (neckDipRows >= 2 && centerPlacketScore >= 20) {
+      pushHyp(topConfBase + 22, 'tops', isFemale ? ['Blouse', 'Button-Up Shirt'] : ['Polo Shirt', 'Linen Camp-Collar Shirt', 'Short-Sleeve Button-Up Shirt'], 'short', 'smart-casual', 'Short sleeves + collar dip / placket');
+    }
+    pushHyp(topConfBase + 24, 'tops', isFemale ? ['Crewneck Cotton Tee', 'T-Shirt', 'Fitted Baby Tee', 'Blouse'] : ['Crewneck T-Shirt', 'T-Shirt', 'V-Neck T-Shirt', 'Henley'], 'short', 'casual', 'Classic T-wing short-sleeve contour');
+  }
+
+  // Fallback safeguard if no hypothesis cleared threshold
+  if (hypotheses.length === 0) {
+    pushHyp(50, 'tops', isFemale ? ['T-Shirt', 'Blouse'] : ['T-Shirt', 'Sweater'], 'short', 'casual', 'General upper garment silhouette');
+  }
+
+  hypotheses.sort((a, b) => b.conf - a.conf);
+  const topPick = hypotheses[0];
+  const alternatives = [];
+  const seenKey = new Set([`${topPick.category}|${topPick.subType}`]);
+  for (const h of hypotheses.slice(1)) {
+    const key = `${h.category}|${h.subType}`;
+    if (!seenKey.has(key)) {
+      seenKey.add(key);
+      alternatives.push({ category: h.category, subType: h.subType, length: h.length, formality: h.formality, reason: h.reason });
+    }
+    if (alternatives.length >= 2) break;
+  }
+  // Always ensure at least one practical alternate category/subtype suggestion for easy 1-tap correction
+  if (alternatives.length === 0) {
+    if (topPick.category === 'tops') {
+      const altSub = topPick.length === 'long' ? pickSub('outerwear', ['Blazer', 'Denim Jacket', 'Bomber Jacket']) : pickSub('tops', ['Polo Shirt', 'Henley', 'Long-Sleeve T-Shirt']);
+      const altCat = topPick.length === 'long' ? 'outerwear' : 'tops';
+      alternatives.push({ category: altCat, subType: altSub, length: topPick.length, formality: topPick.formality, reason: 'Alternative match' });
+    } else if (topPick.category === 'outerwear') {
+      alternatives.push({ category: 'tops', subType: pickSub('tops', ['Hoodie', 'Sweater', 'Overshirt']), length: 'long', formality: 'casual', reason: 'Mid-layer alternative' });
+    } else if (topPick.category === 'bottoms') {
+      alternatives.push({ category: 'bottoms', subType: pickSub('bottoms', ['Chinos', 'Tailored Trousers', 'Shorts']), length: topPick.length, formality: 'smart-casual', reason: 'Alternative cut' });
+    }
+  }
+
+  const season = inferItemSeasonSuitability({ category: topPick.category, subType: topPick.subType, length: topPick.length, name: rawName });
+  const finalName = `${colorName} ${topPick.subType}`;
 
   return {
-    category,
-    subType,
-    length: length || getDefaultLengthForPiece(category, subType),
-    formality,
+    category: topPick.category,
+    subType: topPick.subType,
+    length: topPick.length || getDefaultLengthForPiece(topPick.category, topPick.subType),
+    formality: topPick.formality,
     season,
     r: domR,
     g: domG,
@@ -7786,8 +8835,9 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName) {
     hex,
     colorName,
     name: finalName,
-    autoNamed: inferredFromText.autoNamed,
-    visionNote
+    autoNamed: true,
+    visionNote: topPick.reason,
+    alternatives
   };
 }
 
@@ -7825,7 +8875,8 @@ function loadPhotoIntoItemModalFromSrc(src, fileNameHint = '') {
         prep.height,
         prep.fgMask,
         prep.bbox,
-        fileNameHint
+        fileNameHint,
+        prep.componentCount || 1
       );
     } catch {
       currentItemOriginalPhoto = src;
@@ -7871,16 +8922,43 @@ function removePhoto(e) {
   const container = document.getElementById('photo-preview-container');
   const placeholder = document.getElementById('photo-placeholder');
   const controls = document.getElementById('photo-controls');
+  const altBar = document.getElementById('cv-alternatives-bar');
   const input = document.getElementById('item-photo-input');
   if (input) input.value = '';
   preview.src = '';
   container.style.display = 'none';
   placeholder.style.display = 'block';
   controls.style.display = 'none';
+  if (altBar) { altBar.innerHTML = ''; altBar.style.display = 'none'; }
 }
 
-function autoDetectColorAndDetails(ctx, w, h, fgMask, bbox, fileNameHint = '') {
-  const analysis = analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileNameHint);
+function applyCvAlternativeModal(cat, sub, len, form) {
+  updateCategoryDropdown(cat);
+  const catEl = document.getElementById('item-category');
+  if (catEl) catEl.value = cat;
+  updateSubTypes(sub);
+  if (len) updateLengthOptions(len);
+  if (form) updateFormalityDropdown(form);
+  const seasonSel = document.getElementById('item-season');
+  const seasonVal = inferItemSeasonSuitability({ category: cat, subType: sub, length: len });
+  if (seasonSel) seasonSel.value = seasonVal;
+  const nameInput = document.getElementById('item-name');
+  const hexVal = document.getElementById('item-color')?.value || '#4a7db5';
+  const r = parseInt(hexVal.slice(1, 3), 16) || 74;
+  const g = parseInt(hexVal.slice(3, 5), 16) || 125;
+  const b = parseInt(hexVal.slice(5, 7), 16) || 181;
+  const colorName = getClosestColorName(r, g, b);
+  if (nameInput && (!nameInput.value.trim() || nameInput.dataset.autoFilled === 'true')) {
+    nameInput.value = `${colorName} ${sub}`;
+    nameInput.dataset.autoFilled = 'true';
+  }
+  const badge = document.getElementById('detected-color-badge');
+  if (badge) badge.textContent = `✨ Selected: ${colorName} ${sub}`;
+  toast(`✓ Switched piece ID to ${sub}`);
+}
+
+function autoDetectColorAndDetails(ctx, w, h, fgMask, bbox, fileNameHint = '', componentCount = 1) {
+  const analysis = analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileNameHint, componentCount);
 
   document.getElementById('item-color').value = analysis.hex;
 
@@ -7903,6 +8981,19 @@ function autoDetectColorAndDetails(ctx, w, h, fgMask, bbox, fileNameHint = '') {
   const badge = document.getElementById('detected-color-badge');
   badge.textContent = `✨ Identified: ${analysis.colorName} ${analysis.subType}`;
   badge.style.display = 'inline-flex';
+
+  const altBar = document.getElementById('cv-alternatives-bar');
+  if (altBar) {
+    const alts = Array.isArray(analysis.alternatives) ? analysis.alternatives : [];
+    if (alts.length > 0 && !editId) {
+      altBar.innerHTML = `<span style="font-size:0.68rem; color:var(--text-secondary);">Or pick close match:</span>` +
+        alts.map(a => `<button type="button" class="cv-alt-chip" onclick="event.stopPropagation(); applyCvAlternativeModal('${escapeHtml(a.category).replace(/'/g, "\\'")}', '${escapeHtml(a.subType).replace(/'/g, "\\'")}', '${escapeHtml(a.length || '').replace(/'/g, "\\'")}', '${escapeHtml(a.formality || 'smart-casual').replace(/'/g, "\\'")}')">${escapeHtml(a.subType)}</button>`).join('');
+      altBar.style.display = 'flex';
+    } else {
+      altBar.innerHTML = '';
+      altBar.style.display = 'none';
+    }
+  }
 
   const nameInput = document.getElementById('item-name');
   const currentSubtype = document.getElementById('item-subtype').value || analysis.subType || 'Item';
@@ -8332,7 +9423,8 @@ function createDraftPieceFromSrc(src, rawFileName) {
           prep.height,
           prep.fgMask,
           prep.bbox,
-          rawFileName
+          rawFileName,
+          prep.componentCount || 1
         );
         resolve({
           draftId: generateId(),
@@ -8346,6 +9438,7 @@ function createDraftPieceFromSrc(src, rawFileName) {
           colorName: analysis.colorName,
           formality: analysis.formality,
           visionNote: analysis.visionNote || 'Vision ID',
+          alternatives: analysis.alternatives || [],
           image: prep.dataUrl
         });
       } catch {
@@ -8527,16 +9620,36 @@ function renderMassValidateModal() {
               ${formalityOptions}
             </select>
           </div>
-          <div class="mass-validate-row-actions">
-            <span style="font-size:0.73rem; color:var(--text-secondary);">✨ <strong>${escapeHtml(d.colorName)} ${escapeHtml(d.subType)}</strong> (${escapeHtml(d.visionNote || 'Vision')})</span>
-            <div style="display:flex; gap:6px; flex-wrap:wrap;">
-              <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 10px; font-size:0.74rem; color:#b91c1c;" onclick="removeMassDraft('${d.draftId}')">✕ Remove</button>
-              <button type="button" class="btn btn-primary btn-sm" style="padding:4px 12px; font-size:0.74rem;" onclick="approveSingleMassDraft('${d.draftId}')">✓ Validate This Piece</button>
+          <div class="mass-validate-row-actions" style="flex-direction:column; align-items:stretch; gap:6px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+              <span style="font-size:0.73rem; color:var(--text-secondary);">✨ <strong>${escapeHtml(d.colorName)} ${escapeHtml(d.subType)}</strong> (${escapeHtml(d.visionNote || 'Vision')})</span>
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 10px; font-size:0.74rem; color:#b91c1c;" onclick="removeMassDraft('${d.draftId}')">✕ Remove</button>
+                <button type="button" class="btn btn-primary btn-sm" style="padding:4px 12px; font-size:0.74rem;" onclick="approveSingleMassDraft('${d.draftId}')">✓ Validate This Piece</button>
+              </div>
             </div>
+            ${Array.isArray(d.alternatives) && d.alternatives.length ? `
+              <div class="cv-alt-chips">
+                <span style="font-size:0.68rem; color:var(--text-secondary);">Or switch to:</span>
+                ${d.alternatives.map(a => `<button type="button" class="cv-alt-chip" onclick="applyCvAlternativeDraft('${d.draftId}', '${escapeHtml(a.category).replace(/'/g, "\\'")}', '${escapeHtml(a.subType).replace(/'/g, "\\'")}', '${escapeHtml(a.length || '').replace(/'/g, "\\'")}', '${escapeHtml(a.formality || 'smart-casual').replace(/'/g, "\\'")}')">${escapeHtml(a.subType)}</button>`).join('')}
+              </div>` : ''}
           </div>
         </div>
       </div>`;
   }).join('');
+}
+
+function applyCvAlternativeDraft(draftId, cat, sub, len, form) {
+  const d = massUploadDrafts.find(x => x.draftId === draftId);
+  if (!d) return;
+  d.category = cat;
+  d.subType = sub;
+  d.length = len || getDefaultLengthForPiece(cat, sub);
+  if (form) d.formality = form;
+  d.season = inferItemSeasonSuitability({ category: cat, subType: sub, length: d.length });
+  if (d.autoNamed) d.name = `${d.colorName} ${sub}`;
+  renderMassValidateModal();
+  toast(`✓ Switched piece to ${sub}`);
 }
 
 function updateMassDraftField(draftId, field, value) {
@@ -9199,8 +10312,8 @@ function addUserSelfieFromSrc(src) {
   img.crossOrigin = 'anonymous';
   img.onload = () => {
     const canvas = document.createElement('canvas');
-    const maxDim = 240;
-    let w = img.width || 240, h = img.height || 240;
+    const maxDim = 360;
+    let w = img.width || 360, h = img.height || 360;
     if (w > maxDim || h > maxDim) {
       if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
       else { w = Math.round((w * maxDim) / h); h = maxDim; }
@@ -9212,7 +10325,7 @@ function addUserSelfieFromSrc(src) {
 
     let dataUrl = src;
     try {
-      dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      dataUrl = canvas.toDataURL('image/jpeg', 0.85);
     } catch {}
 
     if (!Array.isArray(userProfile.selfies)) {
@@ -9223,12 +10336,7 @@ function addUserSelfieFromSrc(src) {
     userProfile.selfie = dataUrl;
     persistUserSelfies();
 
-    try {
-      analyzePhotoClarityAndShapes(ctx, w, h);
-    } catch {
-      renderUserProfileUI();
-      toast('📷 Personal photo added!');
-    }
+    analyzeUploadedPhotos(userProfile.selfies);
   };
   img.onerror = () => toast('⚠️ Could not load that photo');
   img.src = src;
@@ -9255,8 +10363,16 @@ function removeUserPhoto(idx) {
   if (!Array.isArray(userProfile.selfies)) return;
   userProfile.selfies.splice(idx, 1);
   userProfile.selfie = userProfile.selfies.length > 0 ? userProfile.selfies[userProfile.selfies.length - 1] : null;
+  if (userProfile.selfies.length === 0) {
+    userProfile.personalAnalysis = null;
+    try { localStorage.removeItem('wtw_personal_analysis'); } catch {}
+  }
   persistUserSelfies();
-  renderUserProfileUI();
+  if (userProfile.selfies.length > 0) {
+    analyzeUploadedPhotos(userProfile.selfies, { silent: true });
+  } else {
+    renderUserProfileUI();
+  }
   toast('Photo removed');
 }
 
@@ -9265,19 +10381,20 @@ function clearAllUserPhotos() {
   if (!confirm(`Remove all ${userProfile.selfies.length} personal photos?`)) return;
   userProfile.selfies = [];
   userProfile.selfie = null;
+  userProfile.personalAnalysis = null;
+  try { localStorage.removeItem('wtw_personal_analysis'); } catch {}
   persistUserSelfies();
   renderUserProfileUI();
   toast('All personal photos cleared');
 }
 
-function analyzePhotoClarityAndShapes(ctx, w, h) {
+function analyzeSinglePersonalPhoto(ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h).data;
-  let totalLuminance = 0;
-  let pixelCount = 0;
+  let totalLuminance = 0, pixelCount = 0;
   const luminances = [];
 
   for (let i = 0; i < imgData.length; i += 16) {
-    const r = imgData[i], g = imgData[i+1], b = imgData[i+2];
+    const r = imgData[i], g = imgData[i + 1], b = imgData[i + 2];
     const lum = 0.299 * r + 0.587 * g + 0.114 * b;
     luminances.push(lum);
     totalLuminance += lum;
@@ -9286,104 +10403,544 @@ function analyzePhotoClarityAndShapes(ctx, w, h) {
 
   const meanLum = totalLuminance / Math.max(1, pixelCount);
   let variance = 0;
-  for (let i = 0; i < luminances.length; i++) {
-    variance += Math.pow(luminances[i] - meanLum, 2);
-  }
+  for (let i = 0; i < luminances.length; i++) variance += Math.pow(luminances[i] - meanLum, 2);
   const stdDev = Math.sqrt(variance / Math.max(1, pixelCount));
 
   let isClear = true;
-  let clarityMsg = '';
-  if (meanLum < 45) {
-    isClear = false;
-    clarityMsg = '⚠️ Photo appears too dark. For maximum accuracy in skin undertone and shape analysis, please add a photo in natural daylight!';
-  } else if (meanLum > 230) {
-    isClear = false;
-    clarityMsg = '⚠️ Photo is overexposed. Consider adding another photo with soft, balanced lighting.';
-  } else if (stdDev < 24) {
-    isClear = false;
-    clarityMsg = '⚠️ Photo contrast is low or blurry. A sharp front-facing photo will improve precision!';
-  } else {
-    clarityMsg = '✅ High Clarity & Good Contrast · Ideal lighting detected for personal color & silhouette mapping!';
+  if (meanLum < 42 || meanLum > 232 || stdDev < 20) isClear = false;
+  const clarityScore = Math.max(15, Math.min(100, Math.round(
+    100 - Math.max(0, 55 - meanLum) * 0.9 - Math.max(0, meanLum - 210) * 1.1 - Math.max(0, 30 - stdDev) * 1.4
+  )));
+
+  // YCbCr + RGB Skin Detector focused across natural portrait framing
+  const isSkin = (r, g, b) => {
+    const cr = 128 + 0.5 * r - 0.4187 * g - 0.0813 * b;
+    const cb = 128 - 0.1687 * r - 0.3313 * g + 0.5 * b;
+    return cr >= 133 && cr <= 178 && cb >= 77 && cb <= 130 && r > 65 && r > g * 0.96 && r > b * 1.04;
+  };
+
+  let rSum = 0, gSum = 0, bSum = 0, cbSum = 0, crSum = 0, skinCount = 0;
+  let minSkinY = h, maxSkinY = 0;
+  const rowSkinFirst = new Int32Array(h).fill(-1);
+  const rowSkinLast = new Int32Array(h).fill(-1);
+  const rowSkinCount = new Int32Array(h);
+
+  const x0 = Math.floor(w * 0.15), x1 = Math.ceil(w * 0.85);
+  const y0 = Math.floor(h * 0.05), y1 = Math.ceil(h * 0.72);
+  for (let y = y0; y < y1; y++) {
+    let first = -1, last = -1, cnt = 0;
+    for (let x = x0; x < x1; x++) {
+      const o = (y * w + x) * 4;
+      const r = imgData[o], g = imgData[o + 1], b = imgData[o + 2];
+      if (isSkin(r, g, b)) {
+        if (first === -1) first = x;
+        last = x;
+        cnt++;
+        rSum += r; gSum += g; bSum += b;
+        const cr = 128 + 0.5 * r - 0.4187 * g - 0.0813 * b;
+        const cb = 128 - 0.1687 * r - 0.3313 * g + 0.5 * b;
+        cbSum += cb; crSum += cr; skinCount++;
+        if (y < minSkinY) minSkinY = y;
+        if (y > maxSkinY) maxSkinY = y;
+      }
+    }
+    rowSkinFirst[y] = first;
+    rowSkinLast[y] = last;
+    rowSkinCount[y] = cnt;
   }
+
+  let warmScore = 0.05;
+  let skinLum = 155;
+  let contrastVal = 40;
+  let detectedSeason = 'autumn';
+  let detectedFace = null;
+  let faceConf = 0;
+  let faceMetrics = null;
+  let detectedChinY = 0;
+  let detectedNeckW = 0;
+
+  if (skinCount >= 60) {
+    const meanR = rSum / skinCount, meanG = gSum / skinCount, meanB = bSum / skinCount;
+    const meanCb = cbSum / skinCount;
+    skinLum = 0.299 * meanR + 0.587 * meanG + 0.114 * meanB;
+    const rbRatio = (meanR - meanB) / Math.max(1, meanR + meanG + meanB);
+    warmScore = (111 - meanCb) * 0.032 + (rbRatio - 0.105) * 4.2;
+
+    // Sample hair/brow band right above skinTopY to gauge hair-to-skin contrast
+    const hairY0 = Math.max(0, minSkinY - Math.round(h * 0.16));
+    const hairY1 = Math.max(hairY0 + 1, minSkinY + Math.round((maxSkinY - minSkinY) * 0.12));
+    const hairLums = [];
+    for (let y = hairY0; y < hairY1; y += 2) {
+      for (let x = Math.floor(w * 0.25); x < Math.ceil(w * 0.75); x += 2) {
+        const o = (y * w + x) * 4;
+        const r = imgData[o], g = imgData[o + 1], b = imgData[o + 2];
+        if (!isSkin(r, g, b)) {
+          hairLums.push(0.299 * r + 0.587 * g + 0.114 * b);
+        }
+      }
+    }
+    let hairLum = skinLum - 40;
+    if (hairLums.length >= 12) {
+      hairLums.sort((a, b) => a - b);
+      const cut = Math.max(4, Math.floor(hairLums.length * 0.45));
+      hairLum = hairLums.slice(0, cut).reduce((s, v) => s + v, 0) / cut;
+    }
+    contrastVal = Math.abs(skinLum - hairLum);
+
+    const isWarm = warmScore >= 0.02;
+    const isHighContrast = contrastVal >= 58 || skinLum <= 98 || (stdDev >= 48 && skinLum >= 195);
+    if (isWarm) {
+      detectedSeason = (skinLum >= 168 && contrastVal >= 38) ? 'spring' : 'autumn';
+    } else {
+      detectedSeason = isHighContrast ? 'winter' : 'summer';
+    }
+
+    // Extract facial geometry from detected skin rows (trimming neck below narrowest constriction)
+    const spanY = maxSkinY - minSkinY;
+    if (skinCount >= 180 && spanY >= 20) {
+      // Find peak face width in upper-middle skin rows
+      let peakW = 0, peakRow = minSkinY;
+      const searchEnd = Math.min(maxSkinY, minSkinY + Math.round(spanY * 0.75));
+      for (let y = minSkinY; y <= searchEnd; y++) {
+        const rw = rowSkinCount[y] >= 8 ? (rowSkinLast[y] - rowSkinFirst[y] + 1) : 0;
+        if (rw > peakW) { peakW = rw; peakRow = y; }
+      }
+      // Locate neck constriction below peak cheek row so neck/chest doesn't inflate faceH
+      let chinY = Math.min(maxSkinY, minSkinY + Math.round(peakW * 1.42));
+      const neckSearch0 = Math.min(maxSkinY, peakRow + Math.round(peakW * 0.25));
+      const neckSearch1 = Math.min(maxSkinY, peakRow + Math.round(peakW * 1.05));
+      let minNeckW = Infinity, minNeckY = chinY;
+      for (let y = neckSearch0; y <= neckSearch1; y++) {
+        const rw = rowSkinCount[y];
+        if (rw > 4 && rw < minNeckW) { minNeckW = rw; minNeckY = y; }
+      }
+      if (minNeckW < peakW * 0.72) chinY = minNeckY;
+
+      const faceH = Math.max(12, chinY - minSkinY + 1);
+      if (peakW >= 18 && faceH >= 18) {
+        const bandWidth = (frac) => {
+          const cy = Math.min(chinY, Math.max(minSkinY, Math.round(minSkinY + faceH * frac)));
+          let sum = 0, cnt = 0;
+          for (let dy = -2; dy <= 2; dy++) {
+            const yy = cy + dy;
+            if (yy >= minSkinY && yy <= chinY && rowSkinCount[yy] >= 5) {
+              sum += (rowSkinLast[yy] - rowSkinFirst[yy] + 1);
+              cnt++;
+            }
+          }
+          return cnt > 0 ? sum / cnt : peakW;
+        };
+        const foreheadW = bandWidth(0.22);
+        const cheekboneW = Math.max(peakW, bandWidth(0.45));
+        const jawW = bandWidth(0.76);
+        const chinW = bandWidth(0.90);
+        const headRatio = faceH / Math.max(1, cheekboneW);
+
+        if (headRatio <= 1.24 && jawW / cheekboneW >= 0.76 && chinW / Math.max(1, jawW) < 0.78) {
+          detectedFace = 'round';
+        } else if (headRatio <= 1.38 && jawW / Math.max(1, foreheadW) >= 0.88 && chinW / cheekboneW >= 0.62) {
+          detectedFace = 'square';
+        } else if (foreheadW / Math.max(1, jawW) >= 1.14 && chinW / cheekboneW < 0.60) {
+          detectedFace = 'heart';
+        } else if (cheekboneW / Math.max(1, Math.max(foreheadW, jawW)) >= 1.11 || headRatio >= 1.48) {
+          detectedFace = 'diamond';
+        } else {
+          detectedFace = 'oval';
+        }
+
+        detectedChinY = chinY;
+        detectedNeckW = Number.isFinite(minNeckW) ? minNeckW : Math.round(peakW * 0.48);
+        faceConf = Math.min(100, Math.round((clarityScore * 0.6) + Math.min(40, (peakW / w) * 85)));
+        faceMetrics = {
+          headRatio: Number(headRatio.toFixed(2)),
+          foreheadToJaw: Number((foreheadW / Math.max(1, jawW)).toFixed(2)),
+          chinToCheek: Number((chinW / Math.max(1, cheekboneW)).toFixed(2))
+        };
+      }
+    }
+  }
+
+  // Extract Full-Body / Torso Silhouette anchored below head/neck using Foreground Segmentation
+  let detectedBody = null;
+  let bodyConf = 0;
+  let bodyMetrics = null;
+  try {
+    const seg = segmentGarmentForAnalysis(ctx, w, h);
+    const { fgMask, bbox } = seg;
+    const bh = bbox.maxY - bbox.minY + 1;
+    const bw = bbox.maxX - bbox.minX + 1;
+    if (bh >= h * 0.42 && bw >= 20) {
+      // Precompute contiguous foreground runs per row inside bbox
+      const rowStats = new Array(h);
+      for (let y = bbox.minY; y <= bbox.maxY; y++) {
+        let first = -1, last = -1, runCount = 0, maxRun = 0, curRun = 0, gap = 99;
+        for (let x = bbox.minX; x <= bbox.maxX; x++) {
+          if (fgMask[y * w + x]) {
+            if (first === -1) first = x;
+            last = x;
+            if (curRun === 0 && gap >= 3) runCount++;
+            curRun++;
+            gap = 0;
+            if (curRun > maxRun) maxRun = curRun;
+          } else {
+            curRun = 0;
+            gap++;
+          }
+        }
+        rowStats[y] = {
+          spanW: first !== -1 ? (last - first + 1) : 0,
+          mainRunW: maxRun,
+          runCount
+        };
+      }
+
+      // Anchor torsoTopY right where shoulders start (below chin/neck)
+      let torsoTopY = detectedChinY > 0
+        ? Math.min(bbox.maxY - 20, detectedChinY + 1)
+        : Math.round(bbox.minY + bh * 0.16);
+      while (torsoTopY < bbox.maxY - 24 && (rowStats[torsoTopY]?.mainRunW || 0) < 16) {
+        torsoTopY++;
+      }
+      // If starting on an attached narrow neck, walk down until shoulder widening
+      const neckCeiling = Math.max(18, Math.round((detectedNeckW || 24) * 1.18));
+      const shoulderProbeLimit = Math.min(bbox.maxY - 24, torsoTopY + Math.round(bh * 0.16));
+      let scanY = torsoTopY;
+      if ((rowStats[scanY]?.spanW || 0) <= neckCeiling) {
+        while (scanY < shoulderProbeLimit && (rowStats[scanY]?.spanW || 0) <= neckCeiling) {
+          scanY++;
+        }
+        if (scanY < shoulderProbeLimit) torsoTopY = scanY;
+      }
+
+      const torsoBottomY = bbox.maxY;
+      const torsoH = torsoBottomY - torsoTopY + 1;
+      if (torsoH >= Math.max(36, Math.round(h * 0.25))) {
+        const bandBodyWidth = (f0, f1, mode = 'max', useSpan = false) => {
+          const widths = [];
+          const yA = Math.max(torsoTopY, Math.round(torsoTopY + torsoH * f0));
+          const yB = Math.min(torsoBottomY, Math.round(torsoTopY + torsoH * f1));
+          for (let y = yA; y <= yB; y++) {
+            const st = rowStats[y];
+            const val = st ? (useSpan ? st.spanW : st.mainRunW) : 0;
+            if (val >= 6) widths.push(val);
+          }
+          if (!widths.length) return 0;
+          widths.sort((a, b) => a - b);
+          return mode === 'min'
+            ? widths[Math.floor(widths.length * 0.25)]
+            : widths[Math.floor(widths.length * 0.80)];
+        };
+
+        // Detect full-body photos (legs split or tapered ankles at bottom) vs 3/4 torso-to-hip framing
+        let legRows = 0, lowerTotal = 0;
+        const legY0 = Math.round(torsoTopY + torsoH * 0.56);
+        const legY1 = Math.round(torsoTopY + torsoH * 0.92);
+        for (let y = legY0; y <= legY1; y++) {
+          lowerTotal++;
+          if ((rowStats[y]?.runCount || 0) >= 2) legRows++;
+        }
+        const midHipTest = bandBodyWidth(0.38, 0.54, 'max', false);
+        const ankleTest = bandBodyWidth(0.86, 0.97, 'min', true);
+        const isFullBody = (lowerTotal >= 12 && (legRows / lowerTotal) >= 0.22) ||
+          (torsoH >= h * 0.50 && midHipTest >= 24 && ankleTest > 0 && ankleTest < midHipTest * 0.56);
+
+        const shoulderW = isFullBody
+          ? bandBodyWidth(0.02, 0.16, 'max', true)
+          : bandBodyWidth(0.02, 0.20, 'max', true);
+        const waistW = isFullBody
+          ? bandBodyWidth(0.22, 0.36, 'min', false)
+          : bandBodyWidth(0.36, 0.56, 'min', false);
+        const hipW = isFullBody
+          ? bandBodyWidth(0.38, 0.54, 'max', false)
+          : bandBodyWidth(0.72, 0.96, 'max', false);
+
+        if (shoulderW >= 16 && waistW >= 12 && hipW >= 16) {
+          const midSH = (shoulderW + hipW) * 0.5;
+          const shRatio = shoulderW / hipW;
+          const waistRatio = waistW / Math.max(1, midSH);
+          const shDiff = Math.abs(shoulderW - hipW) / Math.max(shoulderW, hipW);
+          if (shRatio >= 1.14) detectedBody = 'inverted-triangle';
+          else if (hipW / shoulderW >= 1.14) detectedBody = 'pear';
+          else if (shDiff <= 0.13 && waistRatio <= 0.78) detectedBody = 'hourglass';
+          else if (shRatio >= 1.10) detectedBody = 'inverted-triangle';
+          else if (hipW / shoulderW >= 1.09) detectedBody = 'pear';
+          else if (waistRatio >= 0.96) detectedBody = 'oval';
+          else detectedBody = 'rectangle';
+
+          bodyConf = Math.min(100, Math.round((clarityScore * 0.5) + (isFullBody ? 46 : torsoH / h >= 0.38 ? 35 : 22)));
+          bodyMetrics = {
+            shoulderToHip: Number(shRatio.toFixed(2)),
+            waistToFrame: Number(waistRatio.toFixed(2))
+          };
+        }
+      }
+    }
+  } catch {}
+
+  return {
+    meanLum,
+    stdDev,
+    clarityScore,
+    isClear,
+    skinCount,
+    warmScore,
+    skinLum,
+    contrastVal,
+    detectedSeason,
+    faceShape: detectedFace,
+    faceConf,
+    faceMetrics,
+    bodyShape: detectedBody,
+    bodyConf,
+    bodyMetrics
+  };
+}
+
+async function analyzeUploadedPhotos(photoSrcs, opts = {}) {
+  const list = Array.isArray(photoSrcs) ? photoSrcs.filter(Boolean) : [];
+  if (!list.length) {
+    renderUserProfileUI();
+    return null;
+  }
+
+  const subset = list.slice(0, 16);
+  const perPhoto = await Promise.all(subset.map(src => new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const maxD = 320;
+        let w = img.naturalWidth || img.width || 240;
+        let h = img.naturalHeight || img.height || 240;
+        if (w > maxD || h > maxD) {
+          if (w > h) { h = Math.max(32, Math.round((h * maxD) / w)); w = maxD; }
+          else { w = Math.max(32, Math.round((w * maxD) / h)); h = maxD; }
+        }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const cCtx = c.getContext('2d');
+        cCtx.drawImage(img, 0, 0, w, h);
+        resolve(analyzeSinglePersonalPhoto(cCtx, w, h));
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  })));
+
+  const valid = perPhoto.filter(Boolean);
+  if (!valid.length) {
+    renderUserProfileUI();
+    return null;
+  }
+
+  const seasonWeights = { spring: 0, summer: 0, autumn: 0, winter: 0 };
+  const faceWeights = { oval: 0, round: 0, square: 0, heart: 0, diamond: 0 };
+  const bodyWeights = { 'inverted-triangle': 0, rectangle: 0, hourglass: 0, pear: 0, oval: 0 };
+  let totalClarity = 0, clearCount = 0;
+  let warmWeightedSum = 0, contrastWeightedSum = 0, skinWeightSum = 0;
+  let bestFaceMetrics = null, bestFaceConf = 0;
+  let bestBodyMetrics = null, bestBodyConf = 0;
+
+  valid.forEach(res => {
+    totalClarity += res.clarityScore;
+    if (res.isClear) clearCount++;
+    if (res.skinCount >= 60) {
+      const w = (res.clarityScore / 100) * Math.min(2.5, Math.sqrt(res.skinCount / 200));
+      seasonWeights[res.detectedSeason] = (seasonWeights[res.detectedSeason] || 0) + w;
+      warmWeightedSum += res.warmScore * w;
+      contrastWeightedSum += res.contrastVal * w;
+      skinWeightSum += w;
+    }
+    if (res.faceShape && res.faceConf > 0) {
+      faceWeights[res.faceShape] = (faceWeights[res.faceShape] || 0) + res.faceConf;
+      if (res.faceConf > bestFaceConf) { bestFaceConf = res.faceConf; bestFaceMetrics = res.faceMetrics; }
+    }
+    if (res.bodyShape && res.bodyConf > 0) {
+      bodyWeights[res.bodyShape] = (bodyWeights[res.bodyShape] || 0) + res.bodyConf;
+      if (res.bodyConf > bestBodyConf) { bestBodyConf = res.bodyConf; bestBodyMetrics = res.bodyMetrics; }
+    }
+  });
+
+  const bestKey = (map, fallback) => {
+    let topK = fallback, topV = 0;
+    Object.entries(map).forEach(([k, v]) => { if (v > topV) { topV = v; topK = k; } });
+    return { key: topK, weight: topV };
+  };
+
+  const detectedSeason = bestKey(seasonWeights, userProfile.palette || 'autumn').key;
+  const detectedFaceResult = bestKey(faceWeights, userProfile.faceShape || 'oval');
+  const detectedBodyResult = bestKey(bodyWeights, userProfile.bodyShape || 'rectangle');
+
+  const avgWarm = skinWeightSum > 0 ? warmWeightedSum / skinWeightSum : 0;
+  const avgContrast = skinWeightSum > 0 ? contrastWeightedSum / skinWeightSum : 42;
+  const avgClarity = Math.round(totalClarity / valid.length);
+  const undertoneLabel = avgWarm >= 0.08 ? 'Warm / Golden Undertone'
+    : (avgWarm <= -0.08 ? 'Cool / Rosy-Blue Undertone' : 'Neutral-Balanced Undertone');
+  const contrastLabel = avgContrast >= 56 ? 'High Contrast' : (avgContrast >= 36 ? 'Medium Contrast' : 'Soft Blended Contrast');
+
+  userProfile.palette = detectedSeason;
+  if (detectedFaceResult.weight > 0) userProfile.faceShape = detectedFaceResult.key;
+  if (detectedBodyResult.weight > 0) userProfile.bodyShape = detectedBodyResult.key;
+
+  const summary = {
+    analyzedCount: valid.length,
+    clarityCount: clearCount,
+    avgClarity,
+    undertoneLabel,
+    contrastLabel,
+    detectedPalette: detectedSeason,
+    detectedFaceShape: userProfile.faceShape,
+    detectedBodyShape: userProfile.bodyShape,
+    faceMetrics: bestFaceMetrics,
+    bodyMetrics: bestBodyMetrics,
+    sourceSummary: `Analyzed ${valid.length} photo${valid.length > 1 ? 's' : ''} (${avgClarity}% avg clarity)`,
+    updatedAt: Date.now()
+  };
+  userProfile.personalAnalysis = summary;
+
+  try {
+    localStorage.setItem('wtw_user_palette', userProfile.palette);
+    localStorage.setItem('wtw_face_shape', userProfile.faceShape);
+    localStorage.setItem('wtw_body_shape', userProfile.bodyShape);
+    localStorage.setItem('wtw_personal_analysis', JSON.stringify(summary));
+  } catch {}
+  if (typeof scheduleCloudPush === 'function') scheduleCloudPush();
 
   const clarityEl = document.getElementById('photo-clarity-badge');
   if (clarityEl) {
     clarityEl.style.display = 'block';
-    clarityEl.className = isClear ? 'clarity-badge clarity-good' : 'clarity-badge clarity-warning';
-    clarityEl.innerHTML = clarityMsg;
+    clarityEl.className = clearCount >= 1 ? 'clarity-badge clarity-good' : 'clarity-badge clarity-warning';
+    clarityEl.innerHTML = clearCount >= 1
+      ? `✅ Analyzed ${valid.length} photo(s) · ${avgClarity}% clarity · Detected <strong>${undertoneLabel}</strong> (${contrastLabel})`
+      : `⚠️ Low lighting detected across ${valid.length} photo(s) — add 1 daylight photo for even higher color precision.`;
   }
-
-  // Sample skin undertone
-  let rSum = 0, gSum = 0, bSum = 0, skinCount = 0;
-  const startX = Math.floor(w * 0.25), startY = Math.floor(h * 0.2);
-  const sampleW = Math.floor(w * 0.5), sampleH = Math.floor(h * 0.5);
-  const faceData = ctx.getImageData(startX, startY, sampleW, sampleH).data;
-
-  for (let i = 0; i < faceData.length; i += 4) {
-    const r = faceData[i], g = faceData[i+1], b = faceData[i+2];
-    if (r > 60 && g > 40 && b > 20 && r > b) {
-      rSum += r; gSum += g; bSum += b; skinCount++;
-    }
-  }
-
-  let detectedSeason = 'autumn';
-  if (skinCount > 0) {
-    const avgR = rSum / skinCount, avgG = gSum / skinCount, avgB = bSum / skinCount;
-    const warmth = (avgR - avgB) / Math.max(1, avgR + avgG + avgB);
-    const brightness = (avgR + avgG + avgB) / 3;
-    if (warmth > 0.22) {
-      detectedSeason = brightness > 140 ? 'spring' : 'autumn';
-    } else {
-      detectedSeason = brightness > 135 ? 'summer' : 'winter';
-    }
-  }
-  userProfile.palette = detectedSeason;
-  localStorage.setItem('wtw_user_palette', detectedSeason);
-
-  // Auto-detect Face Shape
-  const aspect = h / Math.max(1, w);
-  let detectedFace = 'oval';
-  if (aspect > 1.35) {
-    detectedFace = 'diamond';
-  } else if (aspect < 1.05) {
-    detectedFace = 'round';
-  } else {
-    const midWidth = sampleW;
-    const jawWidth = Math.floor(sampleW * 0.76);
-    if (midWidth - jawWidth > 16) {
-      detectedFace = 'heart';
-    } else if (Math.abs(midWidth - jawWidth) < 6) {
-      detectedFace = 'square';
-    } else {
-      detectedFace = 'oval';
-    }
-  }
-
-  // Auto-detect Body Shape
-  let detectedBody = userProfile.styleGender === 'male' ? 'inverted-triangle' : 'hourglass';
-  if (aspect < 1.1) {
-    detectedBody = 'rectangle';
-  } else if (userProfile.styleGender === 'male') {
-    detectedBody = aspect > 1.35 ? 'inverted-triangle' : 'rectangle';
-  } else {
-    detectedBody = aspect > 1.3 ? 'hourglass' : 'pear';
-  }
-
-  userProfile.faceShape = detectedFace;
-  userProfile.bodyShape = detectedBody;
-  localStorage.setItem('wtw_face_shape', detectedFace);
-  localStorage.setItem('wtw_body_shape', detectedBody);
 
   const notice = document.getElementById('shape-detection-notice');
   if (notice) {
     notice.style.display = 'block';
-    notice.innerHTML = `✨ Auto-detected from photo: <strong>${detectedFace.toUpperCase()} Face Shape</strong> & <strong>${detectedBody.toUpperCase()} Body Silhouette</strong>. You can manually adjust below if desired!`;
+    notice.innerHTML = `✨ Multi-Photo Biometric Result: <strong>${(userProfile.faceShape || 'oval').toUpperCase()} Face</strong> &amp; <strong>${(userProfile.bodyShape || 'rectangle').toUpperCase()} Silhouette</strong> · <strong>${SEASONAL_PALETTES[detectedSeason].name}</strong> (${undertoneLabel}).`;
   }
 
   renderUserProfileUI();
   renderOutfit();
   renderShopRecommendations();
-  toast(`✨ Photo analyzed: Identified as ${SEASONAL_PALETTES[detectedSeason].name}!`);
+  if (!opts.silent) {
+    toast(`✨ Analyzed ${valid.length} photo(s): ${SEASONAL_PALETTES[detectedSeason].name} · ${(userProfile.faceShape || 'oval').toUpperCase()} face!`);
+  }
+  return summary;
+}
+
+function analyzePhotoClarityAndShapes(ctx, w, h) {
+  const res = analyzeSinglePersonalPhoto(ctx, w, h);
+  const clarityEl = document.getElementById('photo-clarity-badge');
+  if (clarityEl) {
+    clarityEl.style.display = 'block';
+    clarityEl.className = res.isClear ? 'clarity-badge clarity-good' : 'clarity-badge clarity-warning';
+    clarityEl.innerHTML = res.isClear
+      ? `✅ High Clarity (${res.clarityScore}%) · Detected crisp lighting for undertone &amp; geometry mapping.`
+      : `⚠️ Lighting Warning (${res.clarityScore}% clarity) · Add a bright natural daylight photo for best precision.`;
+  }
+
+  userProfile.palette = res.detectedSeason || userProfile.palette || 'autumn';
+  if (res.faceShape) userProfile.faceShape = res.faceShape;
+  if (res.bodyShape) userProfile.bodyShape = res.bodyShape;
+
+  userProfile.personalAnalysis = {
+    analyzedCount: Math.max(1, (userProfile.selfies || []).length),
+    clarityCount: res.isClear ? 1 : 0,
+    avgClarity: res.clarityScore,
+    undertoneLabel: res.warmScore >= 0.08 ? 'Warm / Golden Undertone' : (res.warmScore <= -0.08 ? 'Cool / Rosy-Blue Undertone' : 'Neutral-Balanced Undertone'),
+    contrastLabel: res.contrastVal >= 56 ? 'High Contrast' : (res.contrastVal >= 36 ? 'Medium Contrast' : 'Soft Blended Contrast'),
+    detectedPalette: userProfile.palette,
+    detectedFaceShape: userProfile.faceShape,
+    detectedBodyShape: userProfile.bodyShape,
+    faceMetrics: res.faceMetrics,
+    bodyMetrics: res.bodyMetrics,
+    sourceSummary: 'Direct photo biometric scan',
+    updatedAt: Date.now()
+  };
+
+  try {
+    localStorage.setItem('wtw_user_palette', userProfile.palette);
+    localStorage.setItem('wtw_face_shape', userProfile.faceShape);
+    localStorage.setItem('wtw_body_shape', userProfile.bodyShape);
+    localStorage.setItem('wtw_personal_analysis', JSON.stringify(userProfile.personalAnalysis));
+  } catch {}
+
+  const notice = document.getElementById('shape-detection-notice');
+  if (notice) {
+    notice.style.display = 'block';
+    notice.innerHTML = `✨ Auto-detected from photo: <strong>${userProfile.faceShape.toUpperCase()} Face Shape</strong> &amp; <strong>${userProfile.bodyShape.toUpperCase()} Silhouette</strong>.`;
+  }
+
+  renderUserProfileUI();
+  renderOutfit();
+  renderShopRecommendations();
+  toast(`✨ Photo analyzed: Identified as ${SEASONAL_PALETTES[userProfile.palette].name}!`);
+}
+
+function renderPersonalBlueprintUI() {
+  const box = document.getElementById('personal-blueprint-box');
+  if (!box) return;
+  const bp = buildPersonalStyleBlueprint();
+  const aInfo = userProfile.personalAnalysis;
+  const swatchPills = (bp.signatureColors || []).map(c =>
+    `<span class="blueprint-tag" style="display:inline-flex; align-items:center; gap:5px;"><span style="width:9px; height:9px; border-radius:50%; background:${c.hex}; border:1px solid rgba(255,255,255,0.4);"></span>${escapeHtml(c.name)}</span>`
+  ).join('');
+  const avoidNames = (bp.avoidHexes || []).slice(0, 3).map(hx => {
+    const r = parseInt(hx.slice(1, 3), 16) || 0;
+    const g = parseInt(hx.slice(3, 5), 16) || 0;
+    const b = parseInt(hx.slice(5, 7), 16) || 0;
+    return getClosestColorName(r, g, b);
+  });
+
+  box.style.display = 'block';
+  box.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+      <strong style="font-size:0.9rem; color:#f8fafc;">🧬 Your Active Outfit Decision Blueprint (Images + Desired Style)</strong>
+      <span class="badge" style="background:rgba(0,229,192,0.16); color:#5eead4; border:1px solid rgba(0,229,192,0.35);">
+        ${aInfo ? escapeHtml(aInfo.sourceSummary || 'Photo Biometrics Active') : 'Profile Active · Add photos to refine'}
+      </span>
+    </div>
+    <div class="persona-blueprint-grid">
+      <div class="blueprint-pill-card">
+        <div class="blueprint-pill-title">🎨 Best Colors For Your Skin (${escapeHtml(bp.palette.name)})</div>
+        <div class="blueprint-pill-body">
+          <strong>${escapeHtml(bp.undertoneLabel)}</strong> · ${escapeHtml(bp.contrastLabel)}.<br>
+          <span style="color:#94a3b8; font-size:0.72rem;">Best near your face:</span>
+          <div class="blueprint-tag-row">${swatchPills}</div>
+          <div style="font-size:0.71rem; color:#fca5a5; margin-top:6px;">Caution tones: ${escapeHtml(avoidNames.join(', '))}</div>
+        </div>
+      </div>
+      <div class="blueprint-pill-card">
+        <div class="blueprint-pill-title">📐 Cloth Types For ${escapeHtml(bp.faceRule.label)}</div>
+        <div class="blueprint-pill-body">
+          ${escapeHtml(bp.faceRule.howToWearTip)}
+          <div class="blueprint-tag-row">
+            ${bp.faceRule.bestNecklines.map(n => `<span class="blueprint-tag">${escapeHtml(n)}</span>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="blueprint-pill-card">
+        <div class="blueprint-pill-title">🧍 Silhouette Cuts For ${escapeHtml(bp.bodyRule.label)}</div>
+        <div class="blueprint-pill-body">
+          ${escapeHtml(bp.bodyRule.howToWearTip)}
+          <div class="blueprint-tag-row">
+            ${bp.bodyRule.bestClothTypes.slice(0, 3).map(ct => `<span class="blueprint-tag">${escapeHtml(ct)}</span>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="blueprint-pill-card">
+        <div class="blueprint-pill-title">✨ Desired Style: ${escapeHtml(bp.archRule.name)}</div>
+        <div class="blueprint-pill-body">
+          <strong>Focus:</strong> ${escapeHtml(bp.archRule.clothFocus)}.<br>
+          <strong>Palette Direction:</strong> ${escapeHtml(bp.archRule.paletteFocus)}
+          ${bp.impressions.length ? `<div class="blueprint-tag-row">${bp.impressions.map(im => `<span class="blueprint-tag">${escapeHtml(im)}</span>`).join('')}</div>` : ''}
+        </div>
+      </div>
+    </div>`;
 }
 
 function renderUserProfileUI() {
@@ -9441,6 +10998,8 @@ function renderUserProfileUI() {
   if (document.getElementById('setting-body-shape')) {
     document.getElementById('setting-body-shape').value = userProfile.bodyShape || 'rectangle';
   }
+
+  renderPersonalBlueprintUI();
 }
 
 /* ================================================================
@@ -10914,7 +12473,11 @@ function pickTripAccessory(accs, usage) {
 function pickTripOutfit(day, items, usage, prev, avoidKey) {
   const wx = dayWx(day);
   const target = dayTarget(day);
-  const needsThreeLayers = day.tmax <= 20 || day.tmin <= 15 || day.rain || layerOverride === '3';
+  const blueprint = buildPersonalStyleBlueprint();
+  const tripTargetLayers = layerOverride === '1' ? 1
+    : (layerOverride === '2' ? 2
+    : (layerOverride === '3' ? 3
+    : ((day.tmax <= 20 || day.tmin <= 15 || day.rain) ? 3 : (day.tmax >= 26 && day.tmin >= 20 ? 1 : 2))));
 
   return withWeather(wx, () => {
     const suit = cat => {
@@ -10924,55 +12487,84 @@ function pickTripOutfit(day, items, usage, prev, avoidKey) {
     };
     const tops = suit('tops'), bottoms = suit('bottoms'), shoes = suit('shoes');
     if (!tops.length || !bottoms.length || !shoes.length) return null;
+
+    const baseTops = tripTargetLayers >= 2 && tops.some(isBaseTop) ? tops.filter(isBaseTop) : tops;
+    const midAll = items.filter(isMidLayerCandidate);
     const outerAll = items.filter(i => i.category === 'outerwear');
-    const outers = outerAll.length ? tripOuterCandidates(outerAll) : [null];
+    const outerShells = outerAll.filter(isOuterShellCandidate);
+    const outers = outerShells.length ? tripOuterCandidates(outerShells) : [];
     const pi = prev && prev.items ? prev.items : null;
 
+    const layerCombos = [];
+    if (tripTargetLayers === 1) {
+      for (const t of baseTops) layerCombos.push({ t, m: null, o: null });
+    } else if (tripTargetLayers === 2) {
+      for (const t of baseTops) {
+        let pushed = false;
+        for (const m of midAll) {
+          if (isLayerPairCompatible(t, m, null)) {
+            layerCombos.push({ t, m, o: null });
+            pushed = true;
+          }
+        }
+        for (const o of outers) {
+          if (isLayerPairCompatible(t, null, o)) {
+            layerCombos.push({ t, m: null, o });
+            pushed = true;
+          }
+        }
+        if (!pushed) layerCombos.push({ t, m: null, o: null });
+      }
+    } else {
+      for (const t of baseTops) {
+        const compatMids = midAll.filter(m => isLayerPairCompatible(t, m, null));
+        const midChoices = compatMids.length ? compatMids : [null];
+        for (const m of midChoices) {
+          const compatOuters = outers.filter(o => isLayerPairCompatible(t, m, o));
+          if (compatOuters.length) {
+            for (const o of compatOuters) layerCombos.push({ t, m, o });
+          } else {
+            layerCombos.push({ t, m, o: null });
+          }
+        }
+      }
+    }
+
     let best = null, bs = -Infinity;
-    for (const t of tops) for (const b of bottoms) for (const s of shoes) for (const o of outers) {
-      const main = [t, b, s, o].filter(Boolean);
-      let sc = evaluateOutfitScore(t, b, s, o, null, { skipWearLog: true }).score;
+    for (const lc of layerCombos) for (const b of bottoms) for (const s of shoes) {
+      const { t, m, o } = lc;
+      const main = [t, m, b, s, o].filter(Boolean);
+      let sc = evaluateOutfitScore(t, b, s, o, null, { midLayer: m, skipWearLog: true, blueprint }).score;
       if (!outfitColorsHarmonious(main)) sc -= 80;
       sc += (formalityMatch(t.formality, target) ? 15 : -25) + (formalityMatch(b.formality, target) ? 10 : -15) + (formalityMatch(s.formality, target) ? 5 : -10);
-      const heavyTop = ['sweater', 'knit sweater', 'turtleneck', 'hoodie', 'flannel shirt', 'cardigan'].includes((t.subType || '').toLowerCase());
-      if (heavyTop && day.tmax >= 22) sc -= 70;
-      if (needsThreeLayers && isBaseTop(t)) sc += 18;
-      if (!heavyTop && day.tmax < 10 && getItemLength(t) === 'long') sc += 10;
-      sc -= (usage[t.id] || 0) * 70 + (usage[b.id] || 0) * 18 + (usage[s.id] || 0) * 8 + (o ? (usage[o.id] || 0) * 3 : 0);
+      if (m) sc += (formalityMatch(m.formality, target) ? 10 : -12);
+      if (isHoodieOrSweatshirt(t) || /\b(sweater|flannel|cardigan)\b/i.test(t.subType || '')) {
+        if (day.tmax >= 22) sc -= 70;
+      }
+      sc -= (usage[t.id] || 0) * 70 + (usage[b.id] || 0) * 18 + (usage[s.id] || 0) * 8 + (m ? (usage[m.id] || 0) * 12 : 0) + (o ? (usage[o.id] || 0) * 6 : 0);
       if (pi) {
         if (pi.top === t.id) sc -= 120;
         if (bottoms.length > 1 && pi.bottom === b.id) sc -= 40;
         if (shoes.length > 1 && pi.shoe === s.id) sc -= 15;
       }
-      if (avoidKey && [t.id, b.id, s.id, o ? o.id : ''].join('|') === avoidKey) sc -= 300;
+      const key = [t.id, m ? m.id : '', b.id, s.id, o ? o.id : ''].join('|');
+      if (avoidKey && key === avoidKey) sc -= 300;
       sc += Math.random() * 6;
       if (sc > bs) {
         bs = sc;
-        best = { top: t.id, mid: null, bottom: b.id, shoe: s.id, outer: o ? o.id : null };
+        best = { top: t.id, mid: m ? m.id : null, bottom: b.id, shoe: s.id, outer: o ? o.id : null };
       }
     }
     if (!best) return null;
 
     const chosenTop = items.find(w => w.id === best.top);
+    const chosenMid = best.mid ? items.find(w => w.id === best.mid) : null;
     const chosenBottom = items.find(w => w.id === best.bottom);
     const chosenShoe = items.find(w => w.id === best.shoe);
     const chosenOuter = best.outer ? items.find(w => w.id === best.outer) : null;
 
-    // Select Layer 2 (Mid-Layer) when trip day calls for 3 layers on top
-    if (needsThreeLayers && layerOverride !== '2') {
-      const usedIds = new Set([best.top, best.outer]);
-      const midPool = items.filter(it => !usedIds.has(it.id) && isMidLayerCandidate(it));
-      const fallbackMidPool = items.filter(it => !usedIds.has(it.id) && (it.category === 'tops' || it.category === 'outerwear'));
-      const candidates = midPool.length ? midPool : fallbackMidPool;
-      if (candidates.length) {
-        candidates.sort((a, b) => ((usage[a.id] || 0) - (usage[b.id] || 0)) + (Math.random() - 0.5) * 0.4);
-        best.mid = candidates[0].id;
-      }
-    }
-
-    // Always propose a belt color & select best packed belt from accessories
     const packedAccs = items.filter(i => i.category === 'accessories');
-    const beltRec = proposeBeltForOutfit(chosenShoe, chosenBottom, chosenTop, chosenOuter, packedAccs);
+    const beltRec = proposeBeltForOutfit(chosenShoe, chosenBottom, chosenTop, chosenOuter || chosenMid, packedAccs);
     best.belt = beltRec.beltItem ? beltRec.beltItem.id : null;
     best.beltHex = beltRec.proposedHex;
     best.beltColorName = beltRec.proposedColorName;
@@ -11044,7 +12636,7 @@ function tripSwapDay(i) {
   const usage = {};
   trip.plan.forEach((p, j) => { if (j !== i) bumpUsage(usage, p); });
   const prev = i > 0 ? trip.plan[i - 1] : null;
-  const avoid = cur.items ? [cur.items.top, cur.items.bottom, cur.items.shoe, cur.items.outer || ''].join('|') : '';
+  const avoid = cur.items ? [cur.items.top, cur.items.mid || '', cur.items.bottom, cur.items.shoe, cur.items.outer || ''].join('|') : '';
   const out = pickTripOutfit(trip.days[i], packedWardrobeItems(), usage, prev, avoid);
   if (out) {
     cur.items = out;
@@ -11073,12 +12665,13 @@ function renderPlanDay(d, p, i) {
   const today = isoDate(new Date());
   const isToday = d.date === today;
   const wc = withWeather(dayWx(d), () => getWeatherCategory());
-  const isThreeLayerDay = !!(p && p.items && p.items.mid) || d.tmax <= 20 || d.tmin <= 15 || d.rain;
+  const topLayerCount = p && p.items ? (1 + (p.items.mid ? 1 : 0) + (p.items.outer ? 1 : 0)) : ((d.tmax <= 20 || d.tmin <= 15 || d.rain) ? 3 : 2);
+  const isThreeLayerDay = topLayerCount >= 3;
   const isAc = (wc.cat === 'hot' || wc.cat === 'warm') && !isThreeLayerDay;
   const labels = {
-    top: isThreeLayerDay ? 'Layer 1 · Base Top' : 'Layer 1 · Top',
-    mid: 'Layer 2 · Mid-Layer',
-    outer: isThreeLayerDay ? 'Layer 3 · Outer Shell' : (isAc ? 'Layer 2 · AC / Evening' : 'Layer 2 · Outerwear'),
+    top: topLayerCount > 1 ? 'Layer 1 · Base Top' : 'Layer 1 · Top',
+    mid: (p && p.items && !p.items.outer) ? 'Layer 2 · Hoodie / Blazer / Sweater' : 'Layer 2 · Mid-Layer',
+    outer: isThreeLayerDay ? 'Layer 3 · Outer Jacket / Coat' : (isAc ? 'Layer 2 · AC / Jacket' : 'Layer 2 · Outer Jacket'),
     bottom: 'Bottom',
     shoe: 'Shoes',
     acc: 'Extra Accessory'
@@ -11122,7 +12715,7 @@ function renderPlanDay(d, p, i) {
         <strong>Day ${i + 1} · ${fmtDate(d.date)}</strong>
         ${isToday ? '<span class="trip-today-tag">TODAY</span>' : ''}
         <span class="trip-wx-chip">${dayIcon(d)} ${d.tmin}°–${d.tmax}°C${d.rain ? ' · rain' : ''}</span>
-        <span class="trip-wx-chip">🧥 ${isThreeLayerDay ? '3 Top Layers' : '2 Top Layers'}</span>
+        <span class="trip-wx-chip">🧥 ${topLayerCount} Top Layer${topLayerCount > 1 ? 's' : ''}</span>
         <span class="trip-wx-chip">${PURPOSES[d.purpose].icon} ${PURPOSES[d.purpose].label}</span>
       </div>
       ${rows}
@@ -11306,7 +12899,7 @@ function renderFloatingPersonaCard() {
   }
   if (countTag) {
     const loadedCount = userPhotos.length;
-    countTag.textContent = loadedCount > 0 ? `${loadedCount} of 6 Portraits Uploaded` : `6 Reference Portraits`;
+    countTag.textContent = loadedCount > 0 ? `${loadedCount} Portrait${loadedCount > 1 ? 's' : ''} Uploaded` : `0 of 6 Portraits Uploaded`;
   }
   if (prefHint) {
     prefHint.textContent = userProfile.styleGender === 'female' ? 'Feminine Style active' : 'Masculine Style active';
@@ -11402,18 +12995,16 @@ function togglePersonaCollapse(forceState) {
   }
 }
 
-function reanalyzePersonaProfile() {
+async function reanalyzePersonaProfile() {
   const userPhotos = Array.isArray(userProfile.selfies) ? userProfile.selfies : [];
-  toast('🔄 Re-analyzing Persona with biometric & wardrobe parameters...');
+  toast('🔄 Re-analyzing Persona across your uploaded photos & style blueprint...');
   if (userPhotos.length > 0 && typeof analyzeUploadedPhotos === 'function') {
-    analyzeUploadedPhotos(userPhotos);
+    await analyzeUploadedPhotos(userPhotos);
   } else {
-    setTimeout(() => {
-      renderFloatingPersonaCard();
-      if (typeof renderUserProfileUI === 'function') renderUserProfileUI();
-      if (typeof renderOutfit === 'function') renderOutfit();
-      toast('✨ Persona re-analyzed: Harmonized with your seasonal palette and archetype!');
-    }, 400);
+    renderFloatingPersonaCard();
+    if (typeof renderUserProfileUI === 'function') renderUserProfileUI();
+    if (typeof renderOutfit === 'function') renderOutfit();
+    toast('✨ Style Blueprint updated from your Face, Body & Desired Style!');
   }
 }
 
@@ -11421,7 +13012,9 @@ function reanalyzePersonaProfile() {
 /* ===== Tabs ===== */
 
 function switchTab(tabId) {
-  if (typeof togglePersonaCollapse === 'function') { togglePersonaCollapse(tabId === 'wardrobe' || tabId === 'trip' || tabId === 'shop'); }
+  if (tabId === 'settings' && typeof togglePersonaCollapse === 'function') {
+    togglePersonaCollapse(false);
+  }
 
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabId));
   document.querySelectorAll('.tab-content').forEach(tc => tc.classList.toggle('active', tc.id === `tab-${tabId}`));
@@ -11444,6 +13037,7 @@ function switchTab(tabId) {
     syncAstralToggle();
     renderPersonaUI();
     renderUserProfileUI();
+    renderFloatingPersonaCard();
   }
 }
 

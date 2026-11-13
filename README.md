@@ -15,18 +15,19 @@ A modern, weather- and hemisphere-season-aware, computer-vision-assisted, and pe
 2. **✨ Google Material Design 3 & Modern Antigravity Floating UI Aesthetics**:
    - **Deep Sophisticated Dark Theme**: Deep obsidian background with subtle glowing teal (`#00e5c0`) and soft yellow accents (`#ffd166`), glassmorphism card surfaces, and multi-elevation floating shadows.
    - **Refined Slim Header**: Minimalist `WTW` brand logo on the left with sleek, rounded status pills on the right displaying live `Spring - Bathurst` and `Cloud Synced`.
-   - **Floating 'My Persona' Hero Card**: Floats with rounded corners (`border-radius: 26px`), a thin glassmorphism border, and a subtle glowing drop-shadow.
+   - **'My Persona' Card in Profile & Settings**: Relocated cleanly from the main landing page into *Profile & Settings* (`rounded corners`, glassmorphism border, luminous drop-shadow, tactile Masculine/Feminine pill toggle, 6 portrait slots, and active biometric blueprint summary).
    - **Tactile Sliding Pill Toggle**: Smooth animated pill switcher between Masculine and Feminine wardrobe preferences.
    - **Six User Portrait Thumbnails**: Clean, spacious 6-column grid with generous negative space, multi-angle role hints (Close-up, Full Body, Daylight, Profile, Elevated, Movement), hover scale, and tap-to-inspect.
-   - **Modern Pill-Shaped Action Buttons with Soft Gradients**: Soft luminous gradients for `📷 Use Camera`, `🔄 Re-analyze`, `🖼️ Photo Library`, and `🗂️ Saved Images`.
+   - **Modern Pill-Shaped Action Buttons with Soft Gradients**: Soft luminous gradients for `📷 Use Camera`, `🔄 Re-analyze Persona`, `🖼️ Photo Library`, and `🗂️ Saved Images`.
    - **Clean Premium Sans-Serif Typography**: Refined font hierarchy powered by *Plus Jakarta Sans*.
 
 3. **🏛️ Bespoke Editorial Branding & `WTW` Monogram Emblem**:
-   - Features a bespoke **`WTW`** monogram emblem in deep botanical emerald (`#0f241d`) and brushed champagne gold (`#c89b6e`), paired with editorial typography (*Cormorant Garamond* + *Plus Jakarta Sans*), glassmorphic navigation, and live status pills in the header (**Install on iPhone** has been removed from the main page header and lives exclusively in *Profile & Settings*).
-2. **📸 Clean Photo Upload & Authentic Gallery Presentation**:
+   - Features a bespoke **`WTW`** monogram emblem in deep botanical emerald (`#0f241d`) and brushed champagne gold (`#c89b6e`), paired with editorial typography (*Cormorant Garamond* + *Plus Jakarta Sans*), glassmorphic navigation, and live status pills in the header (**Install on iPhone** lives in *Profile & Settings*).
+2. **📸 Clean Photo Upload & Non-Overlapping Wardrobe Controls**:
    - Preserves original clothing photos with full fidelity and crisp aspect-ratio rendering across wardrobe cards, outfit previews, and lightboxes.
+   - Wardrobe card **Edit (`✏️`) & Delete (`✕`)** buttons sit in a dedicated header action bar above the photo container so garment images never cover or block controls.
 3. **🎯 High-Precision Computer-Vision Item Identification**:
-   - Analyzes clothing photos across a 56-shade fashion color palette and a normalized `32×32` silhouette grid (aspect ratio, twin-leg split for Jeans/Chinos/Trousers/Shorts, lateral sleeve-wing spread & drop ratio for Short-Sleeve vs. Long-Sleeve vs. Sleeveless tops, collar/placket contrast for Shirts & Outerwear, horizontal contour for Footwear, and ring/strap geometry for Belts & Accessories).
+   - Segments the garment from studio or real-world backgrounds for analysis (while keeping the stored original photo untouched), excludes white studio washout and wearer skin tones when worn, and classifies across a normalized `40×40` silhouette matrix (underarm gap vs. crotch leg-split, short vs. long sleeve drop, hoodie dome crown, lapel/placket contrast, quilted puffer baffles, dual-shoe geometry, belt ring/strap) with one-click alternative match chips.
 4. **👚 150+ Precise Garment Types + Custom Categories, Types & 9+ Formalities**:
    - Includes over **150 specific garment types** across Masculine and Feminine styles.
    - In **Add / Edit Clothing Item**, you can create your own **Custom Category** (`＋ Add Category`), **Custom Garment Type** (`＋ Add Type`), and **Custom Formality** (`＋ Add Formality`).
@@ -60,33 +61,15 @@ Upload up to 8 photos of looks you love. WhaToWear reads dominant colours, contr
   - **Feminine**: Tops & Blouses, Bottoms & Skirts, Shoes & Heels, Outerwear, Bags & Accessories (Silk Camisoles, Bodysuits, Wide-Leg Trousers, Midi Skirts, Heeled Pumps, Trench Coats, Crossbody Bags).
   - Clicking **"Add Sample Wardrobe"** populates a curated masculine or feminine capsule wardrobe based on your setting.
 
-### 3. 📸 Multi-Photo Gallery, Quality Scanner & Shape Detection
-- **Multi-Photo Gallery**: Upload 1 to 4 photos (Close-up Portrait, Full Body Shot, Natural Daylight, Profile).
-- **Lighting & Clarity Quality Scanner**:
-  - Analyzes image luminance and contrast standard deviation.
-  - If a photo is dim, overexposed, or blurry, the app displays a helpful advisory:
-    `⚠️ Photo appears low-light or blurry. Please add a clear, front-facing photo in natural daylight!`
-  - If crisp: `✅ High Clarity & Good Contrast · Ideal lighting detected`.
-- **Automated Face Shape Detection**:
-  - Measures facial aspect ratios and jawline contour to identify **Oval, Round, Square, Heart, or Diamond**.
-  - Shows auto-detected badge and allows manual change/override anytime.
-- **Automated Body Silhouette Detection**:
-  - Scans shoulder, waist, and hip width proportions to identify **Inverted Triangle, Rectangle, Hourglass, Pear, or Oval**.
-  - Pre-selects the dropdown with full override flexibility.
+### 3. 📸 Multi-Photo Personal Biometrics, Best Colors & Face/Body Blueprint
+- **Unlimited Multi-Photo Aggregation**: Reads across **all** uploaded portraits & full-body photos weighted by lighting clarity (`analyzeUploadedPhotos`), rather than sampling only a single file.
+- **YCbCr Undertone & Contrast Detection**: Maps skin chrominance + hair/brow contrast to identify your personal **Seasonal Color Season**, undertone label, contrast level, best flattering tones near the face, and caution colors.
+- **Facial & Body Geometry Extraction**:
+  - Measures forehead, cheekbone, jaw, and chin proportions from facial skin contours (**Oval, Round, Square, Heart, Diamond / Oblong**) to recommend ideal necklines, collars, and lapels.
+  - Segments full-length body silhouettes to measure shoulder, waist, and hip proportions (**Inverted Triangle, Rectangle, Hourglass, Pear, Oval**) and define optimal garment cuts.
 
-### 4. 🎭 "My Persona & Style Identity Profile" (*How I Want to Be Seen*)
-- Define the impression and aesthetic you want to project:
-  - **7 Signature Archetypes**:
-    - 🏛️ *Old Money & Quiet Luxury* (Neutral tones, cashmere, refined tailoring)
-    - 💼 *Executive Power & Authority* (Sharp blazers, commanding presence, crisp lines)
-    - ☕ *Effortless Minimalist Chic* (Tonal harmony, architectural drape, capsule ease)
-    - 🎨 *Creative Avant-Garde* (Expressive color pops, artistic silhouettes)
-    - 🌿 *Warm & Earthy Approachable* (Soft knits, breathable linen, friendly earth tones)
-    - ⚡ *Dynamic Modern Edge* (Contemporary street-tailoring, structured tech pieces)
-    - 🌸 *Romantic & Soft Elegance* (Fluid draping, gentle jewel/pastel tones)
-  - **Desired Impression Chips**: Multi-select pills like `[Polished]`, `[Approachable]`, `[Authoritative]`, `[Creative]`, `[Effortless]`, `[Sophisticated]`, `[Confident]`, `[Modern]`.
-  - **Style Vision Statement**: Write your own vision prompt (e.g. *"I want to look polished and creative without appearing stiff"*).
-- The styling engine weaves your persona into outfit evaluations and displays an alignment badge (`🏛️ Tailored to your "Quiet Luxury" profile`).
+### 4. 🎭 "My Persona & Style Blueprint" (Primary Outfit Decision Maker)
+- Combines your **Personal Color & Face/Body Cloth Type Blueprint** with your **Desired Style** (**7 Signature Archetypes**, **Desired Impression Chips**, **Style Vision Statement**, and uploaded **Inspiration Palette**) as the **primary decision engine** deciding both **what** you wear and **how** to wear it (complete with an in-card *"Why These Colors, Cuts & How to Wear It"* styling guide on *Today's Outfit*).
 
 ### 5. 🔮 Wardrobe Illusion & Usage Maximizer Engine
 - **Combinatorial Capacity Calculator**:
@@ -117,10 +100,13 @@ Upload up to 8 photos of looks you love. WhaToWear reads dominant colours, contr
 - Evaluates daily planetary ruler (Sun, Moon, Mars, Mercury, Jupiter, Venus, Saturn) to **automatically pre-select your daily mood**, with manual override anytime.
 - Suggests daily lucky power colors and cosmic style insights.
 
-### 8. 🧥 Multi-Layer Top Engine (2 or 3 Layers on Top) & 🪢 Always-Proposed Belt Color
-- **Smart 3-Layer Top System**:
-  - Automatically adapts between **2 Top Layers** (warm weather: *Layer 1 Base Top + Layer 2 Indoor AC / Light Outerwear*) and **3 Top Layers** (cool/cold/rainy weather or chilly morning/evening dips $\le 16^\circ\text{C}$: *Layer 1 Base Top + Layer 2 Mid-Layer [Sweater / Cardigan / Overshirt / Vest / Flannel] + Layer 3 Outer Shell / Coat / Jacket*).
-  - Includes an interactive **Top Layering Control** (`[🌦️ Auto Weather]`, `[2 Layers]`, `[3 Layers (Base + Mid + Outer)]`) right on the outfit card so you can override the layer count anytime.
+### 8. 🧥 Strict 3-Tier Top Layer Hierarchy & 🪢 Always-Proposed Belt Color
+- **Strict 3-Tier Top Layer System** (enforced across *Today's Outfit* and *Trip Mode*):
+  - **Layer 1 (Base Layer)**: T-Shirts (short or long sleeve), Henleys, Camisoles, Bodysuits, or light base shirts next to skin.
+  - **Layer 2 (Mid-Layer)**: Hoodies, Blazers / Sport Coats, Sweaters, Cardigans, Overshirts, or Vests.
+  - **Layer 3 (Outer Shell / Jacket)**: Denim Jackets, Bombers, Leather Jackets, Field/Rain Jackets, Puffers, Trenches, or Wool Overcoats.
+  - Automatically adapts between **1 Layer**, **2 Layers** (Base + Mid-Layer OR Jacket), and **3 Layers** (Base + Mid-Layer + Outer Jacket/Coat), preventing invalid stacks like a blazer over a bomber jacket or dress shirt over a hoodie.
+  - Includes an interactive **Top Layering Control** (`[🌡️ Auto by Temp]`, `[1 Layer]`, `[2 Layers]`, `[3 Layers]`) right on the outfit card so you can override the layer count anytime.
 - **Always Proposes a Belt Color (Coordinated with Accessories)**:
   - Every daily and Trip Mode outfit **always proposes an ideal belt color** (with a color swatch, shade name such as *Rich Cognac / Amber Brown Leather*, *Classic Black Leather*, *Warm Saddle Tan*, and styling rationale coordinated with your shoes and bottoms).
   - Automatically selects the best-matching **Belt** from your **Accessories** category (`subType: 'Belt'`), or offers a 1-click **＋ Save "... Belt" to My Accessories** button if you haven't added one yet.
