@@ -3788,6 +3788,14 @@ input[type="text"]:focus, select:focus, textarea:focus {
           <p class="settings-note">Get a free key at <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a></p>
         </div>
       </div>
+      <div class="settings-section">
+        <h3>✨ Gemini Vision API Key (Optional)</h3>
+        <div class="form-group">
+          <label for="setting-gemini-apikey">Gemini API Key</label>
+          <input type="password" id="setting-gemini-apikey" placeholder="Paste Gemini API key for AI photo recognition">
+          <p class="settings-note">Used directly in your browser when hosted on GitHub Pages (no backend server). Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a></p>
+        </div>
+      </div>
       <button class="btn btn-primary" onclick="saveSettings()">💾 Save All Settings</button>
     </div>
 
@@ -6337,6 +6345,7 @@ function getSettings() {
   return {
     city: localStorage.getItem('wtw_city') || '',
     apiKey: localStorage.getItem('wtw_apikey') || '',
+    geminiApiKey: localStorage.getItem('wtw_gemini_apikey') || '',
     dob: localStorage.getItem('wtw_dob') || '',
     birthTime: localStorage.getItem('wtw_birth_time') || '',
     birthPlace: localStorage.getItem('wtw_birth_place') || ''
@@ -6346,12 +6355,14 @@ function getSettings() {
 function saveSettings() {
   const city = document.getElementById('setting-city').value.trim();
   const apiKey = document.getElementById('setting-apikey').value.trim();
+  const geminiApiKey = document.getElementById('setting-gemini-apikey')?.value.trim() || '';
   const dob = document.getElementById('setting-dob').value;
   const birthTime = document.getElementById('setting-birth-time').value;
   const birthPlace = document.getElementById('setting-birth-place').value.trim();
 
   localStorage.setItem('wtw_city', city);
   localStorage.setItem('wtw_apikey', apiKey);
+  localStorage.setItem('wtw_gemini_apikey', geminiApiKey);
   localStorage.setItem('wtw_dob', dob);
   localStorage.setItem('wtw_birth_time', birthTime);
   localStorage.setItem('wtw_birth_place', birthPlace);
@@ -9700,15 +9711,23 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName, componentC
 
   if (colorBins.size > 0) {
     const sortedBins = Array.from(colorBins.values()).sort((a, b) => b.count - a.count);
-    const primary = sortedBins[0];
+    const totalBinCount = sortedBins.reduce((s, b) => s + b.count, 0);
+    const nonDarkBins = sortedBins.filter(b => {
+      const br = b.rSum / b.count, bg = b.gSum / b.count, bb = b.bSum / b.count;
+      return !(br < 38 && bg < 38 && bb < 42);
+    });
+    const nonDarkCount = nonDarkBins.reduce((s, b) => s + b.count, 0);
+    const useNonDarkPrimary = nonDarkBins.length > 0 && nonDarkCount >= totalBinCount * 0.32;
+    const primary = useNonDarkPrimary ? nonDarkBins[0] : sortedBins[0];
+    const candidateBins = useNonDarkPrimary ? nonDarkBins : sortedBins;
     let rAcc = primary.rSum, gAcc = primary.gSum, bAcc = primary.bSum, cAcc = primary.count;
     const pR = primary.rSum / primary.count;
     const pG = primary.gSum / primary.count;
     const pB = primary.bSum / primary.count;
-    for (let i = 1; i < Math.min(5, sortedBins.length); i++) {
-      const b = sortedBins[i];
+    for (let i = 1; i < Math.min(6, candidateBins.length); i++) {
+      const b = candidateBins[i];
       const br = b.rSum / b.count, bg = b.gSum / b.count, bb = b.bSum / b.count;
-      if (Math.hypot(br - pR, bg - pG, bb - pB) < 40) {
+      if (Math.hypot(br - pR, bg - pG, bb - pB) < 42) {
         rAcc += b.rSum; gAcc += b.gSum; bAcc += b.bSum; cAcc += b.count;
       }
     }
@@ -9906,6 +9925,36 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName, componentC
   }
   const horizLegSplitScore = horizSplitCols / 17;
 
+  // Detect Stacked / Paired Shoe Geometry (2 horizontal shoes one above the other, touching or separated)
+  let stackedShoeCols = 0;
+  for (let gx = 6; gx <= 33; gx++) {
+    let topShoe = 0, midGap = 0, botShoe = 0;
+    for (let gy = 3; gy <= 15; gy++) if (grid[gy * G + gx]) topShoe++;
+    for (let gy = 16; gy <= 23; gy++) if (!grid[gy * G + gx]) midGap++;
+    for (let gy = 24; gy <= 36; gy++) if (grid[gy * G + gx]) botShoe++;
+    if (topShoe >= 3 && midGap >= 1 && botShoe >= 3) stackedShoeCols++;
+  }
+  const stackedShoeSplitScore = stackedShoeCols / 28;
+
+  // Detect Footwear Material Cues: bright rubber sole rim, dark foot-opening cavity, or tan cork footbed
+  let brightSolePix = 0, darkOpeningPix = 0, tanFootbedPix = 0, shoeCueSamples = 0;
+  for (let y = minY; y <= maxY; y += 3) {
+    for (let x = minX; x <= maxX; x += 3) {
+      const pIdx = y * w + x;
+      if (fgMask && !fgMask[pIdx]) continue;
+      const o = pIdx * 4;
+      if (imgData[o + 3] < 120) continue;
+      const r = imgData[o], g = imgData[o + 1], b = imgData[o + 2];
+      shoeCueSamples++;
+      if (r >= 182 && g >= 182 && b >= 176 && Math.max(r, g, b) - Math.min(r, g, b) <= 28) brightSolePix++;
+      if (r <= 42 && g <= 42 && b <= 45) darkOpeningPix++;
+      if (r > g + 12 && g > b + 10 && r >= 115 && r <= 215 && g >= 75 && g <= 165) tanFootbedPix++;
+    }
+  }
+  const brightSoleRatio = shoeCueSamples > 0 ? brightSolePix / shoeCueSamples : 0;
+  const darkOpeningRatio = shoeCueSamples > 0 ? darkOpeningPix / shoeCueSamples : 0;
+  const tanFootbedRatio = shoeCueSamples > 0 ? tanFootbedPix / shoeCueSamples : 0;
+
   // Denim / Indigo signature (includes dark indigo & mid-blue denim with fabric grain)
   const hasFabricGrain = trimmedTexture >= 2.4 || weaveRatio >= 0.06;
   const isDenimTone = (hsl.h >= 195 && hsl.h <= 245 && hsl.s >= 16 && hsl.l >= 12 && hsl.l <= 76 && hasFabricGrain);
@@ -9959,17 +10008,25 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName, componentC
     hypotheses.push({ conf, category, subType: pickSub(category, candidates), length, formality, reason });
   };
 
-  // Hypothesis A: Footwear (2 separate shoe components without waistband bridge, wide L-profile, bottom-heavy horizontal geometry)
+  // Hypothesis A: Footwear (2 separate or stacked/touching shoes, sole rims, foot openings, or cork/tan footbed)
   let shoeConf = 0;
-  if (componentCount >= 2 && aspect < 1.25 && topBridgeScore < 0.35) shoeConf += 52;
-  else if (componentCount === 1 && aspect < 0.85 && legSplitScore < 0.30 && !hasCentralHole) shoeConf += 36;
-  if (aspect < 0.78 && topBridgeScore < 0.45) shoeConf += 40;
-  else if (aspect < 0.96 && topBridgeScore < 0.45 && botHalfFill > topHalfFill * 1.15) shoeConf += 28;
-  if (shoeConf >= 35) {
-    if (hsl.l >= 78 && hsl.s <= 20) {
+  if (componentCount >= 2 && aspect < 1.25 && topBridgeScore < 0.35) shoeConf += 56;
+  else if (stackedShoeSplitScore >= 0.25 && aspect < 1.18 && legSplitScore < 0.30) shoeConf += 54;
+  else if (componentCount === 1 && aspect < 0.88 && legSplitScore < 0.28 && !hasCentralHole) shoeConf += 42;
+  if (aspect < 0.82 && topBridgeScore < 0.50) shoeConf += 34;
+  else if (aspect < 1.02 && topBridgeScore < 0.50 && botHalfFill > topHalfFill * 1.12) shoeConf += 26;
+  if (hsl.l < 65 && brightSoleRatio >= 0.035) shoeConf += 18;
+  if (hsl.l >= 18 && darkOpeningRatio >= 0.06 && darkOpeningRatio <= 0.55 && aspect < 1.15) shoeConf += 14;
+  if (tanFootbedRatio >= 0.10 && aspect < 1.15) shoeConf += 18;
+  if (shoeConf >= 38) {
+    if (tanFootbedRatio >= 0.10 && darkOpeningRatio < 0.50) {
+      pushHyp(shoeConf + 10, 'shoes', ['Sandals', 'Slides'], '', 'casual', 'Open sandal silhouette + contoured footbed');
+    } else if (brightSoleRatio >= 0.035 || avgTexture >= 24) {
+      pushHyp(shoeConf + 10, 'shoes', ['Sneakers', 'Canvas Sneakers'], '', 'casual', 'Paired footwear silhouette + sole/lace contrast');
+    } else if (hsl.l >= 78 && hsl.s <= 20) {
       pushHyp(shoeConf + 10, 'shoes', ['Sneakers', 'Canvas Sneakers'], '', 'casual', 'Horizontal footwear silhouette + bright white tone');
     } else if (hsl.l <= 24) {
-      pushHyp(shoeConf + 8, 'shoes', isFemale ? ['Ankle Boots', 'Loafers', 'Pumps'] : ['Chelsea Boots', 'Oxford Shoes', 'Loafers'], '', 'smart-casual', 'Horizontal footwear silhouette + dark leather tone');
+      pushHyp(shoeConf + 8, 'shoes', isFemale ? ['Ankle Boots', 'Loafers', 'Pumps'] : ['Oxford Shoes', 'Loafers', 'Chelsea Boots'], '', 'smart-casual', 'Horizontal footwear silhouette + dark leather tone');
     } else if (hsl.h >= 14 && hsl.h <= 48 && hsl.s >= 18) {
       pushHyp(shoeConf + 8, 'shoes', isFemale ? ['Ankle Boots', 'Loafers', 'Sandals'] : ['Penny Loafers', 'Derby Shoes', 'Chelsea Boots'], '', 'smart-casual', 'Horizontal footwear silhouette + leather tan/brown');
     } else {
@@ -10010,19 +10067,19 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName, componentC
     pushHyp(62, 'bottoms', aspect >= 1.0 ? ['Midi Skirt'] : ['Mini Skirt'], aspect >= 1.0 ? 'long' : 'shorts', 'smart-casual', 'Flared lower silhouette');
   }
 
-  const isPairedShoeShape = componentCount >= 2 && topBridgeScore < 0.35;
+  const isPairedShoeShape = (componentCount >= 2 && topBridgeScore < 0.35) || stackedShoeSplitScore >= 0.25 || shoeConf >= 55;
 
-  // Hypothesis D: Outerwear (Blazers, Coats, Jackets, Puffers — require strong placket/zipper & high-contrast baffles, not soft folded tees!)
+  // Hypothesis D: Outerwear (Blazers, Coats, Jackets, Puffers — require strong placket/zipper & full-torso geometry, never shoes!)
   let outerConf = 0;
   if (!hasCentralHole && !isPairedShoeShape && horizLegSplitScore < 0.20) {
     if (underarmGapScore >= 0.16 || sleeveDropRatio >= 0.62) outerConf += 20;
     if (centerPlacketScore >= 28) outerConf += 30;
-    if (horizontalBaffleRatio >= 0.36 && centerPlacketScore >= 24) outerConf += 26;
+    if (horizontalBaffleRatio >= 0.36 && centerPlacketScore >= 24 && aspect >= 0.90 && topWidth >= 0.54 && botWidth >= 0.50) outerConf += 26;
     if (isDenimTone && aspect >= 0.85 && legSplitScore < 0.18 && centerPlacketScore >= 22) outerConf += 18;
     if (aspect >= 1.22 && underarmGapScore >= 0.14 && legSplitScore < 0.2 && centerPlacketScore >= 22) outerConf += 16;
   }
   if (outerConf >= 56 && legSplitScore < 0.28) {
-    if (horizontalBaffleRatio >= 0.36 && centerPlacketScore >= 24) {
+    if (horizontalBaffleRatio >= 0.36 && centerPlacketScore >= 24 && aspect >= 0.90 && topWidth >= 0.54) {
       pushHyp(outerConf + 14, 'outerwear', ['Puffer Jacket', 'Windbreaker'], '', 'casual', 'Quilted horizontal baffles + center zipper');
     } else if (isDenimTone) {
       pushHyp(outerConf + 14, 'outerwear', ['Denim Jacket', 'Chore Jacket'], '', 'casual', 'Indigo denim weave + jacket placket');
@@ -10036,12 +10093,12 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName, componentC
   }
 
   // Hypothesis E: Tops — Short-Sleeve T-Shirt / Polo vs Long-Sleeve T-Shirt / Sweater / Hoodie / Shirt / Sleeveless
-  const topConfBase = (hasCentralHole || isPairedShoeShape || legSplitScore >= 0.30 || horizLegSplitScore >= 0.22) ? 28 : 62;
-  if (sleeveDropRatio < 0.28 && topWidth < 0.58 && neckDipRows >= 2) {
+  const topConfBase = (hasCentralHole || isPairedShoeShape || legSplitScore >= 0.30 || horizLegSplitScore >= 0.22) ? 24 : 62;
+  if (!isPairedShoeShape && sleeveDropRatio < 0.28 && topWidth < 0.58 && neckDipRows >= 2) {
     pushHyp(topConfBase + 22, 'tops', isFemale ? ['Camisole', 'Tank Top', 'Bodysuit'] : ['Tank Top'], 'sleeveless', 'casual', 'Sleeveless narrow strap upper contour');
-  } else if (hoodCrownRows >= 2) {
+  } else if (!isPairedShoeShape && hoodCrownRows >= 2 && aspect >= 0.90 && midWidth >= 0.58 && botWidth >= 0.50) {
     pushHyp(topConfBase + 28, 'tops', isFemale ? ['Hoodie', 'Sweatshirt'] : ['Hoodie'], 'long', 'casual', 'Hood dome silhouette above shoulders');
-  } else if (sleeveDropRatio >= 0.68 && underarmGapScore >= 0.18) {
+  } else if (!isPairedShoeShape && sleeveDropRatio >= 0.68 && underarmGapScore >= 0.18) {
     // Long-sleeve top (Shirt vs Sweater vs Long-Sleeve Tee)
     if (centerPlacketScore >= 26 || (neckDipRows >= 2 && avgTexture < 18)) {
       pushHyp(topConfBase + 20, 'tops', isFemale ? ['Button-Up Shirt', 'Blouse'] : ['Oxford Button-Down Shirt', 'Dress Shirt', 'Linen Shirt', 'Flannel Shirt'], 'long', 'smart-casual', 'Long sleeves + front button placket / collar');
@@ -10052,7 +10109,7 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName, componentC
     pushHyp(topConfBase + 16, 'tops', isFemale ? ['T-Shirt', 'Sweatshirt'] : ['Long-Sleeve T-Shirt', 'Henley', 'Sweatshirt'], 'long', 'casual', 'Long-sleeve upper garment contour');
   } else {
     // Short-sleeve Tee vs Polo vs Blouse (also covers flat-lay & folded T-shirts!)
-    if (neckDipRows >= 2 && centerPlacketScore >= 24) {
+    if (!isPairedShoeShape && neckDipRows >= 2 && centerPlacketScore >= 24) {
       pushHyp(topConfBase + 20, 'tops', isFemale ? ['Blouse', 'Button-Up Shirt'] : ['Polo Shirt', 'Short-Sleeve Button-Up Shirt'], 'short', 'elevated-casual', 'Short sleeves + collar dip / placket');
     }
     pushHyp(topConfBase + 26, 'tops', isFemale ? ['T-Shirt', 'Crewneck T-Shirt', 'Blouse'] : ['T-Shirt', 'Crewneck T-Shirt', 'V-Neck T-Shirt'], 'short', 'casual', 'Flat-lay / folded T-shirt contour');
@@ -10244,6 +10301,51 @@ function ensureSubTypeOptionSelected(cat, subType) {
   autoSelectLengthBySubtype();
 }
 
+async function recognizeGarmentViaGeminiDirect(imageBase64, mimeType, fileNameHint = '', signal = undefined) {
+  const geminiKey = (localStorage.getItem('wtw_gemini_apikey') || '').trim();
+  if (!geminiKey) return null;
+
+  const subMap = getSubTypes();
+  const allowedList = Object.entries(subMap)
+    .map(([cat, list]) => `- ${cat}: ${(list || []).join(', ')}`)
+    .join('\n');
+
+  const prompt = [
+    'You are an expert fashion archivist and computer-vision wardrobe classifier.',
+    'Analyze the single wardrobe item in the photo (including flat-lay, folded garments, or footwear pairs) and return ONE unified JSON object.',
+    'If the item is footwear (sneakers, sandals, loafers, oxfords, boots, heels, slides), classify it strictly under "shoes" and NEVER as outerwear or tops.',
+    'If the garment is folded on a flat surface, inspect fabric knit/weave, ribbed neckline/collar, stitching, and proportions rather than mistaking fold creases for puffer baffles or shorts.',
+    'Allowed category and garment_type options:',
+    allowedList,
+    fileNameHint ? `Filename hint (ignore if generic): ${fileNameHint}` : '',
+    'Return ONLY JSON with keys: category, garment_type, length (short|long|sleeveless|shorts|cropped|none), color_name, color_hex (#RRGGBB), season (all-season|spring-summer|autumn-winter|spring|summer|autumn|winter), formality (casual|lounge|athleisure|elevated-casual|smart-casual|business-casual|formal|cocktail|black-tie), confidenceScore (0..1).'
+  ].filter(Boolean).join('\n');
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal,
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { inline_data: { mime_type: mimeType, data: imageBase64 } },
+          { text: prompt }
+        ]
+      }],
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: 'application/json'
+      }
+    })
+  });
+  if (!resp.ok) return null;
+  const payload = await resp.json();
+  const rawText = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!rawText) return null;
+  return JSON.parse(rawText);
+}
+
 async function recognizeGarmentViaApi(dataUrl, fileNameHint = '') {
   if (!shouldAttemptBackendApi() || !dataUrl || !dataUrl.startsWith('data:image/')) {
     return null;
@@ -10256,21 +10358,31 @@ async function recognizeGarmentViaApi(dataUrl, fileNameHint = '') {
   const timeoutId = setTimeout(() => controller.abort(), 25000);
 
   try {
-    const response = await fetch('/api/recognize-garment', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        imageBase64,
-        mimeType,
-        fileNameHint: String(fileNameHint || ''),
-        styleGender: userProfile.styleGender || 'male',
-        availableSubTypes: getSubTypes()
-      })
-    });
-    if (!response.ok) return null;
+    let data = null;
+    try {
+      const response = await fetch('/api/recognize-garment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          imageBase64,
+          mimeType,
+          fileNameHint: String(fileNameHint || ''),
+          styleGender: userProfile.styleGender || 'male',
+          availableSubTypes: getSubTypes()
+        })
+      });
+      if (response.ok) {
+        data = await response.json();
+      }
+    } catch {
+      // Backend /api/recognize-garment unavailable (e.g. static GitHub Pages)
+    }
 
-    const data = await response.json();
+    if (!data) {
+      data = await recognizeGarmentViaGeminiDirect(imageBase64, mimeType, fileNameHint, controller.signal);
+    }
+
     if (!data || !data.category || (!data.garment_type && !data.subcategory) || (!data.color_name && !data.primaryColor) || !data.season || typeof data.confidenceScore !== 'number') {
       return null;
     }
@@ -15193,9 +15305,12 @@ function init() {
   setupIosPwa();
   loadData();
   runRetroactiveWardrobeCleanup({ silent: true });
-  const { city, apiKey, dob, birthTime, birthPlace } = getSettings();
+  const { city, apiKey, geminiApiKey, dob, birthTime, birthPlace } = getSettings();
   document.getElementById('setting-city').value = city;
   document.getElementById('setting-apikey').value = apiKey;
+  if (document.getElementById('setting-gemini-apikey')) {
+    document.getElementById('setting-gemini-apikey').value = geminiApiKey;
+  }
   if (document.getElementById('setting-dob')) {
     document.getElementById('setting-dob').value = dob;
   }
