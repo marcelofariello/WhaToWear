@@ -3764,7 +3764,9 @@ input[type="text"]:focus, select:focus, textarea:focus {
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
           <button type="button" class="btn btn-secondary btn-sm" onclick="syncPushToCloud(true)">⬆️ Push to Cloud Now</button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="syncPullFromCloud(true)">⬇️ Pull from Cloud Now</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="runFirebaseCloudDiagnostics()">🩺 Test Phone Cloud &amp; Storage</button>
         </div>
+        <div id="cloud-diagnostics-panel" style="display:none; margin-top:12px;"></div>
         <div id="cloud-failed-panel" style="display:none; margin-top:12px;"></div>
       </div>
     </div>
@@ -4893,9 +4895,11 @@ let isCloudSyncInFlight = false;
 
 const CLOUD_UPLOAD_CONCURRENCY = 5;
 const COMPRESSION_LOOKAHEAD_CONCURRENCY = 4;
+const CLOUD_STORAGE_UPLOAD_TIMEOUT_MS = 25000;
 const FIRESTORE_BATCH_LIMIT = 400;
 const FIRESTORE_SAFE_DOC_BYTES = 900 * 1024;
 let ensureFirebaseAuthPromise = null;
+let lastFirebaseAuthError = null;
 const compressedUploadCache = new Map();
 const compressedUploadInFlight = new Map();
 
@@ -5019,13 +5023,27 @@ function clearFailedSyncItemIds(itemIds) {
   renderFailedSyncPanels();
 }
 
+function configureFirebaseStorageTimeouts(storageInstance) {
+  if (!storageInstance) return;
+  try {
+    if (typeof storageInstance.setMaxUploadRetryTime === 'function') {
+      storageInstance.setMaxUploadRetryTime(20000);
+    }
+    if (typeof storageInstance.setMaxOperationRetryTime === 'function') {
+      storageInstance.setMaxOperationRetryTime(15000);
+    }
+  } catch {}
+}
+
 async function ensureFirebaseAuthSession() {
   if (typeof firebase === 'undefined' || typeof firebase.auth !== 'function') {
+    lastFirebaseAuthError = 'Firebase Auth SDK unavailable';
     return null;
   }
   firebaseAuth = firebaseAuth || firebase.auth();
   if (firebaseAuth.currentUser) {
     currentFirebaseUser = firebaseAuth.currentUser;
+    lastFirebaseAuthError = null;
     return currentFirebaseUser;
   }
   if (ensureFirebaseAuthPromise) {
@@ -5035,9 +5053,13 @@ async function ensureFirebaseAuthSession() {
     try {
       const cred = await firebaseAuth.signInAnonymously();
       currentFirebaseUser = cred?.user || firebaseAuth.currentUser || null;
+      lastFirebaseAuthError = null;
       return currentFirebaseUser;
     } catch (err) {
-      console.warn('Firebase anonymous auth unavailable:', err?.code || '', err?.message || err);
+      const code = err?.code || '';
+      const msg = err?.message || String(err || 'Anonymous Auth failed');
+      lastFirebaseAuthError = code ? `${code}: ${msg}` : msg;
+      console.warn('Firebase anonymous auth unavailable:', lastFirebaseAuthError);
       return firebaseAuth?.currentUser || null;
     } finally {
       ensureFirebaseAuthPromise = null;
@@ -5062,10 +5084,12 @@ function initFirebaseSync() {
     }
     db = firebase.firestore();
     firebaseStorage = typeof firebase.storage === 'function' ? firebase.storage() : null;
+    configureFirebaseStorageTimeouts(firebaseStorage);
     if (typeof firebase.auth === 'function') {
       firebaseAuth = firebase.auth();
       firebaseAuth.onAuthStateChanged((user) => {
         currentFirebaseUser = user || null;
+        if (user) lastFirebaseAuthError = null;
       });
     }
     ensureFirebaseAuthSession().finally(() => {
@@ -5446,10 +5470,133 @@ async function compressImageForCloudUpload(
   }
 }
 
+async function runStorageUploadWithTimeout(uploadTask, storagePath, timeoutMs = CLOUD_STORAGE_UPLOAD_TIMEOUT_MS) {
+  let timerId = null;
+  try {
+    const timeoutPromise = new Promise((_, reject) => {
+      timerId = setTimeout(() => {
+        try {
+          if (uploadTask && typeof uploadTask.cancel === 'function') uploadTask.cancel();
+        } catch {}
+        const protocolNote = (typeof window !== 'undefined' && window.location?.protocol === 'file:')
+          ? ' App is opened over file:// which blocks Firebase Storage CORS uploads; use an https:// link on phone.'
+          : ' Check Firebase Storage rules, Anonymous Auth, or mobile network stability.';
+        reject(new Error(`storage/timeout: Upload timed out after ${Math.round(timeoutMs / 1000)}s for ${storagePath}.${protocolNote}`));
+      }, timeoutMs);
+    });
+    return await Promise.race([uploadTask, timeoutPromise]);
+  } finally {
+    if (timerId !== null) clearTimeout(timerId);
+  }
+}
+
+function formatStorageFailureWithAuthHint(err, storagePath) {
+  const baseMsg = (err && (err.code ? `${err.code}: ${err.message}` : err.message)) || String(err || 'Storage upload failed');
+  const hints = [];
+  if (lastFirebaseAuthError && !currentFirebaseUser) {
+    hints.push(`Anonymous Auth failed (${lastFirebaseAuthError}) — enable Authentication -> Sign-in method -> Anonymous in Firebase Console`);
+  }
+  if (typeof window !== 'undefined' && window.location?.protocol === 'file:') {
+    hints.push('Page is running from file:// which can block Firebase Storage CORS on phones — open via https://');
+  }
+  if (/unauthorized|permission|bucket|404/i.test(baseMsg) && !lastFirebaseAuthError) {
+    hints.push(`Verify Firebase Storage is enabled for bucket "${FIREBASE_CONFIG.storageBucket}" and rules permit writes`);
+  }
+  if (!hints.length) return err instanceof Error ? err : new Error(baseMsg);
+  const enriched = new Error(`${baseMsg} [${hints.join('; ')}]`);
+  if (err && err.code) enriched.code = err.code;
+  return enriched;
+}
+
+async function runFirebaseCloudDiagnostics() {
+  const panel = document.getElementById('cloud-diagnostics-panel');
+  const rows = [];
+  const renderRows = () => {
+    if (!panel) return;
+    panel.style.display = 'block';
+    panel.innerHTML = `
+      <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:12px; padding:12px 14px; font-size:0.8rem; color:#0f172a;">
+        <div style="font-weight:700; margin-bottom:6px;">🩺 Phone Cloud &amp; Storage Diagnostics</div>
+        <ul style="margin:0 0 0 18px; padding:0; line-height:1.5;">
+          ${rows.map(r => `<li>${r}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  };
+
+  const proto = (typeof window !== 'undefined' && window.location) ? `${window.location.protocol}//${window.location.host || 'local'}` : 'unknown';
+  if (typeof window !== 'undefined' && window.location?.protocol === 'file:') {
+    rows.push(`⚠️ <strong>Origin:</strong> <code>${escapeHtml(proto)}</code> — opening via <code>file://</code> can let Firestore appear connected while blocking Firebase Storage CORS on phones. Use an <code>https://</code> URL (Netlify / GitHub Pages).`);
+  } else {
+    rows.push(`✅ <strong>Origin:</strong> <code>${escapeHtml(proto)}</code>`);
+  }
+  rows.push(`ℹ️ <strong>Bucket / Vault:</strong> <code>${escapeHtml(FIREBASE_CONFIG.storageBucket)}</code> · vault <code>${escapeHtml(syncVaultKey)}</code>`);
+  renderRows();
+
+  if (typeof firebase === 'undefined') {
+    rows.push('❌ <strong>Firebase SDK:</strong> Not loaded (offline or blocked CDN).');
+    renderRows();
+    return { ok: false, rows };
+  }
+
+  // Force fresh Anonymous Auth check
+  const authUser = await ensureFirebaseAuthSession();
+  if (authUser && authUser.uid) {
+    rows.push(`✅ <strong>Firebase Auth:</strong> Signed in (<code>${escapeHtml(authUser.uid.slice(0, 12))}...</code>${authUser.isAnonymous ? ' anonymous' : ''})`);
+  } else {
+    rows.push(`❌ <strong>Firebase Auth:</strong> ${escapeHtml(lastFirebaseAuthError || 'No user session')} — enable <strong>Anonymous</strong> under Firebase Console → Authentication → Sign-in method.`);
+  }
+  renderRows();
+
+  // Firestore read/write probe
+  let firestoreOk = false;
+  try {
+    if (!db) db = firebase.firestore();
+    const pingRef = db.collection('wardrobes').doc(syncVaultKey).collection('_diagnostics').doc('ping');
+    await pingRef.set({ checkedAt: Date.now(), origin: proto }, { merge: true });
+    firestoreOk = true;
+    rows.push('✅ <strong>Firestore Database:</strong> Write succeeded.');
+  } catch (err) {
+    rows.push(`❌ <strong>Firestore Database:</strong> ${escapeHtml(err?.code || '')} ${escapeHtml(err?.message || String(err))}`);
+  }
+  renderRows();
+
+  // Firebase Storage upload probe (with short 12s mobile fail-fast timeout)
+  let storageOk = false;
+  try {
+    if (!firebaseStorage && typeof firebase.storage === 'function') {
+      firebaseStorage = firebase.storage();
+    }
+    configureFirebaseStorageTimeouts(firebaseStorage);
+    if (!firebaseStorage) {
+      throw new Error('Firebase Storage SDK unavailable');
+    }
+    const testPath = `wardrobes/${syncVaultKey}/_diagnostics/ping.txt`;
+    const ref = firebaseStorage.ref(testPath);
+    const testBlob = new Blob(['ok'], { type: 'text/plain' });
+    const snap = await runStorageUploadWithTimeout(
+      ref.put(testBlob, { contentType: 'text/plain' }),
+      testPath,
+      12000
+    );
+    const url = await snap.ref.getDownloadURL();
+    try { await ref.delete(); } catch {}
+    storageOk = Boolean(url);
+    rows.push('✅ <strong>Firebase Storage:</strong> Upload &amp; download URL succeeded.');
+  } catch (err) {
+    const formatted = formatStorageFailureWithAuthHint(err, `wardrobes/${syncVaultKey}/_diagnostics/ping.txt`);
+    rows.push(`❌ <strong>Firebase Storage:</strong> ${escapeHtml(formatted.message || String(err))}`);
+  }
+  renderRows();
+
+  return { ok: Boolean(authUser && firestoreOk && storageOk), rows };
+}
+
 async function uploadBlobToFirebaseStorage(storagePath, srcDataUrl, metadataTags = {}, opts = {}) {
   if (!firebaseStorage && typeof firebase !== 'undefined' && typeof firebase.storage === 'function') {
     firebaseStorage = firebase.storage();
   }
+  configureFirebaseStorageTimeouts(firebaseStorage);
   if (!firebaseStorage) {
     throw new Error('Firebase Storage SDK is not available. Cannot upload garment image.');
   }
@@ -5461,11 +5608,12 @@ async function uploadBlobToFirebaseStorage(storagePath, srcDataUrl, metadataTags
 
   try {
     const storageRef = firebaseStorage.ref(storagePath);
-    const snap = await storageRef.put(compressed.blob, {
+    const uploadTask = storageRef.put(compressed.blob, {
       contentType: 'image/jpeg',
       cacheControl: 'public,max-age=31536000,immutable',
       customMetadata: metadataTags
     });
+    const snap = await runStorageUploadWithTimeout(uploadTask, storagePath, opts.timeoutMs || CLOUD_STORAGE_UPLOAD_TIMEOUT_MS);
     const tokens = snap?.metadata?.downloadTokens;
     const bucket = snap?.metadata?.bucket;
     const fullPath = snap?.metadata?.fullPath || storagePath;
@@ -5474,6 +5622,8 @@ async function uploadBlobToFirebaseStorage(storagePath, srcDataUrl, metadataTags
       ? `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(fullPath)}?alt=media&token=${encodeURIComponent(firstToken)}`
       : await snap.ref.getDownloadURL();
     return { imageUrl, storagePath, bytes: compressed.byteLength };
+  } catch (err) {
+    throw formatStorageFailureWithAuthHint(err, storagePath);
   } finally {
     compressedUploadCache.delete(srcDataUrl);
   }
@@ -9894,50 +10044,82 @@ function handlePhotoUpload(event) {
   processPhotoFile(files[0]);
 }
 
+function applyDecodedModalPhotoSource(imgSource, fileNameHint, fallbackSrc, token) {
+  try {
+    const prep = preparePhotoForAnalysis(imgSource);
+    currentItemOriginalPhoto = prep.dataUrl;
+    currentItemPhoto = prep.dataUrl;
+
+    showPhotoPreview(currentItemPhoto, false);
+    const localAnalysis = autoDetectColorAndDetails(
+      prep.ctx,
+      prep.width,
+      prep.height,
+      prep.fgMask,
+      prep.bbox,
+      fileNameHint,
+      prep.componentCount || 1
+    );
+    hydrateModalWithGeminiRecognition(token, prep.dataUrl, fileNameHint, localAnalysis);
+  } catch {
+    if (fallbackSrc) {
+      currentItemOriginalPhoto = fallbackSrc;
+      currentItemPhoto = fallbackSrc;
+      showPhotoPreview(fallbackSrc, false);
+      toast('📷 Photo attached!');
+    } else {
+      toast('⚠️ Could not decode photo (if HEIC, switch camera format to JPEG/Most Compatible)');
+    }
+  }
+}
+
 function loadPhotoIntoItemModalFromSrc(src, fileNameHint = '') {
   const token = ++activeModalRecognitionToken;
   const img = new Image();
   img.crossOrigin = 'anonymous';
-  img.onload = () => {
-    try {
-      const prep = preparePhotoForAnalysis(img);
-      currentItemOriginalPhoto = prep.dataUrl;
-      currentItemPhoto = prep.dataUrl;
-
-      showPhotoPreview(currentItemPhoto, false);
-      const localAnalysis = autoDetectColorAndDetails(
-        prep.ctx,
-        prep.width,
-        prep.height,
-        prep.fgMask,
-        prep.bbox,
-        fileNameHint,
-        prep.componentCount || 1
-      );
-      hydrateModalWithGeminiRecognition(token, prep.dataUrl, fileNameHint, localAnalysis);
-    } catch {
-      currentItemOriginalPhoto = src;
-      currentItemPhoto = src;
-      showPhotoPreview(src, false);
-      toast('📷 Photo attached!');
-    }
-  };
+  img.onload = () => applyDecodedModalPhotoSource(img, fileNameHint, src, token);
   img.onerror = () => {
     toast('⚠️ Could not load that image');
   };
   img.src = src;
 }
 
-function processPhotoFile(file) {
+async function processPhotoFile(file) {
   if (!isImageFile(file)) {
     toast('Please drop or select an image file (JPG, PNG, BMP, WEBP)');
     return;
   }
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    loadPhotoIntoItemModalFromSrc(e.target.result, file.name || '');
-  };
-  reader.readAsDataURL(file);
+  const token = ++activeModalRecognitionToken;
+  if (typeof createImageBitmap === 'function') {
+    let bitmap = null;
+    try {
+      bitmap = await createImageBitmap(file);
+      applyDecodedModalPhotoSource(bitmap, file.name || '', '', token);
+      return;
+    } catch {
+      // Fall back to object URL Image decode on HEIC or unsupported formats
+    } finally {
+      if (bitmap && typeof bitmap.close === 'function') bitmap.close();
+    }
+  }
+
+  const objUrl = URL.createObjectURL(file);
+  try {
+    await new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        applyDecodedModalPhotoSource(img, file.name || '', '', token);
+        resolve();
+      };
+      img.onerror = () => {
+        toast('⚠️ Could not decode this phone image (if HEIC, enable Most Compatible camera format)');
+        resolve();
+      };
+      img.src = objUrl;
+    });
+  } finally {
+    URL.revokeObjectURL(objUrl);
+  }
 }
 
 function showPhotoPreview(src) {
