@@ -3391,8 +3391,8 @@ input[type="text"]:focus, select:focus, textarea:focus {
           <span class="pill-text" id="header-season-text">Spring - Bathurst</span>
         </span>
         <span class="header-pill status-pill-cloud" id="header-cloud-pill" style="cursor:pointer;" onclick="switchTab('settings')" title="Firebase Cloud Database Sync">
-          <span class="pill-dot glow-teal"></span>
-          <span class="pill-text" id="header-cloud-text">Cloud Synced</span>
+          <span class="pill-dot glow-yellow"></span>
+          <span class="pill-text" id="header-cloud-text">Connecting...</span>
         </span>
       </div>
     </div>
@@ -3459,6 +3459,7 @@ input[type="text"]:focus, select:focus, textarea:focus {
         <button type="button" class="photo-action-btn" onclick="openSavedImagesModal('item')">🗂️ Saved Images</button>
       </div>
     </div>
+    <div id="wardrobe-sync-alert-banner" style="display:none; margin-bottom:14px;"></div>
     <div class="wardrobe-grid" id="wardrobe-grid"></div>
     <div id="wardrobe-empty" style="display:none;">
       <div class="empty-wardrobe">
@@ -3764,6 +3765,7 @@ input[type="text"]:focus, select:focus, textarea:focus {
           <button type="button" class="btn btn-secondary btn-sm" onclick="syncPushToCloud(true)">⬆️ Push to Cloud Now</button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="syncPullFromCloud(true)">⬇️ Pull from Cloud Now</button>
         </div>
+        <div id="cloud-failed-panel" style="display:none; margin-top:12px;"></div>
       </div>
     </div>
 
@@ -4001,11 +4003,13 @@ input[type="text"]:focus, select:focus, textarea:focus {
       </button>
     </div>
 
+    <div id="mass-upload-progress-bar" style="display:none; margin-bottom:10px; padding:10px 14px; border-radius:10px; background:#eff6ff; border:1px solid #bfdbfe; font-size:0.82rem; color:#1e40af; font-weight:600;"></div>
+    <div id="mass-sync-failed-banner" style="display:none; margin-bottom:10px;"></div>
     <div class="mass-validate-list" id="mass-validate-list"></div>
 
     <div class="form-actions" style="margin-top:14px;">
       <button type="button" class="btn btn-secondary" onclick="discardAllMassDrafts()">🗑️ Discard Queue</button>
-      <button type="button" class="btn btn-primary" onclick="validateAndSaveAllMassDrafts()">✅ Validate &amp; Add All to My Wardrobe</button>
+      <button type="button" class="btn btn-primary" id="mass-approve-footer-btn" onclick="validateAndSaveAllMassDrafts()">✅ Validate &amp; Add All to My Wardrobe</button>
     </div>
   </div>
 </div>
@@ -4064,7 +4068,9 @@ input[type="text"]:focus, select:focus, textarea:focus {
 
 <!-- Firebase SDK (Compat v10) for Static HTML PWA Multi-Device Sync -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
 
 <script>
 /* ================================================================
@@ -4798,10 +4804,11 @@ async function idbGet(key) {
 
 async function hydrateUnlimitedPhotosFromIdb() {
   try {
-    const [idbWardrobe, idbSelfies, idbInspo] = await Promise.all([
+    const [idbWardrobe, idbSelfies, idbInspo, idbFailedSync] = await Promise.all([
       idbGet('wtw_wardrobe'),
       idbGet('wtw_user_selfies'),
-      idbGet('wtw_inspo_photos')
+      idbGet('wtw_inspo_photos'),
+      idbGet('wtw_failed_sync_items')
     ]);
     let changed = false;
     if (Array.isArray(idbWardrobe) && idbWardrobe.length > wardrobe.length) {
@@ -4816,6 +4823,14 @@ async function hydrateUnlimitedPhotosFromIdb() {
     if (Array.isArray(idbInspo) && idbInspo.length > (userProfile.inspoPhotos || []).length) {
       userProfile.inspoPhotos = idbInspo;
       changed = true;
+    }
+    if (Array.isArray(idbFailedSync) && idbFailedSync.length > 0) {
+      failedCloudSyncItems = idbFailedSync;
+      renderFailedSyncPanels();
+      setCloudStatusUI(
+        'partial',
+        `${failedCloudSyncItems.length} item${failedCloudSyncItems.length === 1 ? '' : 's'} pending retry`
+      );
     }
     if (changed) {
       renderWardrobe();
@@ -4864,33 +4879,158 @@ const FIREBASE_CONFIG = {
 };
 
 let db = null;
+let firebaseStorage = null;
+let firebaseAuth = null;
+let currentFirebaseUser = null;
 let syncVaultKey = localStorage.getItem('wtw_sync_vault') || 'marcelo-atelier-wardrobe';
 let isApplyingRemoteCloudData = false;
 let cloudSyncDebounceTimer = null;
 let cloudUnsubscribeListener = null;
+let cloudItemsUnsubscribeListener = null;
+let subcollectionItemsLoaded = false;
+let failedCloudSyncItems = [];
+let isCloudSyncInFlight = false;
+
+const CLOUD_UPLOAD_CONCURRENCY = 4;
+const FIRESTORE_BATCH_LIMIT = 400;
+const FIRESTORE_SAFE_DOC_BYTES = 900 * 1024;
+
+function isInlineBase64DataUrl(val) {
+  return typeof val === 'string' && /^\s*data:/i.test(val);
+}
+
+function measureJsonUtf8Bytes(obj) {
+  const json = JSON.stringify(obj);
+  if (typeof TextEncoder !== 'undefined') {
+    return new TextEncoder().encode(json).length;
+  }
+  return unescape(encodeURIComponent(json)).length;
+}
+
+function getSyncUserScope() {
+  const cleanVault = (syncVaultKey || '').trim() || 'marcelo-atelier-wardrobe';
+  const authUid = (currentFirebaseUser && currentFirebaseUser.uid) || null;
+  const userId = currentFirebaseUser && !currentFirebaseUser.isAnonymous && authUid ? authUid : cleanVault;
+  return { userId, authUid, vaultKey: cleanVault };
+}
 
 function setCloudStatusUI(status, label) {
+  let effectiveStatus = status || 'connecting';
+  let effectiveLabel = label || '';
+
+  // Never falsely display "Cloud Synced" when failed items are waiting or offline/syncing
+  if (failedCloudSyncItems.length > 0 && (effectiveStatus === 'connected' || effectiveStatus === 'offline')) {
+    effectiveStatus = 'partial';
+    effectiveLabel = `${failedCloudSyncItems.length} failed to sync`;
+  }
+
   const badge = document.getElementById('cloud-status-badge');
   const pill = document.getElementById('header-cloud-pill');
-  const colors = {
-    connected: { bg: 'rgba(0, 229, 192, 0.15)', text: '#00e5c0', border: '#00e5c0', dot: 'glow-teal', icon: '🟢', label: 'Cloud Synced' },
-    syncing:   { bg: 'rgba(56, 189, 248, 0.15)', text: '#38bdf8', border: '#38bdf8', dot: 'glow-teal', icon: '🔄', label: 'Syncing...' },
-    error:     { bg: 'rgba(251, 113, 133, 0.15)', text: '#fb7185', border: '#fb7185', dot: 'glow-yellow', icon: '⚠️', label: 'Offline / Reconnecting' },
-    offline:   { bg: 'rgba(148, 163, 184, 0.15)', text: '#94a3b8', border: '#94a3b8', dot: 'glow-teal', icon: '⚪', label: 'Cloud Synced' }
+  const states = {
+    connected:  { bg: 'rgba(0, 229, 192, 0.15)',  text: '#00e5c0', border: '#00e5c0', dot: 'glow-teal',   icon: '🟢', label: 'Cloud Synced',         pillLabel: 'Cloud Synced' },
+    connecting: { bg: 'rgba(250, 204, 21, 0.16)', text: '#eab308', border: '#eab308', dot: 'glow-yellow', icon: '🔄', label: 'Connecting...',        pillLabel: 'Connecting...' },
+    syncing:    { bg: 'rgba(56, 189, 248, 0.15)', text: '#38bdf8', border: '#38bdf8', dot: 'glow-yellow', icon: '🔄', label: 'Syncing...',           pillLabel: 'Syncing...' },
+    partial:    { bg: 'rgba(245, 158, 11, 0.18)', text: '#d97706', border: '#f59e0b', dot: 'glow-yellow', icon: '⚠️', label: 'Partial Sync Error',   pillLabel: 'Sync Failed' },
+    error:      { bg: 'rgba(251, 113, 133, 0.18)',text: '#e11d48', border: '#fb7185', dot: 'glow-yellow', icon: '⚠️', label: 'Upload Failed',        pillLabel: 'Sync Error' },
+    offline:    { bg: 'rgba(148, 163, 184, 0.15)',text: '#64748b', border: '#94a3b8', dot: 'glow-yellow', icon: '⚪', label: 'Offline (Not Synced)', pillLabel: 'Offline (Local)' }
   };
-  const c = colors[status] || colors.connected;
-  const text = label || c.label;
+  const cfg = states[effectiveStatus] || states.connecting;
+  const fullText = effectiveLabel || cfg.label;
+  const headerText =
+    effectiveStatus === 'connected'
+      ? 'Cloud Synced'
+      : effectiveStatus === 'partial' || effectiveStatus === 'error'
+        ? (failedCloudSyncItems.length > 0 ? `Sync Error (${failedCloudSyncItems.length})` : cfg.pillLabel)
+        : (effectiveLabel && effectiveStatus === 'syncing' ? effectiveLabel : cfg.pillLabel);
 
   if (badge) {
-    badge.style.background = c.bg;
-    badge.style.color = c.text;
-    badge.style.borderColor = c.border;
-    badge.textContent = `${c.icon} ${text}`;
+    badge.style.background = cfg.bg;
+    badge.style.color = cfg.text;
+    badge.style.borderColor = cfg.border;
+    badge.textContent = `${cfg.icon} ${fullText}`;
   }
   if (pill) {
-    const isSynced = text.toLowerCase().includes('sync') || status === 'connected' || status === 'offline';
-    const displayLabel = isSynced ? 'Cloud Synced' : text;
-    pill.innerHTML = `<span class="pill-dot ${c.dot}"></span><span class="pill-text" id="header-cloud-text">${displayLabel}</span>`;
+    pill.innerHTML = `<span class="pill-dot ${cfg.dot}"></span><span class="pill-text" id="header-cloud-text">${escapeHtml(headerText)}</span>`;
+  }
+}
+
+function buildFailedSyncAlertHtml() {
+  if (!failedCloudSyncItems.length) return '';
+  const n = failedCloudSyncItems.length;
+  const previewRows = failedCloudSyncItems.slice(0, 6).map(f =>
+    `<li style="margin:2px 0;"><strong>${escapeHtml(f.item?.name || f.itemId)}</strong> <span style="opacity:0.85;">(${escapeHtml(f.stage)}: ${escapeHtml(f.reason)})</span></li>`
+  ).join('');
+  const extraCount = failedCloudSyncItems.length > 6 ? `<li style="opacity:0.85;">...and ${failedCloudSyncItems.length - 6} more failed item(s)</li>` : '';
+
+  return `
+    <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:12px; padding:12px 14px; color:#991b1b;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <div style="font-weight:700; font-size:0.85rem;">
+          ⚠️ ${n} item${n === 1 ? '' : 's'} failed to sync to Firebase Cloud (saved locally only)
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" onclick="retryFailedCloudSyncs()" style="background:#dc2626; border-color:#b91c1c;">
+          🔄 Retry Failed (${n})
+        </button>
+      </div>
+      <ul style="margin:6px 0 0 18px; padding:0; font-size:0.77rem;">
+        ${previewRows}${extraCount}
+      </ul>
+    </div>
+  `;
+}
+
+function renderFailedSyncPanels() {
+  const html = buildFailedSyncAlertHtml();
+  const hasFailures = failedCloudSyncItems.length > 0;
+  ['wardrobe-sync-alert-banner', 'cloud-failed-panel', 'mass-sync-failed-banner'].forEach(elId => {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.innerHTML = html;
+    el.style.display = hasFailures ? 'block' : 'none';
+  });
+}
+
+function recordFailedSyncItems(records) {
+  const map = new Map(failedCloudSyncItems.map(r => [r.itemId, r]));
+  for (const rec of records) {
+    if (!rec || !rec.item) continue;
+    const itemId = rec.item.id || rec.itemId;
+    map.set(itemId, {
+      itemId,
+      item: { ...rec.item },
+      stage: rec.stage || 'firestore',
+      reason: rec.reason || 'Sync failed',
+      failedAt: rec.failedAt || Date.now()
+    });
+  }
+  failedCloudSyncItems = Array.from(map.values());
+  idbSet('wtw_failed_sync_items', failedCloudSyncItems);
+  renderFailedSyncPanels();
+}
+
+function clearFailedSyncItemIds(itemIds) {
+  const idSet = new Set(itemIds);
+  failedCloudSyncItems = failedCloudSyncItems.filter(r => !idSet.has(r.itemId));
+  idbSet('wtw_failed_sync_items', failedCloudSyncItems);
+  renderFailedSyncPanels();
+}
+
+async function ensureFirebaseAuthSession() {
+  if (typeof firebase === 'undefined' || typeof firebase.auth !== 'function') {
+    return null;
+  }
+  try {
+    firebaseAuth = firebase.auth();
+    if (firebaseAuth.currentUser) {
+      currentFirebaseUser = firebaseAuth.currentUser;
+      return currentFirebaseUser;
+    }
+    const cred = await firebaseAuth.signInAnonymously();
+    currentFirebaseUser = cred?.user || firebaseAuth.currentUser || null;
+    return currentFirebaseUser;
+  } catch (err) {
+    console.warn('Firebase anonymous auth unavailable:', err?.code || '', err?.message || err);
+    return firebaseAuth?.currentUser || null;
   }
 }
 
@@ -4904,16 +5044,63 @@ function initFirebaseSync() {
   }
 
   try {
+    setCloudStatusUI('connecting', 'Connecting...');
     if (!firebase.apps.length) {
       firebase.initializeApp(FIREBASE_CONFIG);
     }
     db = firebase.firestore();
-    setCloudStatusUI('connected', 'Cloud Synced');
-    setupCloudRealtimeListener();
+    firebaseStorage = typeof firebase.storage === 'function' ? firebase.storage() : null;
+    if (typeof firebase.auth === 'function') {
+      firebaseAuth = firebase.auth();
+      firebaseAuth.onAuthStateChanged((user) => {
+        currentFirebaseUser = user || null;
+      });
+    }
+    ensureFirebaseAuthSession().finally(() => {
+      setupCloudRealtimeListener();
+    });
   } catch (err) {
     console.error('Firebase init error:', err);
     setCloudStatusUI('error', 'Sync Init Error');
   }
+}
+
+function normalizeRemoteWardrobeItem(raw, scope) {
+  if (!raw || !raw.id) return null;
+  const imgUrl = raw.imageUrl || (!isInlineBase64DataUrl(raw.image) ? raw.image : null) || null;
+  return {
+    id: raw.id,
+    name: raw.name || 'Wardrobe Piece',
+    category: raw.category || 'tops',
+    subType: raw.subType || 'Item',
+    length: raw.length || '',
+    season: raw.season || 'all-season',
+    color: raw.color || '#4a7db5',
+    formality: raw.formality || 'casual',
+    image: imgUrl,
+    imageUrl: imgUrl,
+    storagePath: raw.storagePath || null,
+    userId: raw.userId || scope.userId,
+    authUid: raw.authUid || null,
+    vaultKey: raw.vaultKey || scope.vaultKey,
+    updatedAt: raw.updatedAt || Date.now(),
+    synced: true
+  };
+}
+
+function mergeRemoteItemsWithPendingLocal(remoteDocs) {
+  const scope = getSyncUserScope();
+  const byId = new Map();
+  for (const docItem of remoteDocs) {
+    const clean = normalizeRemoteWardrobeItem(docItem, scope);
+    if (clean) byId.set(clean.id, clean);
+  }
+  for (const failed of failedCloudSyncItems) {
+    if (failed?.item?.id && !byId.has(failed.item.id)) {
+      byId.set(failed.item.id, failed.item);
+    }
+  }
+  return Array.from(byId.values());
 }
 
 function setupCloudRealtimeListener() {
@@ -4922,41 +5109,93 @@ function setupCloudRealtimeListener() {
     cloudUnsubscribeListener();
     cloudUnsubscribeListener = null;
   }
+  if (cloudItemsUnsubscribeListener) {
+    cloudItemsUnsubscribeListener();
+    cloudItemsUnsubscribeListener = null;
+  }
 
-  const docRef = db.collection('wardrobes').doc(syncVaultKey);
-  cloudUnsubscribeListener = docRef.onSnapshot((doc) => {
+  subcollectionItemsLoaded = false;
+  const scope = getSyncUserScope();
+  const vaultDocRef = db.collection('wardrobes').doc(syncVaultKey);
+
+  // Real-time per-item listener filtered by active userId / vault scope
+  const itemsQuery = vaultDocRef.collection('items').where('userId', '==', scope.userId);
+  cloudItemsUnsubscribeListener = itemsQuery.onSnapshot((snapshot) => {
+    if (snapshot.metadata?.hasPendingWrites) {
+      return; // Wait until Firestore server acknowledges local batch writes
+    }
+    const remoteItems = snapshot.docs
+      .map(d => normalizeRemoteWardrobeItem({ id: d.id, ...d.data() }, scope))
+      .filter(Boolean);
+
+    if (remoteItems.length > 0 || subcollectionItemsLoaded) {
+      subcollectionItemsLoaded = true;
+      isApplyingRemoteCloudData = true;
+      try {
+        const merged = mergeRemoteItemsWithPendingLocal(remoteItems);
+        wardrobe = merged;
+        saveLocalDataOnly();
+        renderFilters();
+        renderWardrobe();
+        renderWardrobeIllusionSection();
+        renderOutfit();
+        renderShopRecommendations();
+      } finally {
+        setTimeout(() => { isApplyingRemoteCloudData = false; }, 150);
+      }
+    }
+
+    if (failedCloudSyncItems.length === 0 && !snapshot.metadata?.fromCache) {
+      setCloudStatusUI('connected', 'Cloud Synced');
+    } else if (snapshot.metadata?.fromCache) {
+      setCloudStatusUI('offline', 'Cached (Awaiting Server)');
+    }
+  }, (err) => {
+    console.error('Firestore items listener error:', err);
+    setCloudStatusUI('error', `Items Listener Error: ${err.code || err.message || err}`);
+  });
+
+  cloudUnsubscribeListener = vaultDocRef.onSnapshot((doc) => {
+    if (doc.metadata?.hasPendingWrites) return;
     if (!doc.exists) {
-      // First time on this vault key: upload current local data to seed the vault
-      console.log('Vault doc does not exist yet. Seeding local state to Firestore...');
-      syncPushToCloud(false);
+      if ((wardrobe || []).length > 0) {
+        syncPushToCloud(false);
+      } else if (failedCloudSyncItems.length === 0 && !doc.metadata?.fromCache) {
+        setCloudStatusUI('connected', 'Cloud Synced');
+      }
       return;
     }
     const data = doc.data();
     if (!data) return;
 
-    // Check if the update was generated locally
     const localUpdatedAt = parseInt(localStorage.getItem('wtw_cloud_updated_at') || '0', 10);
-    if (data.updatedAt && data.updatedAt <= localUpdatedAt) {
-      return; // Already up to date
+    if (data.updatedAt && data.updatedAt <= localUpdatedAt && failedCloudSyncItems.length === 0) {
+      if (!doc.metadata?.fromCache) {
+        setCloudStatusUI('connected', 'Cloud Synced');
+      }
+      return;
     }
 
-    applyRemoteCloudData(data);
+    applyRemoteCloudData(data, { fromCache: Boolean(doc.metadata?.fromCache) });
   }, (err) => {
     console.error('Firestore listener error:', err);
-    setCloudStatusUI('error', 'Sync Listener Error');
+    setCloudStatusUI('error', `Sync Listener Error: ${err.code || err.message || err}`);
   });
 }
 
-function applyRemoteCloudData(data) {
+function applyRemoteCloudData(data, opts = {}) {
   if (!data) return;
   isApplyingRemoteCloudData = true;
   setCloudStatusUI('syncing', 'Applying Cloud Update...');
 
   try {
-    if (Array.isArray(data.wardrobe)) {
-      wardrobe = data.wardrobe;
-      idbSet('wtw_wardrobe', wardrobe);
-      try { localStorage.setItem('wtw_wardrobe', JSON.stringify(wardrobe)); } catch {}
+    if (!subcollectionItemsLoaded && Array.isArray(data.wardrobe)) {
+      const scope = getSyncUserScope();
+      const normalized = data.wardrobe
+        .map(it => normalizeRemoteWardrobeItem(it, scope))
+        .filter(Boolean);
+      wardrobe = mergeRemoteItemsWithPendingLocal(normalized);
+      saveLocalDataOnly();
     }
 
     if (data.userProfile && typeof data.userProfile === 'object') {
@@ -5018,8 +5257,14 @@ function applyRemoteCloudData(data) {
     renderShopRecommendations();
     renderDislikedStylesUI();
 
-    setCloudStatusUI('connected', 'Cloud Synced');
-    toast('☁️ Cloud updates synced across all your devices!');
+    if (failedCloudSyncItems.length === 0 && !opts.fromCache) {
+      setCloudStatusUI('connected', 'Cloud Synced');
+      toast('☁️ Cloud updates synced across all your devices!');
+    } else if (opts.fromCache) {
+      setCloudStatusUI('offline', 'Cached Snapshot');
+    } else {
+      setCloudStatusUI('partial', `${failedCloudSyncItems.length} failed to sync`);
+    }
   } catch (err) {
     console.error('Error applying remote cloud data:', err);
     setCloudStatusUI('error', 'Update Error');
@@ -5028,54 +5273,425 @@ function applyRemoteCloudData(data) {
   }
 }
 
-function syncPushToCloud(manualNotice = false) {
+async function compressImageForCloudUpload(srcDataUrl, { maxDim = 900, initialQuality = 0.80, maxBytes = 350 * 1024 } = {}) {
+  const img = await new Promise((resolve, reject) => {
+    const i = new Image();
+    i.crossOrigin = 'anonymous';
+    i.onload = () => resolve(i);
+    i.onerror = () => reject(new Error('Failed to decode garment image for compression'));
+    i.src = srcDataUrl;
+  });
+
+  const rawW = img.naturalWidth || img.width || 480;
+  const rawH = img.naturalHeight || img.height || 480;
+  const scale = Math.min(1, maxDim / Math.max(rawW, rawH));
+  const w = Math.max(1, Math.round(rawW * scale));
+  const h = Math.max(1, Math.round(rawH * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+
+  const exportBlob = (q) => new Promise((resolve, reject) => {
+    if (typeof canvas.toBlob === 'function') {
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Canvas JPEG compression failed'))), 'image/jpeg', q);
+      return;
+    }
+    try {
+      const dataUri = canvas.toDataURL('image/jpeg', q);
+      const bin = atob(dataUri.split(',')[1]);
+      const arr = new Uint8Array(bin.length);
+      for (let idx = 0; idx < bin.length; idx++) arr[idx] = bin.charCodeAt(idx);
+      resolve(new Blob([arr], { type: 'image/jpeg' }));
+    } catch (e) {
+      reject(e);
+    }
+  });
+
+  const qualitySteps = [initialQuality, 0.68, 0.56];
+  let blob = await exportBlob(qualitySteps[0]);
+  for (let i = 1; i < qualitySteps.length && blob.size > maxBytes; i++) {
+    blob = await exportBlob(qualitySteps[i]);
+  }
+  return { blob, byteLength: blob.size, width: w, height: h };
+}
+
+async function uploadBlobToFirebaseStorage(storagePath, srcDataUrl, metadataTags = {}) {
+  if (!firebaseStorage && typeof firebase !== 'undefined' && typeof firebase.storage === 'function') {
+    firebaseStorage = firebase.storage();
+  }
+  if (!firebaseStorage) {
+    throw new Error('Firebase Storage SDK is not available. Cannot upload garment image.');
+  }
+
+  await ensureFirebaseAuthSession();
+  const { blob, byteLength } = await compressImageForCloudUpload(srcDataUrl);
+  const storageRef = firebaseStorage.ref(storagePath);
+  const snap = await storageRef.put(blob, {
+    contentType: 'image/jpeg',
+    customMetadata: metadataTags
+  });
+  const imageUrl = await snap.ref.getDownloadURL();
+  return { imageUrl, storagePath, bytes: byteLength };
+}
+
+async function runWithBoundedConcurrency(items, concurrency, worker) {
+  const limit = Math.max(1, Math.min(concurrency, items.length || 1));
+  const results = new Array(items.length);
+  let cursor = 0;
+
+  const workers = Array.from({ length: limit }, async () => {
+    while (cursor < items.length) {
+      const idx = cursor++;
+      try {
+        const value = await worker(items[idx], idx);
+        results[idx] = { status: 'fulfilled', value };
+      } catch (reason) {
+        results[idx] = { status: 'rejected', reason };
+      }
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
+
+function sanitizeWardrobeItemForFirestore(item, scope, timestamp) {
+  const candidateUrl = item.imageUrl || (!isInlineBase64DataUrl(item.image) ? item.image || null : null);
+  if (isInlineBase64DataUrl(candidateUrl) || isInlineBase64DataUrl(item.imageUrl)) {
+    throw new Error(`Refusing Firestore write for "${item.name}": raw base64 must be uploaded to Firebase Storage first.`);
+  }
+  return {
+    id: item.id,
+    name: item.name,
+    category: item.category,
+    subType: item.subType,
+    length: item.length || '',
+    season: item.season || 'all-season',
+    color: item.color,
+    formality: item.formality,
+    image: candidateUrl,
+    imageUrl: candidateUrl,
+    storagePath: item.storagePath || null,
+    userId: scope.userId,
+    authUid: scope.authUid,
+    vaultKey: scope.vaultKey,
+    updatedAt: timestamp,
+    synced: true
+  };
+}
+
+async function offloadProfileMediaListToStorage(list, prefix, scope) {
+  const srcList = Array.isArray(list) ? list : [];
+  if (!srcList.length) return [];
+  const outcomes = await runWithBoundedConcurrency(srcList, CLOUD_UPLOAD_CONCURRENCY, async (entry, idx) => {
+    if (!isInlineBase64DataUrl(entry)) return entry;
+    const path = `wardrobes/${scope.vaultKey}/profile/${prefix}_${idx}_${Date.now()}.jpg`;
+    const res = await uploadBlobToFirebaseStorage(path, entry, {
+      userId: scope.userId,
+      vaultKey: scope.vaultKey
+    });
+    return res.imageUrl;
+  });
+
+  const cleanUrls = [];
+  for (let i = 0; i < outcomes.length; i++) {
+    if (outcomes[i].status === 'fulfilled') {
+      cleanUrls.push(outcomes[i].value);
+    } else {
+      throw outcomes[i].reason instanceof Error ? outcomes[i].reason : new Error('Profile photo Storage upload failed');
+    }
+  }
+  return cleanUrls;
+}
+
+async function buildCloudProfilePayload(scope) {
+  const safeSelfies = await offloadProfileMediaListToStorage(userProfile.selfies || [], 'selfie', scope);
+  if (safeSelfies.some((u, idx) => u !== (userProfile.selfies || [])[idx])) {
+    userProfile.selfies = safeSelfies;
+    userProfile.selfie = safeSelfies[safeSelfies.length - 1] || null;
+  }
+  const safeInspo = await offloadProfileMediaListToStorage(userProfile.inspoPhotos || [], 'inspo', scope);
+  if (safeInspo.some((u, idx) => u !== (userProfile.inspoPhotos || [])[idx])) {
+    userProfile.inspoPhotos = safeInspo;
+  }
+
+  return {
+    styleGender: userProfile.styleGender || 'male',
+    selfies: safeSelfies,
+    selfie: safeSelfies[safeSelfies.length - 1] || null,
+    faceShape: userProfile.faceShape || 'oval',
+    bodyShape: userProfile.bodyShape || 'rectangle',
+    palette: userProfile.palette || 'autumn',
+    personalAnalysis: userProfile.personalAnalysis || null,
+    personaArchetype: userProfile.personaArchetype || 'quiet-luxury',
+    personaImpressions: userProfile.personaImpressions || [],
+    personaStatement: userProfile.personaStatement || '',
+    inspoPhotos: safeInspo,
+    inspoPalette: userProfile.inspoPalette || [],
+    inspoAnalysis: userProfile.inspoAnalysis || null,
+    dislikedSubTypes: userProfile.dislikedSubTypes || [],
+    dislikedItemNames: userProfile.dislikedItemNames || [],
+    customCategories: userProfile.customCategories || {},
+    customSubTypes: userProfile.customSubTypes || {},
+    customFormalities: userProfile.customFormalities || []
+  };
+}
+
+async function commitItemsViaWriteBatch(firestoreItems, deletedIds = [], scope) {
+  const vaultDocRef = db.collection('wardrobes').doc(scope.vaultKey);
+  const itemsCollRef = vaultDocRef.collection('items');
+  const ops = [
+    ...firestoreItems.map(item => ({ type: 'set', item })),
+    ...deletedIds.map(id => ({ type: 'delete', id }))
+  ];
+
+  for (let i = 0; i < ops.length; i += FIRESTORE_BATCH_LIMIT) {
+    const slice = ops.slice(i, i + FIRESTORE_BATCH_LIMIT);
+    const batch = db.batch();
+    for (const op of slice) {
+      if (op.type === 'set') {
+        batch.set(itemsCollRef.doc(op.item.id), op.item, { merge: true });
+      } else {
+        batch.delete(itemsCollRef.doc(op.id));
+      }
+    }
+    await batch.commit();
+  }
+}
+
+async function syncWardrobeItemsToCloud(itemsToSync, { deletedIds = [], onProgress } = {}) {
+  const targets = Array.isArray(itemsToSync) ? itemsToSync : [];
+  const scope = getSyncUserScope();
+
+  if (!db || !syncVaultKey) {
+    const offlineFailures = targets.map(item => ({
+      itemId: item.id,
+      item,
+      stage: 'firestore',
+      reason: 'Firebase Cloud connection is not initialized (offline)',
+      failedAt: Date.now()
+    }));
+    recordFailedSyncItems(offlineFailures);
+    setCloudStatusUI('offline', 'Offline (Saved Locally Only)');
+    return { status: 'offline', syncedItems: [], failedRecords: offlineFailures };
+  }
+
+  isCloudSyncInFlight = true;
+  const now = Date.now();
+  const newlyFailed = [];
+  const readyForFirestore = [];
+  let completed = 0;
+
+  try {
+    setCloudStatusUI('syncing', targets.length > 0 ? `Uploading 0/${targets.length}...` : 'Syncing...');
+    onProgress?.({ phase: 'uploading', total: targets.length, completed: 0, succeeded: 0, failed: 0 });
+
+    await ensureFirebaseAuthSession();
+
+    const storageOutcomes = await runWithBoundedConcurrency(targets, CLOUD_UPLOAD_CONCURRENCY, async (item) => {
+      const needsUpload = !item.imageUrl && (
+        isInlineBase64DataUrl(item.image) ||
+        (typeof item.image === 'string' && item.image.startsWith('/api/garment-photos/'))
+      );
+      if (!needsUpload) {
+        return sanitizeWardrobeItemForFirestore(item, scope, now);
+      }
+
+      const storagePath = `wardrobes/${scope.vaultKey}/items/${item.id}.jpg`;
+      const uploaded = await uploadBlobToFirebaseStorage(storagePath, item.image, {
+        userId: scope.userId,
+        vaultKey: scope.vaultKey,
+        itemId: item.id
+      });
+
+      return sanitizeWardrobeItemForFirestore(
+        {
+          ...item,
+          image: uploaded.imageUrl,
+          imageUrl: uploaded.imageUrl,
+          storagePath: uploaded.storagePath
+        },
+        scope,
+        now
+      );
+    });
+
+    storageOutcomes.forEach((outcome, idx) => {
+      completed++;
+      const sourceItem = targets[idx];
+      if (outcome.status === 'fulfilled') {
+        readyForFirestore.push(outcome.value);
+      } else {
+        const err = outcome.reason;
+        const msg = (err && (err.code ? `${err.code}: ${err.message}` : err.message)) || String(err || 'Storage upload failed');
+        console.error(`[CloudSync][Storage] Failed for "${sourceItem.name}" (${sourceItem.id}):`, err);
+        newlyFailed.push({
+          itemId: sourceItem.id,
+          item: sourceItem,
+          stage: 'storage',
+          reason: msg,
+          failedAt: Date.now()
+        });
+      }
+      setCloudStatusUI('syncing', `Uploading ${completed}/${targets.length}...`);
+      onProgress?.({
+        phase: 'uploading',
+        total: targets.length,
+        completed,
+        succeeded: readyForFirestore.length,
+        failed: newlyFailed.length,
+        currentLabel: sourceItem.name
+      });
+    });
+
+    const committedItems = [];
+    if (readyForFirestore.length > 0 || deletedIds.length > 0) {
+      setCloudStatusUI('syncing', `Saving ${readyForFirestore.length} item(s) to Firestore...`);
+      onProgress?.({
+        phase: 'committing',
+        total: targets.length,
+        completed,
+        succeeded: readyForFirestore.length,
+        failed: newlyFailed.length
+      });
+
+      try {
+        await commitItemsViaWriteBatch(readyForFirestore, deletedIds, scope);
+        committedItems.push(...readyForFirestore);
+      } catch (err) {
+        const msg = (err && (err.code ? `${err.code}: ${err.message}` : err.message)) || String(err || 'Firestore batch write failed');
+        console.error('[CloudSync][Firestore writeBatch] Rejected:', err);
+        for (const item of readyForFirestore) {
+          newlyFailed.push({
+            itemId: item.id,
+            item,
+            stage: 'firestore',
+            reason: msg,
+            failedAt: Date.now()
+          });
+        }
+      }
+    }
+
+    // Update local wardrobe items with confirmed Storage HTTPS URLs & sync metadata
+    if (committedItems.length > 0) {
+      const committedMap = new Map(committedItems.map(it => [it.id, it]));
+      wardrobe = wardrobe.map(w => committedMap.has(w.id) ? { ...w, ...committedMap.get(w.id) } : w);
+      saveLocalDataOnly();
+      clearFailedSyncItemIds(committedItems.map(it => it.id));
+    }
+
+    // Sync lightweight metadata-only vault doc when changes committed (NEVER includes raw base64)
+    if (targets.length === 0 || committedItems.length > 0 || deletedIds.length > 0) {
+      try {
+        const safeProfilePayload = await buildCloudProfilePayload(scope);
+        const slimWardrobeForSummary = [];
+        for (const w of wardrobe) {
+          if (!isInlineBase64DataUrl(w.image) && !isInlineBase64DataUrl(w.imageUrl)) {
+            slimWardrobeForSummary.push(sanitizeWardrobeItemForFirestore(w, scope, w.updatedAt || now));
+          }
+        }
+        const vaultPayload = {
+          updatedAt: now,
+          vaultKey: scope.vaultKey,
+          userId: scope.userId,
+          wardrobe: slimWardrobeForSummary,
+          userProfile: safeProfilePayload,
+          settings: getSettings()
+        };
+        const payloadBytes = measureJsonUtf8Bytes(vaultPayload);
+        if (payloadBytes > FIRESTORE_SAFE_DOC_BYTES) {
+          throw new Error(`Vault metadata payload exceeded safe Firestore threshold (${payloadBytes} bytes).`);
+        }
+        await db.collection('wardrobes').doc(scope.vaultKey).set(vaultPayload, { merge: true });
+        localStorage.setItem('wtw_cloud_updated_at', String(now));
+      } catch (err) {
+        const msg = (err && (err.code ? `${err.code}: ${err.message}` : err.message)) || String(err || 'Vault summary write failed');
+        console.error('[CloudSync][Firestore Vault Summary] Rejected:', err);
+        for (const item of committedItems) {
+          newlyFailed.push({
+            itemId: item.id,
+            item,
+            stage: 'firestore',
+            reason: msg,
+            failedAt: Date.now()
+          });
+        }
+        committedItems.length = 0;
+      }
+    }
+
+    if (newlyFailed.length > 0) {
+      recordFailedSyncItems(newlyFailed);
+    }
+
+    if (failedCloudSyncItems.length > 0) {
+      const status = committedItems.length > 0 ? 'partial' : 'error';
+      const label = committedItems.length > 0
+        ? `${failedCloudSyncItems.length} failed (${committedItems.length} synced)`
+        : `Sync Error (${failedCloudSyncItems.length} failed)`;
+      setCloudStatusUI(status, label);
+      onProgress?.({
+        phase: 'done',
+        total: targets.length,
+        completed: targets.length,
+        succeeded: committedItems.length,
+        failed: failedCloudSyncItems.length
+      });
+      return { status, syncedItems: committedItems, failedRecords: newlyFailed };
+    }
+
+    setCloudStatusUI('connected', 'Cloud Synced');
+    onProgress?.({
+      phase: 'done',
+      total: targets.length,
+      completed: targets.length,
+      succeeded: committedItems.length,
+      failed: 0
+    });
+    return { status: 'connected', syncedItems: committedItems, failedRecords: [] };
+  } finally {
+    isCloudSyncInFlight = false;
+  }
+}
+
+async function retryFailedCloudSyncs() {
+  if (!failedCloudSyncItems.length) {
+    toast('✅ No failed items remaining to retry.');
+    return;
+  }
+  const itemsToRetry = failedCloudSyncItems.map(r => r.item).filter(Boolean);
+  toast(`🔄 Retrying ${itemsToRetry.length} failed cloud item${itemsToRetry.length === 1 ? '' : 's'}...`);
+  const result = await syncWardrobeItemsToCloud(itemsToRetry);
+  if (result.failedRecords.length === 0 && failedCloudSyncItems.length === 0) {
+    renderWardrobe();
+    toast('✅ All failed items recovered and Cloud Synced!');
+  } else {
+    toast(`⚠️ ${failedCloudSyncItems.length} item(s) still failed to sync. Check connection or Firebase rules.`);
+  }
+}
+
+async function syncPushToCloud(manualNotice = false) {
   if (isApplyingRemoteCloudData) return;
   if (!db || !syncVaultKey) {
     if (manualNotice) toast('⚠️ Cloud connection not initialized');
+    setCloudStatusUI('offline', 'Offline (Not Synced)');
     return;
   }
 
-  setCloudStatusUI('syncing', 'Uploading to Cloud...');
-  const now = Date.now();
-
-  const payload = {
-    updatedAt: now,
-    vaultKey: syncVaultKey,
-    wardrobe: wardrobe || [],
-    userProfile: {
-      styleGender: userProfile.styleGender || 'male',
-      selfies: userProfile.selfies || [],
-      selfie: userProfile.selfie || null,
-      faceShape: userProfile.faceShape || 'oval',
-      bodyShape: userProfile.bodyShape || 'rectangle',
-      palette: userProfile.palette || 'autumn',
-      personalAnalysis: userProfile.personalAnalysis || null,
-      personaArchetype: userProfile.personaArchetype || 'quiet-luxury',
-      personaImpressions: userProfile.personaImpressions || [],
-      personaStatement: userProfile.personaStatement || '',
-      inspoPhotos: userProfile.inspoPhotos || [],
-      inspoPalette: userProfile.inspoPalette || [],
-      inspoAnalysis: userProfile.inspoAnalysis || null,
-      dislikedSubTypes: userProfile.dislikedSubTypes || [],
-      dislikedItemNames: userProfile.dislikedItemNames || [],
-      customCategories: userProfile.customCategories || {},
-      customSubTypes: userProfile.customSubTypes || {},
-      customFormalities: userProfile.customFormalities || []
-    },
-    settings: getSettings()
-  };
-
-  db.collection('wardrobes').doc(syncVaultKey).set(payload, { merge: true })
-    .then(() => {
-      localStorage.setItem('wtw_cloud_updated_at', String(now));
-      setCloudStatusUI('connected', 'Cloud Synced');
-      if (manualNotice) toast('✅ Wardrobe & Settings uploaded to Cloud Vault!');
-    })
-    .catch((err) => {
-      console.error('Firestore push error:', err);
-      setCloudStatusUI('error', 'Upload Failed');
-      if (manualNotice) toast('⚠️ Could not save to cloud: ' + (err.message || err));
-    });
+  const unsyncedOrAll = (wardrobe || []).filter(w =>
+    isInlineBase64DataUrl(w.image) || !w.imageUrl || !w.userId || !w.synced
+  );
+  const res = await syncWardrobeItemsToCloud(unsyncedOrAll);
+  if (res.failedRecords.length === 0 && failedCloudSyncItems.length === 0) {
+    if (manualNotice) toast('✅ Wardrobe & Settings uploaded and Cloud Synced!');
+  } else {
+    if (manualNotice) toast(`⚠️ Sync incomplete: ${failedCloudSyncItems.length} item(s) failed.`);
+  }
+  return res;
 }
 
 function scheduleCloudPush() {
@@ -5092,13 +5708,31 @@ function syncPullFromCloud(manualNotice = false) {
     return;
   }
   setCloudStatusUI('syncing', 'Downloading from Cloud...');
-  db.collection('wardrobes').doc(syncVaultKey).get()
-    .then((doc) => {
+  const scope = getSyncUserScope();
+  const vaultDocRef = db.collection('wardrobes').doc(syncVaultKey);
+
+  Promise.all([
+    vaultDocRef.get(),
+    vaultDocRef.collection('items').where('userId', '==', scope.userId).get().catch(() => ({ docs: [] }))
+  ])
+    .then(([doc, itemsSnap]) => {
+      const remoteItems = (itemsSnap?.docs || [])
+        .map(d => normalizeRemoteWardrobeItem({ id: d.id, ...d.data() }, scope))
+        .filter(Boolean);
+      if (remoteItems.length > 0) {
+        subcollectionItemsLoaded = true;
+        wardrobe = mergeRemoteItemsWithPendingLocal(remoteItems);
+        saveLocalDataOnly();
+      }
       if (doc.exists) {
-        applyRemoteCloudData(doc.data());
+        applyRemoteCloudData(doc.data(), { fromCache: false });
         if (manualNotice) toast('✅ Latest data pulled from cloud!');
-      } else {
+      } else if (remoteItems.length > 0) {
+        renderWardrobe();
+        renderOutfit();
         setCloudStatusUI('connected', 'Cloud Synced');
+        if (manualNotice) toast('✅ Latest wardrobe items pulled from cloud!');
+      } else {
         if (manualNotice) toast('No cloud vault found with this key. Pushing current data now...');
         syncPushToCloud(true);
       }
@@ -5124,13 +5758,17 @@ function applySyncVaultKey() {
   syncPullFromCloud(false);
 }
 
-function saveData() {
+function saveLocalDataOnly() {
   idbSet('wtw_wardrobe', wardrobe);
   try {
     localStorage.setItem('wtw_wardrobe', JSON.stringify(wardrobe));
   } catch (e) {
     // IndexedDB stores the full unlimited wardrobe even if localStorage reaches its 5MB cap
   }
+}
+
+function saveData() {
+  saveLocalDataOnly();
   scheduleCloudPush();
 }
 
@@ -9753,6 +10391,9 @@ async function processMassWardrobeFiles(fileList, urlList = []) {
 }
 
 function openMassValidateModal() {
+  const prog = document.getElementById('mass-upload-progress-bar');
+  if (prog) { prog.style.display = 'none'; prog.textContent = ''; }
+  renderFailedSyncPanels();
   renderMassValidateModal();
   const modal = document.getElementById('mass-validate-modal');
   if (modal) modal.classList.add('active');
@@ -9974,11 +10615,11 @@ function applyBulkCategoryToMassDrafts(cat) {
   toast(`Updated all ${massUploadDrafts.length} draft pieces to ${getCategoryLabel(cat)}`);
 }
 
-function approveSingleMassDraft(draftId) {
+async function approveSingleMassDraft(draftId) {
   const idx = massUploadDrafts.findIndex(x => x.draftId === draftId);
   if (idx === -1) return;
   const d = massUploadDrafts[idx];
-  wardrobe.push({
+  const newItem = {
     id: generateId(),
     name: (d.name || `${d.colorName} ${d.subType}`).trim(),
     category: d.category,
@@ -9988,17 +10629,35 @@ function approveSingleMassDraft(draftId) {
     color: d.color,
     formality: d.formality,
     image: d.image
-  });
+  };
+
+  wardrobe.push(newItem);
   massUploadDrafts.splice(idx, 1);
-  saveData();
+  saveLocalDataOnly();
   renderWardrobe();
   renderWardrobeIllusionSection();
   renderOutfit();
-  toast(`✅ Validated & added "${d.name}" to My Wardrobe!`);
-  if (massUploadDrafts.length === 0) {
-    closeMassValidateModal();
+  renderMassValidateModal();
+
+  const prog = document.getElementById('mass-upload-progress-bar');
+  const syncRes = await syncWardrobeItemsToCloud([newItem], {
+    onProgress: (p) => {
+      if (!prog) return;
+      prog.style.display = 'block';
+      prog.textContent = p.phase === 'done'
+        ? ''
+        : `☁️ Uploading "${d.name}" (${p.phase})...`;
+      if (p.phase === 'done') prog.style.display = 'none';
+    }
+  });
+
+  if (syncRes.failedRecords.length === 0 && failedCloudSyncItems.length === 0) {
+    toast(`✅ Validated & Cloud Synced "${d.name}"!`);
+    if (massUploadDrafts.length === 0) {
+      closeMassValidateModal();
+    }
   } else {
-    renderMassValidateModal();
+    toast(`⚠️ "${d.name}" saved locally, but cloud sync failed (${syncRes.failedRecords[0]?.reason || 'error'}). Click Retry Failed.`);
   }
 }
 
@@ -10019,33 +10678,71 @@ function discardAllMassDrafts() {
   toast('Draft queue discarded');
 }
 
-function validateAndSaveAllMassDrafts() {
+function updateMassProgressUI(progress) {
+  const prog = document.getElementById('mass-upload-progress-bar');
+  if (!prog) return;
+  if (!progress || progress.phase === 'done') {
+    prog.style.display = 'none';
+    prog.textContent = '';
+    return;
+  }
+  prog.style.display = 'block';
+  if (progress.phase === 'committing') {
+    prog.textContent = `☁️ Committing ${progress.succeeded} item(s) to Firestore database...`;
+  } else {
+    prog.textContent = `☁️ Compressing & uploading photos to Firebase Storage: ${progress.completed}/${progress.total} (${progress.failed} failed)...`;
+  }
+}
+
+async function validateAndSaveAllMassDrafts() {
   if (!massUploadDrafts.length) {
     closeMassValidateModal();
     return;
   }
-  const addedCount = massUploadDrafts.length;
-  massUploadDrafts.forEach(d => {
-    wardrobe.push({
-      id: generateId(),
-      name: (d.name || `${d.colorName} ${d.subType}`).trim(),
-      category: d.category,
-      subType: d.subType,
-      length: d.length || getDefaultLengthForPiece(d.category, d.subType),
-      season: d.season || inferItemSeasonSuitability(d),
-      color: d.color,
-      formality: d.formality,
-      image: d.image
-    });
-  });
+
+  const headerBtn = document.getElementById('mass-approve-all-btn');
+  const footerBtn = document.getElementById('mass-approve-footer-btn');
+  [headerBtn, footerBtn].forEach(b => { if (b) b.disabled = true; });
+
+  const newItems = massUploadDrafts.map(d => ({
+    id: generateId(),
+    name: (d.name || `${d.colorName} ${d.subType}`).trim(),
+    category: d.category,
+    subType: d.subType,
+    length: d.length || getDefaultLengthForPiece(d.category, d.subType),
+    season: d.season || inferItemSeasonSuitability(d),
+    color: d.color,
+    formality: d.formality,
+    image: d.image
+  }));
+
+  wardrobe.push(...newItems);
   massUploadDrafts = [];
-  saveData();
+  saveLocalDataOnly();
   renderWardrobe();
   renderWardrobeIllusionSection();
   renderOutfit();
-  closeMassValidateModal();
-  switchTab('wardrobe');
-  toast(`✅ Validated & added ${addedCount} piece${addedCount === 1 ? '' : 's'} to My Wardrobe!`);
+
+  try {
+    const syncRes = await syncWardrobeItemsToCloud(newItems, {
+      onProgress: updateMassProgressUI
+    });
+    renderWardrobe();
+    renderFailedSyncPanels();
+
+    if (syncRes.failedRecords.length === 0 && failedCloudSyncItems.length === 0) {
+      closeMassValidateModal();
+      switchTab('wardrobe');
+      toast(`✅ Validated, uploaded, and Cloud Synced ${newItems.length} piece${newItems.length === 1 ? '' : 's'}!`);
+    } else {
+      renderMassValidateModal();
+      const failedCount = syncRes.failedRecords.length || failedCloudSyncItems.length;
+      toast(`⚠️ ${newItems.length - failedCount}/${newItems.length} synced — ${failedCount} failed! Use Retry Failed above.`);
+    }
+  } finally {
+    updateMassProgressUI({ phase: 'done' });
+    [headerBtn, footerBtn].forEach(b => { if (b) b.disabled = false; });
+  }
 }
 
 /* ===== Saved Images Browser & Fullscreen Lightbox ===== */
@@ -10329,7 +11026,7 @@ function closeModal() {
   removePhoto();
 }
 
-function saveItem() {
+async function saveItem() {
   const name = document.getElementById('item-name').value.trim();
   const category = document.getElementById('item-category').value;
   const subType = document.getElementById('item-subtype').value;
@@ -10355,32 +11052,49 @@ function saveItem() {
     image: currentItemPhoto || null
   };
 
+  let savedItem;
   if (editId) {
     const idx = wardrobe.findIndex(it => it.id === editId);
     if (idx !== -1) {
-      wardrobe[idx] = { ...wardrobe[idx], ...itemPayload };
-      toast('Item updated!');
+      const imageChanged = itemPayload.image !== wardrobe[idx].image;
+      wardrobe[idx] = {
+        ...wardrobe[idx],
+        ...itemPayload,
+        imageUrl: imageChanged ? (isInlineBase64DataUrl(itemPayload.image) ? null : itemPayload.image) : wardrobe[idx].imageUrl
+      };
+      savedItem = wardrobe[idx];
     }
   } else {
-    wardrobe.push({ id: generateId(), ...itemPayload });
-    toast('Item added!');
+    savedItem = { id: generateId(), ...itemPayload };
+    wardrobe.push(savedItem);
   }
 
-  saveData();
+  saveLocalDataOnly();
   renderFilters();
   renderWardrobe();
   renderOutfit();
   closeModal();
+
+  if (savedItem) {
+    const syncRes = await syncWardrobeItemsToCloud([savedItem]);
+    if (syncRes.failedRecords.length === 0 && failedCloudSyncItems.length === 0) {
+      toast(editId ? '✅ Item updated & Cloud Synced!' : '✅ Item added & Cloud Synced!');
+    } else {
+      toast('⚠️ Saved locally, but cloud sync failed — see Retry Failed.');
+    }
+  }
 }
 
-function deleteItem(id) {
+async function deleteItem(id) {
   const item = wardrobe.find(it => it.id === id);
   if (!item) return;
   if (!confirm(`Delete "${item.name}"?`)) return;
   wardrobe = wardrobe.filter(it => it.id !== id);
-  saveData();
+  clearFailedSyncItemIds([id]);
+  saveLocalDataOnly();
   renderWardrobe();
   renderOutfit();
+  await syncWardrobeItemsToCloud([], { deletedIds: [id] });
   toast('Item deleted');
 }
 

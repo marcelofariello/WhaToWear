@@ -7,11 +7,10 @@ A modern, weather- and hemisphere-season-aware, computer-vision-assisted, and pe
 ## 🌟 Key Features
 
 ### 🆕 Multi-Device Cloud Sync ("Common Memory" via Firebase), Custom Categories/Types/Formalities & Location Season Styling
-1. **☁️ Multi-Device Cloud Sync (Common Memory across iPhone & PCs)**:
-   - Built-in real-time synchronization backed by **Firebase Firestore**.
-   - Changes made on your PC (wardrobe items, captured photos, personal palette, body shapes, custom categories, and vision statements) automatically sync in real-time with your phone and second PC.
-   - Protected by a private **Vault Key / Passphrase** (default `marcelo-atelier-wardrobe`) configured in *Profile & Settings*.
-   - Features a live **`🟢 Cloud Synced`** status badge in the header and in settings.
+1. **☁️ Multi-Device Cloud Sync (Firebase Auth + Firebase Storage + Real-Time Firestore)**:
+   - Separates heavy garment/profile photos from Firestore metadata: uploaded images are compressed client-side (`<= 900px` JPEG), uploaded in controlled concurrent batches (max 4 concurrent workers via `Promise.allSettled`) to **Firebase Storage** (`wardrobes/{vaultKey}/items/{itemId}.jpg`), and only lightweight `imageUrl` links + `userId`/`vaultKey` metadata are committed atomically via Firestore **`writeBatch`** (never raw base64 inside Firestore documents).
+   - Scopes cross-device listeners via Firebase Anonymous/Account Auth + **`userId` / Vault Key** with real-time `onSnapshot` listeners on both `wardrobes/{vaultKey}/items` (`where('userId', '==', scopeId)`) and `wardrobes/{vaultKey}`.
+   - Displays an **honest sync indicator** (`Connecting...`, `Syncing...`, `🟢 Cloud Synced` strictly after server write confirmation, or `⚠️ Sync Failed` with a per-item failure report & **🔄 Retry Failed** button).
 2. **✨ Google Material Design 3 & Modern Antigravity Floating UI Aesthetics**:
    - **Deep Sophisticated Dark Theme**: Deep obsidian background with subtle glowing teal (`#00e5c0`) and soft yellow accents (`#ffd166`), glassmorphism card surfaces, and multi-elevation floating shadows.
    - **Refined Slim Header**: Minimalist `WTW` brand logo on the left with sleek, rounded status pills on the right displaying live `Spring - Bathurst` and `Cloud Synced`.
@@ -143,10 +142,38 @@ Upload up to 8 photos of looks you love. WhaToWear reads dominant colours, contr
    npm start
    ```
 3. Open `http://localhost:3000` in your browser.
-4. *(Optional)* Verify live 2-sample `3:4` `#F5F5F5` garment generation and disk-cache latency:
+4. *(Optional)* Verify TypeScript mass-upload batching & live 2-sample garment generation checks:
    ```bash
+   npm run verify:mass-upload
    npm run verify:images
    ```
+
+### Firebase Firestore & Storage Rules (for Cross-Device Sync & Mass Upload)
+Ensure Anonymous Auth (or Email/Google Sign-In) is enabled in Firebase Authentication, and deploy rules allowing vault/user-scoped reads & writes on `wardrobes/{vaultKey}/items/{itemId}` and Firebase Storage:
+```txt
+// Firestore Security Rules
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /wardrobes/{vaultKey} {
+      allow read, write: if request.auth != null;
+      match /items/{itemId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+  }
+}
+
+// Firebase Storage Security Rules
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /wardrobes/{vaultKey}/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+```
 
 ### Offline / Standalone Preview
 You can still open [`index.html`](index.html) directly in any modern browser; when served without the Node backend or without `GEMINI_API_KEY`, studio product previews and wardrobe recognition fall back cleanly to built-in client-side studio vector previews and canvas CV analysis.
