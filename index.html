@@ -3801,6 +3801,7 @@ input[type="text"]:focus, select:focus, textarea:focus {
           <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-file').click()">📥 Import</button>
           <input type="file" id="import-file" accept=".json" style="display:none" onchange="importWardrobe(event)">
           <button class="btn btn-secondary btn-sm" onclick="runRetroactiveWardrobeCleanup()">✨ Clean &amp; Sync Item Titles</button>
+          <button class="btn btn-secondary btn-sm" onclick="reidentifyAllWardrobePhotos()">🔄 Re-Identify All Photos</button>
           <button class="btn btn-danger btn-sm" onclick="clearWardrobe()">🗑️ Clear All</button>
         </div>
       </div>
@@ -5000,6 +5001,95 @@ function runRetroactiveWardrobeCleanup({ silent = false } = {}) {
 }
 
 window.runRetroactiveWardrobeCleanup = runRetroactiveWardrobeCleanup;
+
+async function reidentifyAllWardrobePhotos() {
+  if (!Array.isArray(wardrobe) || wardrobe.length === 0) {
+    toast('Wardrobe is currently empty');
+    return 0;
+  }
+  const photoItems = wardrobe.filter(it => it.image || it.imageUrl);
+  if (photoItems.length === 0) {
+    toast('No wardrobe items have photos to re-identify');
+    return 0;
+  }
+
+  toast(`🔍 Re-identifying ${photoItems.length} wardrobe photo${photoItems.length === 1 ? '' : 's'}...`);
+  let updatedCount = 0;
+
+  for (const item of photoItems) {
+    const src = item.image || item.imageUrl;
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.crossOrigin = 'anonymous';
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error('Image load failed'));
+        el.src = src;
+      });
+      const prep = preparePhotoForAnalysis(img);
+      const cv = analyzeGarmentPhotoVision(
+        prep.ctx,
+        prep.width,
+        prep.height,
+        prep.fgMask,
+        prep.bbox,
+        '',
+        prep.componentCount || 1
+      );
+
+      let category = cv.category;
+      let subType = cleanGarmentType(cv.subType);
+      let length = cv.length || getDefaultLengthForPiece(category, subType);
+      let color = cv.hex;
+      let colorName = cv.colorName;
+      let formality = inferFormalityFromRecognizedPiece(category, subType, length);
+      let season = cv.season || inferItemSeasonSuitability({ category, subType, length }, { forceRecalc: true });
+
+      if (shouldAttemptBackendApi()) {
+        const aiResult = await recognizeGarmentViaApi(prep.dataUrl, '');
+        if (aiResult) {
+          const swatch = resolveColorSwatchFromName(aiResult.primaryColor, cv.hex);
+          category = aiResult.category;
+          subType = cleanGarmentType(aiResult.garment_type || aiResult.subcategory);
+          length = aiResult.length || resolveRecognizedGarmentLength(category, subType, cv.category, cv.length);
+          color = aiResult.color_hex || swatch.hex;
+          colorName = aiResult.color_name || swatch.colorName;
+          formality = (aiResult.formality && getAllFormalityLevels().some(f => f.id === aiResult.formality))
+            ? aiResult.formality
+            : inferFormalityFromRecognizedPiece(category, subType, length);
+          season = aiResult.season || inferItemSeasonSuitability({ category, subType, length }, { forceRecalc: true });
+        }
+      }
+
+      const name = buildStandardGarmentName({ category, subType, length, color, colorName });
+      item.category = category;
+      item.subType = subType;
+      item.length = length;
+      item.color = color;
+      item.colorName = colorName;
+      item.formality = formality;
+      item.season = season;
+      item.name = name;
+      updatedCount++;
+    } catch {
+      // Skip unreadable remote/tainted images
+    }
+  }
+
+  if (updatedCount > 0) {
+    saveData();
+    renderFilters();
+    renderWardrobe();
+    renderOutfit();
+    renderShopRecommendations();
+    toast(`✨ Re-identified ${updatedCount} wardrobe photo${updatedCount === 1 ? '' : 's'}!`);
+  } else {
+    toast('⚠️ Could not re-identify any saved photos');
+  }
+  return updatedCount;
+}
+
+window.reidentifyAllWardrobePhotos = reidentifyAllWardrobePhotos;
 
 /* ================================================================
    FIREBASE MULTI-DEVICE CLOUD SYNC ENGINE
@@ -9792,9 +9882,20 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName, componentC
   const topHalfFill = avgSlice(rowFill, 2, 18);
   const botHalfFill = avgSlice(rowFill, 21, 37);
 
-  // Denim / Indigo signature (requires true fabric grain/weave & mid-blue range; smooth deep navy wool is tailoring, not denim)
-  const hasFabricGrain = trimmedTexture >= 2.8 || weaveRatio >= 0.08;
-  const isDenimTone = (hsl.h >= 198 && hsl.h <= 242 && hsl.s >= 18 && hsl.l >= 23 && hsl.l <= 76 && hasFabricGrain);
+  // Detect Horizontal / Sideways Leg Split (e.g. jeans/pants laid horizontally on a bed)
+  let horizSplitCols = 0;
+  for (let gx = 20; gx <= 36; gx++) {
+    let topLeg = 0, midGap = 0, botLeg = 0;
+    for (let gy = 2; gy <= 15; gy++) if (grid[gy * G + gx]) topLeg++;
+    for (let gy = 16; gy <= 23; gy++) if (!grid[gy * G + gx]) midGap++;
+    for (let gy = 24; gy <= 37; gy++) if (grid[gy * G + gx]) botLeg++;
+    if (topLeg >= 3 && midGap >= 3 && botLeg >= 3) horizSplitCols++;
+  }
+  const horizLegSplitScore = horizSplitCols / 17;
+
+  // Denim / Indigo signature (includes dark indigo & mid-blue denim with fabric grain)
+  const hasFabricGrain = trimmedTexture >= 2.4 || weaveRatio >= 0.06;
+  const isDenimTone = (hsl.h >= 195 && hsl.h <= 245 && hsl.s >= 16 && hsl.l >= 12 && hsl.l <= 76 && hasFabricGrain);
 
   // Filename hints check (used only when filename carries explicit garment nouns!)
   const inferredFromText = inferGarmentFromPhotoContext(fileName, w, h, domR, domG, domB);
@@ -9853,100 +9954,100 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName, componentC
   else if (aspect < 0.96 && topBridgeScore < 0.45 && botHalfFill > topHalfFill * 1.15) shoeConf += 28;
   if (shoeConf >= 35) {
     if (hsl.l >= 78 && hsl.s <= 20) {
-      pushHyp(shoeConf + 10, 'shoes', ['Minimalist White Leather Sneakers', 'White Sneakers', 'Sneakers'], '', 'casual', 'Horizontal footwear silhouette + bright white tone');
+      pushHyp(shoeConf + 10, 'shoes', ['Sneakers', 'Canvas Sneakers'], '', 'casual', 'Horizontal footwear silhouette + bright white tone');
     } else if (hsl.l <= 24) {
-      pushHyp(shoeConf + 8, 'shoes', isFemale ? ['Ankle Boots', 'Loafers', 'Heeled Pumps'] : ['Chelsea Boots', 'Oxford Shoes', 'Loafers'], '', 'smart-casual', 'Horizontal footwear silhouette + dark leather tone');
+      pushHyp(shoeConf + 8, 'shoes', isFemale ? ['Ankle Boots', 'Loafers', 'Pumps'] : ['Chelsea Boots', 'Oxford Shoes', 'Loafers'], '', 'smart-casual', 'Horizontal footwear silhouette + dark leather tone');
     } else if (hsl.h >= 14 && hsl.h <= 48 && hsl.s >= 18) {
-      pushHyp(shoeConf + 8, 'shoes', isFemale ? ['Ankle Boots', 'Loafers', 'Strappy Sandals'] : ['Penny Loafers', 'Suede Derby Shoes', 'Chelsea Boots'], '', 'smart-casual', 'Horizontal footwear silhouette + leather tan/brown');
+      pushHyp(shoeConf + 8, 'shoes', isFemale ? ['Ankle Boots', 'Loafers', 'Sandals'] : ['Penny Loafers', 'Derby Shoes', 'Chelsea Boots'], '', 'smart-casual', 'Horizontal footwear silhouette + leather tan/brown');
     } else {
-      pushHyp(shoeConf, 'shoes', ['Retro Suede Trainers', 'Sneakers', 'Loafers'], '', 'casual', 'Horizontal footwear contour');
+      pushHyp(shoeConf, 'shoes', ['Sneakers', 'Loafers'], '', 'casual', 'Horizontal footwear contour');
     }
   }
 
   // Hypothesis B: Accessories (Belt ring/strap, sunglasses wide 2-lens, watch vertical strap)
   if (hasCentralHole && aspect >= 0.55 && aspect <= 1.55 && totalFill < 0.62) {
-    const accCands = (hsl.h >= 12 && hsl.h <= 50) ? ['Dress Leather Belt', 'Belt'] : ['Belt', 'Watch', 'Sunglasses'];
+    const accCands = (hsl.h >= 12 && hsl.h <= 50) ? ['Dress Belt', 'Belt'] : ['Belt', 'Watch', 'Sunglasses'];
     pushHyp(86, 'accessories', accCands, '', 'smart-casual', 'Circular strap/ring contour');
   } else if (aspect < 0.45 && totalFill < 0.48 && componentCount === 1) {
-    pushHyp(76, 'accessories', ['Wayfarer / Acetate Sunglasses', 'Sunglasses', 'Belt'], '', 'casual', 'Slender horizontal accessory profile');
+    pushHyp(76, 'accessories', ['Sunglasses', 'Belt'], '', 'casual', 'Slender horizontal accessory profile');
   }
 
-  // Hypothesis C: Bottoms (Jeans, Chinos, Trousers, Shorts, Skirts — require connected waist bridge & solid interior!)
-  const isWideSkirtOrShorts = !hasCentralHole && componentCount === 1 && aspect < 1.15 && legSplitScore < 0.16 && underarmGapScore < 0.18 && topWidth < botWidth * 1.05;
-  const splitPantsStrong = !hasCentralHole && componentCount === 1 && topBridgeScore >= 0.35 && legSplitScore >= 0.22 && underarmGapScore < 0.25;
-  const slimPantsTall = !hasCentralHole && componentCount === 1 && aspect >= 1.25 && underarmGapScore < 0.18 && sleeveWingRatio < 1.12 && (legSplitScore >= 0.12 || lowerSeamScore >= 0.28);
+  // Hypothesis C: Bottoms (Jeans, Chinos, Trousers, Shorts, Skirts — require genuine leg split or tall pants shape, never a folded square top!)
+  const isFoldedTopShape = totalFill >= 0.56 && aspect >= 0.72 && aspect <= 1.35 && botBridgeScore >= 0.45;
+  const isWideSkirtOrShorts = !hasCentralHole && !isFoldedTopShape && componentCount === 1 && aspect < 1.15 && legSplitScore < 0.16 && underarmGapScore < 0.18 && topWidth < botWidth * 1.05;
+  const splitPantsStrong = !hasCentralHole && componentCount === 1 && ((topBridgeScore >= 0.35 && legSplitScore >= 0.30 && botBridgeScore < 0.50) || horizLegSplitScore >= 0.25) && underarmGapScore < 0.25;
+  const slimPantsTall = !hasCentralHole && componentCount === 1 && aspect >= 1.28 && underarmGapScore < 0.18 && sleeveWingRatio < 1.12 && (legSplitScore >= 0.14 || lowerSeamScore >= 0.30);
 
-  if (splitPantsStrong || slimPantsTall) {
-    if (aspect < 1.08 && legSplitScore >= 0.18) {
+  if (splitPantsStrong || slimPantsTall || (isDenimTone && horizLegSplitScore >= 0.18)) {
+    if (aspect < 1.05 && legSplitScore >= 0.32 && botBridgeScore < 0.45 && horizLegSplitScore < 0.20) {
       const shConf = 68 + Math.round(legSplitScore * 30);
-      const cands = isDenimTone ? ['Denim Shorts', 'Shorts'] : ['Tailored Chino Shorts', 'Chino Shorts', 'Shorts'];
+      const cands = isDenimTone ? ['Denim Shorts', 'Shorts'] : ['Chino Shorts', 'Shorts'];
       pushHyp(shConf, 'bottoms', cands, 'shorts', 'casual', 'Short split-leg silhouette');
     } else {
-      const pConf = 66 + Math.round(Math.max(legSplitScore, lowerSeamScore) * 35);
+      const pConf = 68 + Math.round(Math.max(legSplitScore, horizLegSplitScore, lowerSeamScore) * 35);
       if (isDenimTone) {
-        pushHyp(pConf + 8, 'bottoms', isFemale ? ['High-Waist Jeans', 'Straight-Leg Vintage Jeans'] : ['Dark Indigo Jeans', 'Slim-Fit Jeans', 'Jeans'], 'long', 'casual', 'Twin-leg silhouette + indigo denim texture');
+        pushHyp(pConf + 14, 'bottoms', isFemale ? ['High-Waist Jeans', 'Jeans'] : ['Jeans', 'Straight Jeans'], 'long', 'casual', 'Twin-leg silhouette + indigo denim texture');
       } else if (hsl.h >= 24 && hsl.h <= 58 && hsl.s >= 14 && hsl.l >= 40) {
-        pushHyp(pConf + 5, 'bottoms', ['Chinos', 'Linen Trousers', 'Tailored Stretch Chinos'], 'long', 'smart-casual', 'Twin-leg silhouette + warm khaki/earth tone');
+        pushHyp(pConf + 5, 'bottoms', ['Chinos', 'Linen Trousers'], 'long', 'smart-casual', 'Twin-leg silhouette + warm khaki/earth tone');
       } else {
-        pushHyp(pConf, 'bottoms', isFemale ? ['Tailored Trousers', 'Wide-Leg Pleated Trousers'] : ['Dress Pants', 'Tailored Wool Dress Trousers', 'Chinos'], 'long', hsl.l <= 30 ? 'formal' : 'smart-casual', 'Twin-leg trouser silhouette');
+        pushHyp(pConf, 'bottoms', isFemale ? ['Trousers', 'Wide-Leg Trousers'] : ['Dress Trousers', 'Chinos'], 'long', hsl.l <= 30 ? 'formal' : 'smart-casual', 'Twin-leg trouser silhouette');
       }
     }
   } else if (isWideSkirtOrShorts && isFemale && botWidth >= topWidth * 1.15) {
-    pushHyp(62, 'bottoms', aspect >= 1.0 ? ['Midi Skirt', 'Pleated Midi Skirt'] : ['Mini Skirt', 'A-Line Mini Skirt'], aspect >= 1.0 ? 'long' : 'shorts', 'smart-casual', 'Flared lower silhouette');
+    pushHyp(62, 'bottoms', aspect >= 1.0 ? ['Midi Skirt'] : ['Mini Skirt'], aspect >= 1.0 ? 'long' : 'shorts', 'smart-casual', 'Flared lower silhouette');
   }
 
   const isPairedShoeShape = componentCount >= 2 && topBridgeScore < 0.35;
 
-  // Hypothesis D: Outerwear (Blazers, Coats, Jackets, Puffers)
+  // Hypothesis D: Outerwear (Blazers, Coats, Jackets, Puffers — require strong placket/zipper & high-contrast baffles, not soft folded tees!)
   let outerConf = 0;
-  if (!hasCentralHole && !isPairedShoeShape) {
-    if (underarmGapScore >= 0.14 || sleeveDropRatio >= 0.56) outerConf += 22;
-    if (centerPlacketScore >= 26) outerConf += 28;
-    if (horizontalBaffleRatio >= 0.18) outerConf += 24;
-    if (totalFill >= 0.55) outerConf += 12;
-    if (isDenimTone && aspect >= 0.85 && legSplitScore < 0.18) outerConf += 18;
-    if (aspect >= 1.18 && underarmGapScore >= 0.12 && legSplitScore < 0.2) outerConf += 16; // long trench/overcoat
+  if (!hasCentralHole && !isPairedShoeShape && horizLegSplitScore < 0.20) {
+    if (underarmGapScore >= 0.16 || sleeveDropRatio >= 0.62) outerConf += 20;
+    if (centerPlacketScore >= 28) outerConf += 30;
+    if (horizontalBaffleRatio >= 0.36 && centerPlacketScore >= 24) outerConf += 26;
+    if (isDenimTone && aspect >= 0.85 && legSplitScore < 0.18 && centerPlacketScore >= 22) outerConf += 18;
+    if (aspect >= 1.22 && underarmGapScore >= 0.14 && legSplitScore < 0.2 && centerPlacketScore >= 22) outerConf += 16;
   }
-  if (outerConf >= 50 && legSplitScore < 0.28) {
-    if (horizontalBaffleRatio >= 0.18) {
-      pushHyp(outerConf + 16, 'outerwear', ['Puffer Jacket', 'Quilted Liner Jacket', 'Windbreaker'], '', 'casual', 'Quilted horizontal baffles + sleeve profile');
+  if (outerConf >= 56 && legSplitScore < 0.28) {
+    if (horizontalBaffleRatio >= 0.36 && centerPlacketScore >= 24) {
+      pushHyp(outerConf + 14, 'outerwear', ['Puffer Jacket', 'Windbreaker'], '', 'casual', 'Quilted horizontal baffles + center zipper');
     } else if (isDenimTone) {
-      pushHyp(outerConf + 14, 'outerwear', ['Denim Jacket', 'Chore / Workwear Jacket'], '', 'casual', 'Indigo denim weave + jacket placket');
+      pushHyp(outerConf + 14, 'outerwear', ['Denim Jacket', 'Chore Jacket'], '', 'casual', 'Indigo denim weave + jacket placket');
     } else if (aspect >= 1.18 && (hsl.h >= 24 && hsl.h <= 52 || hsl.l <= 34)) {
-      pushHyp(outerConf + 14, 'outerwear', ['Trench Coat', 'Single-Breasted Wool Overcoat', 'Overcoat', 'Wool Coat'], '', 'smart-casual', 'Long coat silhouette + lapel structure');
+      pushHyp(outerConf + 14, 'outerwear', ['Trench Coat', 'Overcoat', 'Wool Coat'], '', 'smart-casual', 'Long coat silhouette + lapel structure');
     } else if (hsl.l <= 32 || (hsl.h >= 195 && hsl.h <= 245 && hsl.l <= 45)) {
-      pushHyp(outerConf + 18, 'outerwear', isFemale ? ['Tailored Blazer', 'Leather Moto Jacket', 'Wool Coat'] : ['Blazer', 'Single-Breasted Navy / Wool Blazer', 'Leather Moto Jacket', 'Bomber Jacket'], '', 'smart-casual', 'Structured lapel/placket + dark tailoring tone');
+      pushHyp(outerConf + 16, 'outerwear', isFemale ? ['Blazer', 'Leather Jacket', 'Wool Coat'] : ['Blazer', 'Leather Jacket', 'Bomber Jacket'], '', 'smart-casual', 'Structured lapel/placket + dark tailoring tone');
     } else {
       pushHyp(outerConf + 10, 'outerwear', ['Bomber Jacket', 'Harrington Jacket', 'Blazer', 'Windbreaker'], '', 'smart-casual', 'Open front placket + long sleeves');
     }
   }
 
   // Hypothesis E: Tops — Short-Sleeve T-Shirt / Polo vs Long-Sleeve T-Shirt / Sweater / Hoodie / Shirt / Sleeveless
-  const topConfBase = (hasCentralHole || isPairedShoeShape || legSplitScore >= 0.25) ? 28 : 58;
+  const topConfBase = (hasCentralHole || isPairedShoeShape || legSplitScore >= 0.30 || horizLegSplitScore >= 0.22) ? 28 : 62;
   if (sleeveDropRatio < 0.28 && topWidth < 0.58 && neckDipRows >= 2) {
-    pushHyp(topConfBase + 22, 'tops', isFemale ? ['Silk Camisole', 'Tank Top', 'Bodysuit'] : ['Tank Top', 'Knitted Sweater Vest / Gilet'], 'sleeveless', 'casual', 'Sleeveless narrow strap upper contour');
+    pushHyp(topConfBase + 22, 'tops', isFemale ? ['Camisole', 'Tank Top', 'Bodysuit'] : ['Tank Top'], 'sleeveless', 'casual', 'Sleeveless narrow strap upper contour');
   } else if (hoodCrownRows >= 2) {
-    pushHyp(topConfBase + 28, 'tops', isFemale ? ['Pullover Hoodie', 'Crewneck Sweatshirt'] : ['Hoodie', 'Zip-Up Hoodie'], 'long', 'casual', 'Hood dome silhouette above shoulders');
-  } else if (sleeveDropRatio >= 0.62 || underarmGapScore >= 0.16) {
-    // Long-sleeve top (Sweater vs Shirt vs Long-Sleeve Tee)
-    if (centerPlacketScore >= 24 || (neckDipRows >= 2 && avgTexture < 18)) {
-      pushHyp(topConfBase + 20, 'tops', isFemale ? ['Button-Up Shirt', 'Silk Button-Up Blouse'] : ['Oxford Button-Down Shirt (OCBD)', 'Dress Shirt', 'Linen Shirt', 'Flannel Shirt'], 'long', 'smart-casual', 'Long sleeves + front button placket / collar');
+    pushHyp(topConfBase + 28, 'tops', isFemale ? ['Hoodie', 'Sweatshirt'] : ['Hoodie'], 'long', 'casual', 'Hood dome silhouette above shoulders');
+  } else if (sleeveDropRatio >= 0.68 && underarmGapScore >= 0.18) {
+    // Long-sleeve top (Shirt vs Sweater vs Long-Sleeve Tee)
+    if (centerPlacketScore >= 26 || (neckDipRows >= 2 && avgTexture < 18)) {
+      pushHyp(topConfBase + 20, 'tops', isFemale ? ['Button-Up Shirt', 'Blouse'] : ['Oxford Button-Down Shirt', 'Dress Shirt', 'Linen Shirt', 'Flannel Shirt'], 'long', 'smart-casual', 'Long sleeves + front button placket / collar');
     }
-    if (avgTexture >= 15 || (hsl.s <= 35 && totalFill >= 0.52)) {
-      pushHyp(topConfBase + 21, 'tops', isFemale ? ['Cashmere Crewneck Sweater', 'Knit Sweater', 'Cardigan'] : ['Merino Wool Crewneck Sweater', 'Sweater', 'Cardigan'], 'long', 'smart-casual', 'Long sleeves + knit texture depth');
+    if (avgTexture >= 28 && weaveRatio >= 0.20) {
+      pushHyp(topConfBase + 21, 'tops', isFemale ? ['Sweater', 'Cardigan'] : ['Sweater', 'Crewneck Sweater', 'Cardigan'], 'long', 'smart-casual', 'Long sleeves + heavy knit texture depth');
     }
-    pushHyp(topConfBase + 16, 'tops', isFemale ? ['Long-Sleeve Ribbed Top', 'Long-Sleeve Fitted Bodysuit'] : ['Long-Sleeve T-Shirt', 'Long-Sleeve Henley', 'Crewneck Sweatshirt'], 'long', 'casual', 'Long-sleeve upper garment contour');
+    pushHyp(topConfBase + 16, 'tops', isFemale ? ['T-Shirt', 'Sweatshirt'] : ['Long-Sleeve T-Shirt', 'Henley', 'Sweatshirt'], 'long', 'casual', 'Long-sleeve upper garment contour');
   } else {
-    // Short-sleeve Tee vs Polo vs Short-sleeve Blouse/Shirt
-    if (neckDipRows >= 2 && centerPlacketScore >= 20) {
-      pushHyp(topConfBase + 22, 'tops', isFemale ? ['Blouse', 'Button-Up Shirt'] : ['Polo Shirt', 'Linen Camp-Collar Shirt', 'Short-Sleeve Button-Up Shirt'], 'short', 'smart-casual', 'Short sleeves + collar dip / placket');
+    // Short-sleeve Tee vs Polo vs Blouse (also covers flat-lay & folded T-shirts!)
+    if (neckDipRows >= 2 && centerPlacketScore >= 24) {
+      pushHyp(topConfBase + 20, 'tops', isFemale ? ['Blouse', 'Button-Up Shirt'] : ['Polo Shirt', 'Short-Sleeve Button-Up Shirt'], 'short', 'elevated-casual', 'Short sleeves + collar dip / placket');
     }
-    pushHyp(topConfBase + 24, 'tops', isFemale ? ['Crewneck Cotton Tee', 'T-Shirt', 'Fitted Baby Tee', 'Blouse'] : ['Crewneck T-Shirt', 'T-Shirt', 'V-Neck T-Shirt', 'Henley'], 'short', 'casual', 'Classic T-wing short-sleeve contour');
+    pushHyp(topConfBase + 26, 'tops', isFemale ? ['T-Shirt', 'Crewneck T-Shirt', 'Blouse'] : ['T-Shirt', 'Crewneck T-Shirt', 'V-Neck T-Shirt'], 'short', 'casual', 'Flat-lay / folded T-shirt contour');
   }
 
   // Fallback safeguard if no hypothesis cleared threshold
   if (hypotheses.length === 0) {
-    pushHyp(50, 'tops', isFemale ? ['T-Shirt', 'Blouse'] : ['T-Shirt', 'Sweater'], 'short', 'casual', 'General upper garment silhouette');
+    pushHyp(50, 'tops', ['T-Shirt'], 'short', 'casual', 'General upper garment silhouette');
   }
 
   hypotheses.sort((a, b) => b.conf - a.conf);
