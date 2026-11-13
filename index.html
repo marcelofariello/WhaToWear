@@ -3892,8 +3892,8 @@ input[type="text"]:focus, select:focus, textarea:focus {
     </div>
 
     <div class="form-group">
-      <label for="item-name">Item Name</label>
-      <input type="text" id="item-name" placeholder="e.g. Midnight Navy Merino Crewneck Sweater">
+      <label for="item-name">Item Name <span style="font-size:0.74rem; color:var(--text-secondary); font-weight:500;">(Auto: Color + Length + Type)</span></label>
+      <input type="text" id="item-name" placeholder="e.g. Midnight Navy Long-Sleeve Sweater">
     </div>
 
     <div class="form-row">
@@ -4593,6 +4593,102 @@ function toggleCustomSubTypeAdder(forceOpen) {
   }
 }
 
+function getColorNameFromHex(hex) {
+  const raw = String(hex || '').trim();
+  const clean = raw.startsWith('#') ? raw.slice(1) : raw;
+  if (clean.length === 6) {
+    const r = parseInt(clean.slice(0, 2), 16);
+    const g = parseInt(clean.slice(2, 4), 16);
+    const b = parseInt(clean.slice(4, 6), 16);
+    if (!Number.isNaN(r) && !Number.isNaN(g) && !Number.isNaN(b)) {
+      return getClosestColorName(r, g, b);
+    }
+  }
+  return 'Neutral';
+}
+
+function getLengthLabelForItemName(category, length, subType) {
+  const cat = String(category || '').toLowerCase();
+  const subLower = String(subType || '').toLowerCase();
+  const effectiveLen = length || getDefaultLengthForPiece(cat, subType);
+
+  if (cat === 'tops') {
+    if (effectiveLen === 'sleeveless') return /\bsleeveless\b/.test(subLower) ? '' : 'Sleeveless';
+    if (effectiveLen === 'short') return /\bshort[- ]sleeve(d)?\b/.test(subLower) ? '' : 'Short-Sleeve';
+    if (effectiveLen === 'long') return /\blong[- ]sleeve(d)?\b/.test(subLower) ? '' : 'Long-Sleeve';
+  }
+  if (cat === 'bottoms') {
+    if (effectiveLen === 'shorts') return /\b(short|shorts|skort)\b/.test(subLower) ? '' : 'Shorts';
+    if (effectiveLen === 'cropped') return /\b(crop|cropped|capri|culotte)\b/.test(subLower) ? '' : 'Cropped';
+    if (effectiveLen === 'long') return /\b(full[- ]length|long)\b/.test(subLower) ? '' : 'Full-Length';
+  }
+  return '';
+}
+
+function buildStandardGarmentName({ category = 'tops', subType = 'Item', length = '', color = '#4a7db5', colorName = '' } = {}) {
+  const rawSub = String(subType || 'Item').trim() || 'Item';
+  const cat = String(category || 'tops').toLowerCase();
+  const effectiveLen = length || getDefaultLengthForPiece(cat, rawSub);
+  const resolvedColor = String(colorName || '').trim() || getColorNameFromHex(color);
+
+  let cleanSub = rawSub;
+  if (cat === 'tops' && effectiveLen) {
+    if (effectiveLen === 'short' && /\blong[- ]sleeve(d)?\b/i.test(cleanSub)) {
+      cleanSub = cleanSub.replace(/\blong[- ]sleeve(d)?\b/i, 'Short-Sleeve').replace(/\s+/g, ' ').trim();
+    } else if (effectiveLen === 'long' && /\bshort[- ]sleeve(d)?\b/i.test(cleanSub)) {
+      cleanSub = cleanSub.replace(/\bshort[- ]sleeve(d)?\b/i, 'Long-Sleeve').replace(/\s+/g, ' ').trim();
+    } else if (effectiveLen === 'sleeveless' && /\b(short|long)[- ]sleeve(d)?\b/i.test(cleanSub)) {
+      cleanSub = cleanSub.replace(/\b(short|long)[- ]sleeve(d)?\b/i, 'Sleeveless').replace(/\s+/g, ' ').trim();
+    }
+  }
+
+  const lengthPart = getLengthLabelForItemName(cat, effectiveLen, cleanSub);
+  const subLower = cleanSub.toLowerCase();
+  const colorLower = resolvedColor.toLowerCase();
+  const colorPart = (colorLower && colorLower !== 'neutral' && subLower.includes(colorLower)) ? '' : resolvedColor;
+
+  return [colorPart, lengthPart, cleanSub].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function syncItemModalAutoFields({ updateTypeProps = false, explicitColorName = '' } = {}) {
+  const cat = document.getElementById('item-category')?.value || 'tops';
+  const subType = document.getElementById('item-subtype')?.value || 'Item';
+  const lengthSel = document.getElementById('item-length');
+  const lengthRow = document.getElementById('length-row');
+  const len = (lengthSel && lengthRow && lengthRow.style.display !== 'none')
+    ? lengthSel.value
+    : getDefaultLengthForPiece(cat, subType);
+  const colorVal = document.getElementById('item-color')?.value || '#4a7db5';
+
+  if (updateTypeProps) {
+    const formalitySel = document.getElementById('item-formality');
+    if (formalitySel && formalitySel.dataset.userEdited !== 'true') {
+      const inferredForm = inferFormalityFromRecognizedPiece(cat, subType, 'casual');
+      updateFormalityDropdown(inferredForm);
+    }
+    const seasonSel = document.getElementById('item-season');
+    if (seasonSel && seasonSel.dataset.userEdited !== 'true') {
+      seasonSel.value = inferItemSeasonSuitability({
+        category: cat,
+        subType,
+        length: len
+      });
+    }
+  }
+
+  const nameInput = document.getElementById('item-name');
+  if (nameInput && (nameInput.dataset.autoFilled === 'true' || !nameInput.value.trim())) {
+    nameInput.value = buildStandardGarmentName({
+      category: cat,
+      subType,
+      length: len,
+      color: colorVal,
+      colorName: explicitColorName
+    });
+    nameInput.dataset.autoFilled = 'true';
+  }
+}
+
 function handleSubTypeSelectChange() {
   const sel = document.getElementById('item-subtype');
   if (!sel) return;
@@ -4604,22 +4700,7 @@ function handleSubTypeSelectChange() {
     return;
   }
   autoSelectLengthBySubtype();
-  const seasonSel = document.getElementById('item-season');
-  if (seasonSel && (!seasonSel.dataset.userEdited || seasonSel.dataset.userEdited === 'false')) {
-    seasonSel.value = inferItemSeasonSuitability({
-      category: document.getElementById('item-category')?.value || 'tops',
-      subType: sel.value,
-      length: document.getElementById('item-length')?.value || ''
-    });
-  }
-  const nameInput = document.getElementById('item-name');
-  if (nameInput && nameInput.dataset.autoFilled === 'true') {
-    const colorVal = document.getElementById('item-color').value;
-    const r = parseInt(colorVal.slice(1, 3), 16) || 100;
-    const g = parseInt(colorVal.slice(3, 5), 16) || 100;
-    const b = parseInt(colorVal.slice(5, 7), 16) || 100;
-    nameInput.value = `${getClosestColorName(r, g, b)} ${sel.value}`;
-  }
+  syncItemModalAutoFields({ updateTypeProps: true });
 }
 
 function addCustomSubTypeFromModal() {
@@ -6440,21 +6521,32 @@ function inferItemSeasonSuitability(item) {
   if (item.season && item.season !== 'auto') return item.season;
   const sub = ((item.subType || '') + ' ' + (item.name || '')).toLowerCase();
   const cat = (item.category || '').toLowerCase();
-  const len = item.length || '';
+  const len = (item.length || '').toLowerCase();
 
-  if (/\b(linen|seersucker|tank|camisole|halter|bandeau|tube top|sundress|flip-flop|slide|espadrille|strappy sandal|swim|boardshort|bikini)\b/.test(sub) || len === 'sleeveless' || len === 'shorts') {
+  if (/\b(sweater vest|gilet)\b/.test(sub)) {
+    return /\b(puffer|quilted|fleece)\b/.test(sub) ? 'autumn-winter' : 'all-season';
+  }
+  if (
+    /\b(linen|seersucker|tank top|camisole|halter|bandeau|tube top|sundress|flip-flop|slide sandal|strappy.*sandal|espadrille|swim|boardshort|bikini|bucket hat|raffia|panama)\b/.test(sub) ||
+    (cat === 'tops' && len === 'sleeveless') ||
+    (cat === 'bottoms' && len === 'shorts')
+  ) {
     return 'summer';
   }
-  if (/\b(short sleeve|polo|camp collar|cuban collar|capri|bermuda|mule|canvas sneaker|boat shoe)\b/.test(sub)) {
+  if (
+    /\b(short[- ]sleeve|polo|camp[- ]collar|cuban|capri|culotte|cropped|mule|canvas sneaker|boat shoe|deck shoe|ballet flat|mini skirt|midi skirt|wrap skirt|crop top|baby tee|resort)\b/.test(sub) ||
+    (cat === 'bottoms' && len === 'cropped') ||
+    (cat === 'tops' && len === 'short' && /\b(shirt|blouse|button-up|button-down|chambray)\b/.test(sub))
+  ) {
     return 'spring-summer';
   }
-  if (/\b(puffer|parka|pea coat|overcoat|shearling|fur|thermal|snow boot|combat boot|turtleneck|cable-knit|cashmere|beanie|gloves|fleece|heavy)\b/.test(sub)) {
+  if (/\b(puffer|down|parka|pea coat|duffle coat|overcoat|chesterfield|topcoat|shearling|aviator|faux-fur|teddy|thermal|snow boot|hiking.*boot|turtleneck|cable-knit|cashmere|beanie|gloves|fleece|winter coat)\b/.test(sub)) {
     return 'winter';
   }
-  if (/\b(flannel|corduroy|merino|sweater|cardigan|overshirt|shacket|suede|chelsea boot|ankle boot|trench coat|leather|wool|velvet|hoodie|sweatshirt)\b/.test(sub)) {
+  if (/\b(flannel|corduroy|merino|sweater|cardigan|overshirt|shacket|suede|chelsea boot|ankle boot|combat boot|knee-high|over-the-knee|trench coat|wool|velvet|hoodie|sweatshirt|longline|leather jacket|leather moto|café racer|cafe racer|barn jacket|quilted|pullover|henley)\b/.test(sub)) {
     return 'autumn-winter';
   }
-  if (cat === 'outerwear' && /\b(windbreaker|denim jacket|bomber|chore|harrington|kimono|duster)\b/.test(sub)) {
+  if (cat === 'outerwear' && /\b(windbreaker|denim jacket|bomber|chore|harrington|kimono|duster|safari)\b/.test(sub)) {
     return 'spring-summer';
   }
   return 'all-season';
@@ -6886,13 +6978,15 @@ function getItemLength(item) {
   if (item.length) return item.length;
   const sub = (item.subType || '').toLowerCase();
   if (item.category === 'tops') {
-    if (/\b(tank|camisole|halter|bandeau|tube top|sleeveless|vest)\b/.test(sub)) return 'sleeveless';
-    if (/\b(t-shirt|tee|polo|short sleeve|camp collar|cuban collar|henley|crop top|bodysuit)\b/.test(sub) && !sub.includes('long sleeve')) return 'short';
+    if (/\b(tank|camisole|halter|bandeau|tube top|sleeveless|vest|gilet)\b/.test(sub)) return 'sleeveless';
+    if (/\bshort[- ]sleeve(d)?\b/.test(sub)) return 'short';
+    if (/\blong[- ]sleeve(d)?\b/.test(sub)) return 'long';
+    if (/\b(t-shirt|tee|polo|camp[- ]collar|cuban|henley|crop top|bodysuit)\b/.test(sub)) return 'short';
     return 'long';
   }
   if (item.category === 'bottoms') {
-    if (/\b(short|skort|bermuda|boardshort|mini skirt)\b/.test(sub)) return 'shorts';
-    if (/\b(crop|capri|culotte|midi)\b/.test(sub)) return 'cropped';
+    if (/\b(short|shorts|skort|bermuda|boardshort|mini skirt)\b/.test(sub)) return 'shorts';
+    if (/\b(crop|cropped|capri|culotte|midi)\b/.test(sub)) return 'cropped';
     return 'long';
   }
   return 'standard';
@@ -9655,16 +9749,24 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName, componentC
   };
 
   if (hasExplicitFilenameKeyword) {
-    const season = inferItemSeasonSuitability({ category: inferredFromText.category, subType: inferredFromText.subType, length: inferredFromText.length, name: rawName });
+    const resolvedLength = inferredFromText.length || getDefaultLengthForPiece(inferredFromText.category, inferredFromText.subType);
+    const resolvedFormality = inferFormalityFromRecognizedPiece(inferredFromText.category, inferredFromText.subType, inferredFromText.formality);
+    const season = inferItemSeasonSuitability({ category: inferredFromText.category, subType: inferredFromText.subType, length: resolvedLength });
     return {
       category: inferredFromText.category,
       subType: inferredFromText.subType,
-      length: inferredFromText.length || getDefaultLengthForPiece(inferredFromText.category, inferredFromText.subType),
-      formality: inferredFromText.formality,
+      length: resolvedLength,
+      formality: resolvedFormality,
       season,
       r: domR, g: domG, b: domB, hex, colorName,
-      name: inferredFromText.name,
-      autoNamed: inferredFromText.autoNamed,
+      name: buildStandardGarmentName({
+        category: inferredFromText.category,
+        subType: inferredFromText.subType,
+        length: resolvedLength,
+        color: hex,
+        colorName
+      }),
+      autoNamed: true,
       visionNote: 'Filename & extracted garment color',
       alternatives: []
     };
@@ -9805,14 +9907,22 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName, componentC
     }
   }
 
-  const season = inferItemSeasonSuitability({ category: topPick.category, subType: topPick.subType, length: topPick.length, name: rawName });
-  const finalName = `${colorName} ${topPick.subType}`;
+  const resolvedLength = topPick.length || getDefaultLengthForPiece(topPick.category, topPick.subType);
+  const resolvedFormality = inferFormalityFromRecognizedPiece(topPick.category, topPick.subType, topPick.formality);
+  const season = inferItemSeasonSuitability({ category: topPick.category, subType: topPick.subType, length: resolvedLength });
+  const finalName = buildStandardGarmentName({
+    category: topPick.category,
+    subType: topPick.subType,
+    length: resolvedLength,
+    color: hex,
+    colorName
+  });
 
   return {
     category: topPick.category,
     subType: topPick.subType,
-    length: topPick.length || getDefaultLengthForPiece(topPick.category, topPick.subType),
-    formality: topPick.formality,
+    length: resolvedLength,
+    formality: resolvedFormality,
     season,
     r: domR,
     g: domG,
@@ -9882,12 +9992,19 @@ function resolveColorSwatchFromName(colorNameStr, fallbackHex) {
 
 function inferFormalityFromRecognizedPiece(category, subType, fallbackFormality = 'casual') {
   const s = `${category || ''} ${subType || ''}`.toLowerCase();
-  if (/tuxedo|suit|oxford|derby|dress shoe|pump|stiletto|gown|cocktail/.test(s)) return 'formal';
-  if (/dress shirt|poplin|twill|blouse|trouser|slacks|blazer|sport coat|loafer|brogue|trench|overcoat/.test(s)) return 'smart-casual';
-  if (/chino|polo|sweater|knit|cardigan|henley|ankle boot|chelsea|overshirt|midi skirt|silk/.test(s)) return 'smart-casual';
-  if (/jogger|track|athletic|running shoe|legging|yoga|gym|sport/.test(s)) return 'sporty';
-  if (/t-shirt|tee|hoodie|sweatshirt|jean|denim|short|sneaker|sandal|flip-flop|tank/.test(s)) return 'casual';
-  return fallbackFormality || 'casual';
+  if (/\b(tuxedo|french[- ]cuff|bow tie|gown|black tie)\b/.test(s)) return 'black-tie';
+  if (/\b(cocktail|evening|minaudière|minaudiere|platform evening|stiletto pump|stiletto bootie|satin lace)\b/.test(s)) return 'cocktail';
+  if (/\b(suit jacket|suit trouser|high-waist suit|waistcoat|oxford shoe|cap-toe oxford|wholecut oxford|patent leather|silk necktie|cufflink|dress pants|tailored wool dress trouser|heeled pump|pointed-toe.*pump|dress leather belt)\b/.test(s)) return 'formal';
+  if (/\b(poplin dress|twill dress|dress shirt|crisp poplin|pleated dress trouser|derby shoe|single-breasted.*blazer|double-breasted.*blazer|tailored blazer|sport coat|briefcase|folio|pashmina|trench coat|double-breasted tailored wool)\b/.test(s)) return 'business-casual';
+  if (/\b(oxford button-down|button-up shirt|button-down|linen shirt|chambray|blouse|tailored trouser|wide-leg trouser|cigarette|ankle-grazing|blazer|wool coat|cashmere|merino|sweater|cardigan|silk camisole|midi skirt|pencil skirt|loafer|brogue|mule|chelsea boot|ankle boot|ballet flat|mary jane|belt|watch|scarf|structured.*tote|pearl|pumps?)\b/.test(s)) return 'smart-casual';
+  if (/\b(overshirt|shacket|knitted polo|polo|cuban|camp[- ]collar|mandarin|chino(?! short)|satin|henley|leather moto|café racer|cafe racer|suede|desert boot|chukka|chore jacket|harrington|bomber|crossbody|tote bag|fedora|boot)\b/.test(s)) return 'elevated-casual';
+  if (/\b(jogger|track pant|running shoe|running trainer|athletic|gym|yoga|cycling|biker short|sweatshort|performance top|fleece|windbreaker|technical waterproof|backpack)\b/.test(s) && !/\blounge\b/.test(s)) return 'athleisure';
+  if (/\b(lounge|resort|slide sandal|flip-flop|espadrille|bucket hat|bermuda)\b/.test(s)) return 'lounge';
+  if (/\b(t-shirt|tee|hoodie|sweatshirt|jean|denim|short|skirt|sneaker|trainer|sandal|tank|bodysuit|crop top|cargo|legging|beanie|cap|sunglass|umbrella|parka|puffer|rain jacket|combat boot|hiking)\b/.test(s)) return 'casual';
+
+  const normalizedFallback = fallbackFormality === 'sporty' ? 'athleisure' : (fallbackFormality || 'casual');
+  const validIds = getAllFormalityLevels().map(f => f.id);
+  return validIds.includes(normalizedFallback) ? normalizedFallback : 'casual';
 }
 
 function mapRecognizedCategoryToConfig(rawCat) {
@@ -9969,6 +10086,15 @@ async function recognizeGarmentViaApi(dataUrl, fileNameHint = '') {
   }
 }
 
+function resolveRecognizedGarmentLength(category, subType, cvCategory, cvLength) {
+  const subLower = String(subType || '').toLowerCase();
+  const isLengthNeutralTop = category === 'tops' && !/\b(short|long)[- ]sleeve|t-shirt|tee|polo|tank|camisole|sweater|hoodie|cardigan\b/.test(subLower);
+  if (isLengthNeutralTop && cvCategory === 'tops' && cvLength) {
+    return cvLength;
+  }
+  return getDefaultLengthForPiece(category, subType);
+}
+
 async function hydrateModalWithGeminiRecognition(token, dataUrl, fileNameHint, fallbackAnalysis) {
   const modal = document.getElementById('item-modal');
   const badge = document.getElementById('detected-color-badge');
@@ -9998,23 +10124,38 @@ async function hydrateModalWithGeminiRecognition(token, dataUrl, fileNameHint, f
   if (colorInput) colorInput.value = resolvedSwatch.hex;
 
   if (!currentEditId) {
+    const formalitySel = document.getElementById('item-formality');
+    if (formalitySel) formalitySel.dataset.userEdited = 'false';
+    const seasonSel = document.getElementById('item-season');
+    if (seasonSel) seasonSel.dataset.userEdited = 'false';
+
     ensureSubTypeOptionSelected(aiResult.category, aiResult.subcategory);
-    const inferredLength = getDefaultLengthForPiece(aiResult.category, aiResult.subcategory);
+    const inferredLength = resolveRecognizedGarmentLength(aiResult.category, aiResult.subcategory, fallbackAnalysis.category, fallbackAnalysis.length);
     if (inferredLength) updateLengthOptions(inferredLength);
 
     const inferredFormality = inferFormalityFromRecognizedPiece(aiResult.category, aiResult.subcategory, fallbackAnalysis.formality);
     updateFormalityDropdown(inferredFormality);
+    if (formalitySel) formalitySel.dataset.userEdited = 'false';
 
-    const seasonSel = document.getElementById('item-season');
     if (seasonSel) {
-      seasonSel.value = aiResult.season;
+      seasonSel.value = aiResult.season || inferItemSeasonSuitability({
+        category: aiResult.category,
+        subType: aiResult.subcategory,
+        length: inferredLength
+      });
       seasonSel.dataset.userEdited = 'false';
     }
 
     const nameInput = document.getElementById('item-name');
     const selectedSub = document.getElementById('item-subtype')?.value || aiResult.subcategory;
     if (nameInput && (!nameInput.value.trim() || nameInput.dataset.autoFilled === 'true')) {
-      nameInput.value = `${resolvedSwatch.colorName} ${selectedSub}`;
+      nameInput.value = buildStandardGarmentName({
+        category: aiResult.category,
+        subType: selectedSub,
+        length: inferredLength,
+        color: resolvedSwatch.hex,
+        colorName: resolvedSwatch.colorName
+      });
       nameInput.dataset.autoFilled = 'true';
     }
   }
@@ -10153,27 +10294,35 @@ function removePhoto(e) {
 }
 
 function applyCvAlternativeModal(cat, sub, len, form) {
+  const formalitySel = document.getElementById('item-formality');
+  if (formalitySel) formalitySel.dataset.userEdited = 'false';
+  const seasonSel = document.getElementById('item-season');
+  if (seasonSel) seasonSel.dataset.userEdited = 'false';
+
   updateCategoryDropdown(cat);
   const catEl = document.getElementById('item-category');
   if (catEl) catEl.value = cat;
   updateSubTypes(sub);
-  if (len) updateLengthOptions(len);
-  if (form) updateFormalityDropdown(form);
-  const seasonSel = document.getElementById('item-season');
-  const seasonVal = inferItemSeasonSuitability({ category: cat, subType: sub, length: len });
-  if (seasonSel) seasonSel.value = seasonVal;
-  const nameInput = document.getElementById('item-name');
+  const resolvedLen = len || getDefaultLengthForPiece(cat, sub);
+  if (resolvedLen) updateLengthOptions(resolvedLen);
+  const resolvedForm = inferFormalityFromRecognizedPiece(cat, sub, form || 'casual');
+  updateFormalityDropdown(resolvedForm);
+  if (formalitySel) formalitySel.dataset.userEdited = 'false';
+
+  const seasonVal = inferItemSeasonSuitability({ category: cat, subType: sub, length: resolvedLen });
+  if (seasonSel) {
+    seasonSel.value = seasonVal;
+    seasonSel.dataset.userEdited = 'false';
+  }
   const hexVal = document.getElementById('item-color')?.value || '#4a7db5';
-  const r = parseInt(hexVal.slice(1, 3), 16) || 74;
-  const g = parseInt(hexVal.slice(3, 5), 16) || 125;
-  const b = parseInt(hexVal.slice(5, 7), 16) || 181;
-  const colorName = getClosestColorName(r, g, b);
+  const colorName = getColorNameFromHex(hexVal);
+  const nameInput = document.getElementById('item-name');
   if (nameInput && (!nameInput.value.trim() || nameInput.dataset.autoFilled === 'true')) {
-    nameInput.value = `${colorName} ${sub}`;
+    nameInput.value = buildStandardGarmentName({ category: cat, subType: sub, length: resolvedLen, color: hexVal, colorName });
     nameInput.dataset.autoFilled = 'true';
   }
   const badge = document.getElementById('detected-color-badge');
-  if (badge) badge.textContent = `✨ Selected: ${colorName} ${sub}`;
+  if (badge) badge.textContent = `✨ Selected: ${nameInput?.value || `${colorName} ${sub}`}`;
   toast(`✓ Switched piece ID to ${sub}`);
 }
 
@@ -10185,16 +10334,24 @@ function autoDetectColorAndDetails(ctx, w, h, fgMask, bbox, fileNameHint = '', c
   // Apply detected Category, SubType, Sleeve/Pant Length, Season, and Formality when adding a new item
   const editId = document.getElementById('edit-id')?.value;
   if (!editId) {
+    const formalitySel = document.getElementById('item-formality');
+    if (formalitySel) formalitySel.dataset.userEdited = 'false';
+    const seasonSel = document.getElementById('item-season');
+    if (seasonSel) seasonSel.dataset.userEdited = 'false';
+
     updateCategoryDropdown(analysis.category);
     document.getElementById('item-category').value = analysis.category;
     updateSubTypes(analysis.subType);
-    if (analysis.length) {
-      updateLengthOptions(analysis.length);
+    const resolvedLen = analysis.length || getDefaultLengthForPiece(analysis.category, analysis.subType);
+    if (resolvedLen) {
+      updateLengthOptions(resolvedLen);
     }
-    updateFormalityDropdown(analysis.formality);
-    const seasonSel = document.getElementById('item-season');
+    const resolvedForm = inferFormalityFromRecognizedPiece(analysis.category, analysis.subType, analysis.formality);
+    updateFormalityDropdown(resolvedForm);
+    if (formalitySel) formalitySel.dataset.userEdited = 'false';
     if (seasonSel) {
-      seasonSel.value = analysis.season || 'all-season';
+      seasonSel.value = analysis.season || inferItemSeasonSuitability({ category: analysis.category, subType: analysis.subType, length: resolvedLen });
+      seasonSel.dataset.userEdited = 'false';
     }
   }
 
@@ -10217,12 +10374,22 @@ function autoDetectColorAndDetails(ctx, w, h, fgMask, bbox, fileNameHint = '', c
 
   const nameInput = document.getElementById('item-name');
   const currentSubtype = document.getElementById('item-subtype').value || analysis.subType || 'Item';
+  const currentCat = document.getElementById('item-category')?.value || analysis.category || 'tops';
+  const lengthSel = document.getElementById('item-length');
+  const lengthRow = document.getElementById('length-row');
+  const currentLen = (lengthSel && lengthRow && lengthRow.style.display !== 'none') ? lengthSel.value : (analysis.length || getDefaultLengthForPiece(currentCat, currentSubtype));
   if (!nameInput.value.trim() || nameInput.dataset.autoFilled === 'true') {
-    nameInput.value = `${analysis.colorName} ${currentSubtype}`;
+    nameInput.value = buildStandardGarmentName({
+      category: currentCat,
+      subType: currentSubtype,
+      length: currentLen,
+      color: analysis.hex,
+      colorName: analysis.colorName
+    });
     nameInput.dataset.autoFilled = 'true';
   }
 
-  toast(`✨ Identified ${analysis.colorName} ${currentSubtype}!`);
+  toast(`✨ Identified ${nameInput.value || `${analysis.colorName} ${currentSubtype}`}!`);
   return analysis;
 }
 
@@ -10467,18 +10634,8 @@ function handleMassWardrobeUpload(event) {
 }
 
 function getDefaultLengthForPiece(category, subType) {
-  const sub = (subType || '').toLowerCase();
-  if (category === 'tops') {
-    if (sub.includes('tank') || sub.includes('camisole')) return 'sleeveless';
-    if (sub.includes('t-shirt') || sub.includes('polo') || sub.includes('short sleeve') || sub.includes('bodysuit')) return 'short';
-    return 'long';
-  }
-  if (category === 'bottoms') {
-    if (sub.includes('short')) return 'shorts';
-    if (sub.includes('crop') || sub.includes('midi')) return 'cropped';
-    return 'long';
-  }
-  return '';
+  const inferred = getItemLength({ category, subType, length: '' });
+  return inferred && inferred !== 'standard' ? inferred : '';
 }
 
 function inferGarmentFromPhotoContext(fileName, w, h, r, g, b) {
@@ -10614,19 +10771,21 @@ function inferGarmentFromPhotoContext(fileName, w, h, r, g, b) {
 
   const colorName = getClosestColorName(r, g, b);
   const length = getDefaultLengthForPiece(category, subType);
-
-  const isGenericFile = !raw || /^(img|dsc|photo|image|pic|screenshot|new bitmap|untitled|whatsapp|pxl|fullsizerender|\d+)(\s*\(\d+\))?[\d_\s-]*$/i.test(raw);
-  const cleanTitle = !isGenericFile
-    ? raw.replace(/\b\w/g, c => c.toUpperCase())
-    : `${colorName} ${subType}`;
-
-  return {
-    name: cleanTitle,
-    autoNamed: isGenericFile,
+  const resolvedFormality = inferFormalityFromRecognizedPiece(category, subType, formality);
+  const standardName = buildStandardGarmentName({
     category,
     subType,
     length,
-    formality,
+    colorName
+  });
+
+  return {
+    name: standardName,
+    autoNamed: true,
+    category,
+    subType,
+    length,
+    formality: resolvedFormality,
     colorName
   };
 }
@@ -10647,11 +10806,11 @@ async function finalizeDraftPieceFromImage(imgSource, rawFileName, fallbackSrcPr
     let category = analysis.category;
     let subType = analysis.subType;
     let length = analysis.length;
-    let season = analysis.season || 'all-season';
+    let season = analysis.season || inferItemSeasonSuitability({ category, subType, length });
     let hex = analysis.hex;
     let colorName = analysis.colorName;
-    let formality = analysis.formality;
-    let name = analysis.name;
+    let formality = inferFormalityFromRecognizedPiece(category, subType, analysis.formality);
+    let name = buildStandardGarmentName({ category, subType, length, color: hex, colorName });
     let visionNote = analysis.visionNote || 'Vision ID';
 
     if (shouldAttemptBackendApi()) {
@@ -10660,12 +10819,12 @@ async function finalizeDraftPieceFromImage(imgSource, rawFileName, fallbackSrcPr
         const swatch = resolveColorSwatchFromName(aiResult.primaryColor, analysis.hex);
         category = aiResult.category;
         subType = aiResult.subcategory;
-        length = getDefaultLengthForPiece(category, subType) || length;
-        season = aiResult.season;
+        length = resolveRecognizedGarmentLength(category, subType, analysis.category, analysis.length);
+        season = aiResult.season || inferItemSeasonSuitability({ category, subType, length });
         hex = swatch.hex;
         colorName = swatch.colorName;
         formality = inferFormalityFromRecognizedPiece(category, subType, analysis.formality);
-        name = `${colorName} ${subType}`;
+        name = buildStandardGarmentName({ category, subType, length, color: hex, colorName });
         visionNote = `Gemini 3.8 Flash · ${Math.round(aiResult.confidenceScore * 100)}% match`;
       }
     }
@@ -10673,7 +10832,9 @@ async function finalizeDraftPieceFromImage(imgSource, rawFileName, fallbackSrcPr
     return {
       draftId: generateId(),
       name,
-      autoNamed: analysis.autoNamed,
+      autoNamed: true,
+      formalityEdited: false,
+      seasonEdited: false,
       category,
       subType,
       length,
@@ -10691,11 +10852,13 @@ async function finalizeDraftPieceFromImage(imgSource, rawFileName, fallbackSrcPr
     return {
       draftId: generateId(),
       name: inferred.name,
-      autoNamed: inferred.autoNamed,
+      autoNamed: true,
+      formalityEdited: false,
+      seasonEdited: false,
       category: inferred.category,
       subType: inferred.subType,
       length: inferred.length,
-      season: 'all-season',
+      season: inferItemSeasonSuitability({ category: inferred.category, subType: inferred.subType, length: inferred.length }),
       color: '#4a7db5',
       colorName: inferred.colorName,
       formality: inferred.formality,
@@ -10925,7 +11088,7 @@ function renderMassValidateModal() {
           </div>
           <div class="mass-validate-row-actions" style="flex-direction:column; align-items:stretch; gap:6px;">
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-              <span style="font-size:0.73rem; color:var(--text-secondary);">✨ <strong>${escapeHtml(d.colorName)} ${escapeHtml(d.subType)}</strong> (${escapeHtml(d.visionNote || 'Vision')})</span>
+              <span style="font-size:0.73rem; color:var(--text-secondary);">✨ <strong>${escapeHtml(d.name || `${d.colorName} ${d.subType}`)}</strong> (${escapeHtml(d.visionNote || 'Vision')})</span>
               <div style="display:flex; gap:6px; flex-wrap:wrap;">
                 <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 10px; font-size:0.74rem; color:#b91c1c;" onclick="removeMassDraft('${d.draftId}')">✕ Remove</button>
                 <button type="button" class="btn btn-primary btn-sm" style="padding:4px 12px; font-size:0.74rem;" onclick="approveSingleMassDraft('${d.draftId}')">✓ Validate This Piece</button>
@@ -10942,17 +11105,44 @@ function renderMassValidateModal() {
   }).join('');
 }
 
+function refreshMassDraftDerivedFields(d, { updateTypeProps = false } = {}) {
+  if (!d) return;
+  if (d.category === 'tops' || d.category === 'bottoms') {
+    d.length = d.length || getDefaultLengthForPiece(d.category, d.subType);
+  } else {
+    d.length = '';
+  }
+  if (updateTypeProps) {
+    if (!d.formalityEdited) {
+      d.formality = inferFormalityFromRecognizedPiece(d.category, d.subType, d.formality || 'casual');
+    }
+    if (!d.seasonEdited) {
+      d.season = inferItemSeasonSuitability({ category: d.category, subType: d.subType, length: d.length });
+    }
+  }
+  if (d.autoNamed !== false) {
+    d.name = buildStandardGarmentName({
+      category: d.category,
+      subType: d.subType,
+      length: d.length,
+      color: d.color,
+      colorName: d.colorName
+    });
+  }
+}
+
 function applyCvAlternativeDraft(draftId, cat, sub, len, form) {
   const d = massUploadDrafts.find(x => x.draftId === draftId);
   if (!d) return;
   d.category = cat;
   d.subType = sub;
   d.length = len || getDefaultLengthForPiece(cat, sub);
-  if (form) d.formality = form;
-  d.season = inferItemSeasonSuitability({ category: cat, subType: sub, length: d.length });
-  if (d.autoNamed) d.name = `${d.colorName} ${sub}`;
+  d.formalityEdited = false;
+  d.seasonEdited = false;
+  d.formality = inferFormalityFromRecognizedPiece(cat, sub, form || 'casual');
+  refreshMassDraftDerivedFields(d, { updateTypeProps: true });
   renderMassValidateModal();
-  toast(`✓ Switched piece to ${sub}`);
+  toast(`✓ Switched piece to ${d.name || sub}`);
 }
 
 function updateMassDraftField(draftId, field, value) {
@@ -10960,8 +11150,14 @@ function updateMassDraftField(draftId, field, value) {
   if (!d) return;
 
   if (field === 'name') {
-    d.name = value.trim() || d.name;
-    d.autoNamed = false;
+    const trimmed = String(value || '').trim();
+    if (trimmed) {
+      d.name = trimmed;
+      d.autoNamed = false;
+    } else {
+      d.autoNamed = true;
+      refreshMassDraftDerivedFields(d);
+    }
     return;
   }
 
@@ -10970,10 +11166,7 @@ function updateMassDraftField(draftId, field, value) {
     const subs = (getSubTypes()[value] || []).filter(st => !isItemDisliked({ subType: st, name: st }));
     d.subType = subs[0] || (getSubTypes()[value] && getSubTypes()[value][0]) || 'Item';
     d.length = getDefaultLengthForPiece(d.category, d.subType);
-    d.season = inferItemSeasonSuitability({ category: d.category, subType: d.subType, length: d.length });
-    if (d.autoNamed) {
-      d.name = `${d.colorName} ${d.subType}`;
-    }
+    refreshMassDraftDerivedFields(d, { updateTypeProps: true });
     renderMassValidateModal();
     return;
   }
@@ -10981,24 +11174,35 @@ function updateMassDraftField(draftId, field, value) {
   if (field === 'subType') {
     d.subType = value;
     d.length = getDefaultLengthForPiece(d.category, d.subType);
-    d.season = inferItemSeasonSuitability({ category: d.category, subType: d.subType, length: d.length });
-    if (d.autoNamed) {
-      d.name = `${d.colorName} ${d.subType}`;
-    }
+    refreshMassDraftDerivedFields(d, { updateTypeProps: true });
+    renderMassValidateModal();
+    return;
+  }
+
+  if (field === 'length') {
+    d.length = value;
+    refreshMassDraftDerivedFields(d, { updateTypeProps: true });
     renderMassValidateModal();
     return;
   }
 
   if (field === 'color') {
     d.color = value;
-    const r = parseInt(value.slice(1, 3), 16) || 100;
-    const g = parseInt(value.slice(3, 5), 16) || 100;
-    const b = parseInt(value.slice(5, 7), 16) || 100;
-    d.colorName = getClosestColorName(r, g, b);
-    if (d.autoNamed) {
-      d.name = `${d.colorName} ${d.subType}`;
-    }
+    d.colorName = getColorNameFromHex(value);
+    refreshMassDraftDerivedFields(d);
     renderMassValidateModal();
+    return;
+  }
+
+  if (field === 'formality') {
+    d.formality = value;
+    d.formalityEdited = true;
+    return;
+  }
+
+  if (field === 'season') {
+    d.season = value;
+    d.seasonEdited = true;
     return;
   }
 
@@ -11013,10 +11217,7 @@ function applyBulkCategoryToMassDrafts(cat) {
     d.category = cat;
     d.subType = defaultSub;
     d.length = getDefaultLengthForPiece(cat, defaultSub);
-    d.season = inferItemSeasonSuitability({ category: cat, subType: defaultSub, length: d.length });
-    if (d.autoNamed) {
-      d.name = `${d.colorName} ${d.subType}`;
-    }
+    refreshMassDraftDerivedFields(d, { updateTypeProps: true });
   });
   renderMassValidateModal();
   toast(`Updated all ${massUploadDrafts.length} draft pieces to ${getCategoryLabel(cat)}`);
@@ -11026,15 +11227,23 @@ async function approveSingleMassDraft(draftId) {
   const idx = massUploadDrafts.findIndex(x => x.draftId === draftId);
   if (idx === -1) return;
   const d = massUploadDrafts[idx];
-  const newItem = {
-    id: generateId(),
-    name: (d.name || `${d.colorName} ${d.subType}`).trim(),
+  const resolvedLength = d.length || getDefaultLengthForPiece(d.category, d.subType);
+  const resolvedName = (d.name || buildStandardGarmentName({
     category: d.category,
     subType: d.subType,
-    length: d.length || getDefaultLengthForPiece(d.category, d.subType),
-    season: d.season || inferItemSeasonSuitability(d),
+    length: resolvedLength,
     color: d.color,
-    formality: d.formality,
+    colorName: d.colorName
+  })).trim();
+  const newItem = {
+    id: generateId(),
+    name: resolvedName,
+    category: d.category,
+    subType: d.subType,
+    length: resolvedLength,
+    season: d.season || inferItemSeasonSuitability({ category: d.category, subType: d.subType, length: resolvedLength }),
+    color: d.color,
+    formality: d.formality || inferFormalityFromRecognizedPiece(d.category, d.subType, 'casual'),
     image: d.image
   };
 
@@ -11111,17 +11320,26 @@ async function validateAndSaveAllMassDrafts() {
   const footerBtn = document.getElementById('mass-approve-footer-btn');
   [headerBtn, footerBtn].forEach(b => { if (b) b.disabled = true; });
 
-  const newItems = massUploadDrafts.map(d => ({
-    id: generateId(),
-    name: (d.name || `${d.colorName} ${d.subType}`).trim(),
-    category: d.category,
-    subType: d.subType,
-    length: d.length || getDefaultLengthForPiece(d.category, d.subType),
-    season: d.season || inferItemSeasonSuitability(d),
-    color: d.color,
-    formality: d.formality,
-    image: d.image
-  }));
+  const newItems = massUploadDrafts.map(d => {
+    const resolvedLength = d.length || getDefaultLengthForPiece(d.category, d.subType);
+    return {
+      id: generateId(),
+      name: (d.name || buildStandardGarmentName({
+        category: d.category,
+        subType: d.subType,
+        length: resolvedLength,
+        color: d.color,
+        colorName: d.colorName
+      })).trim(),
+      category: d.category,
+      subType: d.subType,
+      length: resolvedLength,
+      season: d.season || inferItemSeasonSuitability({ category: d.category, subType: d.subType, length: resolvedLength }),
+      color: d.color,
+      formality: d.formality || inferFormalityFromRecognizedPiece(d.category, d.subType, 'casual'),
+      image: d.image
+    };
+  });
 
   wardrobe.push(...newItems);
   massUploadDrafts = [];
@@ -11312,18 +11530,11 @@ function updateLengthOptions(selectedLength) {
 
 function autoSelectLengthBySubtype() {
   const cat = document.getElementById('item-category').value;
-  const sub = (document.getElementById('item-subtype').value || '').toLowerCase();
+  const sub = document.getElementById('item-subtype').value || '';
   const sel = document.getElementById('item-length');
   if (!sel) return;
-  if (cat === 'tops') {
-    if (/\b(tank|camisole|halter|bandeau|tube top|sleeveless|vest)\b/.test(sub)) sel.value = 'sleeveless';
-    else if (/\b(t-shirt|tee|polo|short sleeve|camp collar|cuban collar|henley|crop top|bodysuit)\b/.test(sub) && !sub.includes('long sleeve')) sel.value = 'short';
-    else sel.value = 'long';
-  } else if (cat === 'bottoms') {
-    if (/\b(short|skort|bermuda|boardshort|mini skirt)\b/.test(sub)) sel.value = 'shorts';
-    else if (/\b(crop|capri|culotte|midi)\b/.test(sub)) sel.value = 'cropped';
-    else sel.value = 'long';
-  }
+  const defaultLen = getDefaultLengthForPiece(cat, sub);
+  if (defaultLen) sel.value = defaultLen;
 }
 
 function updateSubTypes(selectedSub) {
@@ -11339,24 +11550,7 @@ function updateSubTypes(selectedSub) {
   }
   updateLengthOptions();
   autoSelectLengthBySubtype();
-
-  const seasonSel = document.getElementById('item-season');
-  if (seasonSel && (!seasonSel.dataset.userEdited || seasonSel.dataset.userEdited === 'false')) {
-    seasonSel.value = inferItemSeasonSuitability({
-      category: cat,
-      subType: sel.value,
-      length: document.getElementById('item-length')?.value || ''
-    });
-  }
-
-  const nameInput = document.getElementById('item-name');
-  if (nameInput && nameInput.dataset.autoFilled === 'true') {
-    const colorVal = document.getElementById('item-color').value;
-    const r = parseInt(colorVal.slice(1,3), 16) || 100;
-    const g = parseInt(colorVal.slice(3,5), 16) || 100;
-    const b = parseInt(colorVal.slice(5,7), 16) || 100;
-    nameInput.value = `${getClosestColorName(r, g, b)} ${sel.value}`;
-  }
+  syncItemModalAutoFields({ updateTypeProps: true });
 }
 
 function openAddModal() {
@@ -11364,20 +11558,19 @@ function openAddModal() {
   document.getElementById('edit-id').value = '';
   const nameInput = document.getElementById('item-name');
   nameInput.value = '';
-  nameInput.dataset.autoFilled = 'false';
+  nameInput.dataset.autoFilled = 'true';
   toggleCustomCategoryAdder(false);
   toggleCustomSubTypeAdder(false);
   toggleCustomFormalityAdder(false);
+  const formalitySel = document.getElementById('item-formality');
+  if (formalitySel) formalitySel.dataset.userEdited = 'false';
+  const seasonSel = document.getElementById('item-season');
+  if (seasonSel) seasonSel.dataset.userEdited = 'false';
+  document.getElementById('item-color').value = '#4a7db5';
   updateCategoryDropdown('tops');
   document.getElementById('item-category').value = 'tops';
-  updateSubTypes();
   updateFormalityDropdown('casual');
-  const seasonSel = document.getElementById('item-season');
-  if (seasonSel) {
-    seasonSel.dataset.userEdited = 'false';
-    seasonSel.value = 'all-season';
-  }
-  document.getElementById('item-color').value = '#4a7db5';
+  updateSubTypes();
   removePhoto();
   document.getElementById('item-modal').classList.add('active');
 }
@@ -11394,6 +11587,11 @@ function openEditModal(id) {
   toggleCustomSubTypeAdder(false);
   toggleCustomFormalityAdder(false);
 
+  const formalitySel = document.getElementById('item-formality');
+  if (formalitySel) formalitySel.dataset.userEdited = 'true';
+  const seasonSel = document.getElementById('item-season');
+  if (seasonSel) seasonSel.dataset.userEdited = 'true';
+
   // Ensure custom category / subType / formality exist in dropdowns if item uses one
   updateCategoryDropdown(item.category);
   document.getElementById('item-category').value = item.category;
@@ -11407,10 +11605,8 @@ function openEditModal(id) {
   document.getElementById('item-subtype').value = item.subType;
   updateLengthOptions(item.length || getItemLength(item));
   document.getElementById('item-color').value = item.color;
-  updateFormalityDropdown(item.formality || 'casual');
-  const seasonSel = document.getElementById('item-season');
+  updateFormalityDropdown(item.formality || inferFormalityFromRecognizedPiece(item.category, item.subType, 'casual'));
   if (seasonSel) {
-    seasonSel.dataset.userEdited = 'true';
     seasonSel.value = item.season || inferItemSeasonSuitability(item);
   }
 
@@ -14752,6 +14948,24 @@ function init() {
   if (document.getElementById('setting-birth-place')) {
     document.getElementById('setting-birth-place').value = birthPlace;
   }
+  const nameInput = document.getElementById('item-name');
+  if (nameInput) {
+    nameInput.addEventListener('input', () => {
+      nameInput.dataset.autoFilled = nameInput.value.trim() ? 'false' : 'true';
+    });
+  }
+  const lengthSel = document.getElementById('item-length');
+  if (lengthSel) {
+    lengthSel.addEventListener('change', () => {
+      syncItemModalAutoFields({ updateTypeProps: true });
+    });
+  }
+  const colorInput = document.getElementById('item-color');
+  if (colorInput) {
+    const syncColorName = () => syncItemModalAutoFields({ updateTypeProps: false });
+    colorInput.addEventListener('input', syncColorName);
+    colorInput.addEventListener('change', syncColorName);
+  }
   const seasonSel = document.getElementById('item-season');
   if (seasonSel) {
     seasonSel.addEventListener('change', () => {
@@ -14764,6 +14978,8 @@ function init() {
       if (formalitySel.value === '__custom__') {
         formalitySel.value = 'casual';
         toggleCustomFormalityAdder(true);
+      } else {
+        formalitySel.dataset.userEdited = 'true';
       }
     });
   }
