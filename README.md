@@ -86,13 +86,16 @@ Upload up to 8 photos of looks you love. WhaToWear reads dominant colours, contr
   - Displays a **Freshness Rating Badge**: `✨ 100% Fresh Combination · Never worn this exact pairing!`
   - **"📌 I'm Wearing This Today!"** button to log and lock in today's rotation.
 
-### 6. 🛍️ Pieces to Buy: Real Fashion Photography & Persona-Driven Curation
-- Every recommended piece uses **real internet fashion photography** (high-resolution Unsplash fashion & garment imagery) with an interactive **Dual-View Stage**:
-  - **🧍 On Model Photo**: Real photograph of a model wearing the piece (automatically tailored to Masculine or Feminine dressing style).
-  - **🧥 Garment Photo**: Detailed photographic view of the garment, fabric texture, and an overlaid shade swatch pill.
+### 6. 🛍️ Pieces to Buy & AI Studio Product Photography (`@google/genai`)
+- Every recommended piece starts in **🧥 Garment Photo** studio mode rendered server-side via the official `@google/genai` SDK (`gemini-3.1-flash-image` / `gemini-3-pro-image`) inside `3:4` e-commerce card containers:
+  - Dynamic prompt builder [`buildGarmentPhotoPrompt(item)`](src/services/garmentPhotoPrompt.ts) injects each recommendation's exact color, cut, collar/closure details, and tangible fabric weave on a pure solid off-white/light-grey background (`#F5F5F5`), with front-left diffused studio lighting, 15% centered padding, and strict negative guardrails (no models, text, watermarks, hangers, or props).
+  - **Two-Tier Persistent Cache**: Generated photos are cached by content hash on the server (`cache/garment-photos/`) and in browser IndexedDB (`wtw_shop_photo_cache_v1`) so reloading never regenerates or repays for already rendered items.
+  - **Interactive Multi-View Toggle**: Switch seamlessly between **🧥 Garment Photo**, **🧍 See How It Looks** (styled model inspiration), and **🎨 Exact Shade** (`3:4` vector cut & colorway preview).
+- **Gemini 3.8 Flash Structured Wardrobe Recognition**:
+  - Single-item and mass photo uploads call `POST /api/recognize-garment` powered by `gemini-3.8-flash` (`MEDIA_RESOLUTION_HIGH`) and JSON Schema Structured Outputs returning strictly `category`, `subcategory`, `primaryColor`, `season`, and `confidenceScore` (with automatic offline canvas fallback if no key is configured).
 - **Driven by What You Love to Wear & Your Desired Impression**:
   - Directly reflects your **Signature Style Archetype**, **Desired Impressions** (e.g., *Polished*, *Authoritative*, *Approachable*, *Effortless*), your uploaded reference outfit palette, and your most-worn wardrobe categories.
-  - Includes a 1-click **➕ Add to Wardrobe** button (which saves the real garment photo into your closet) and a **🔍 Shop Online** Google Shopping link.
+  - Includes 1-click **➕ Add to Wardrobe**, **🔍 Shop Online** Google Shopping links, and **🚫 Dislike** filtering.
 
 ### 7. 🔮 Natal Birth Chart & Daily Planetary Transits
 - Enter Date, Time, and Place of Birth in *Profile & Settings*.
@@ -127,16 +130,37 @@ Upload up to 8 photos of looks you love. WhaToWear reads dominant colours, contr
 
 ## 🚀 Quick Start
 
-1. Open [`index.html`](file:///c:/Users/ec387923/OneDrive%20-%20Mars%20Inc/Desktop/files%20to%20trasfer/whatowear/index.html) in any modern web browser (Chrome, Edge, Firefox, Safari).
-2. Go to **Profile & Settings**:
+### Recommended: Full Stack with Gemini Studio Photography & Garment Recognition (`http://localhost:3000`)
+1. Copy `.env.example` to `.env` and add your server-side Gemini API key (never committed to git):
+   ```bash
+   cp .env.example .env
+   # Edit .env and set GEMINI_API_KEY=...
+   ```
+2. Install dependencies, build the TypeScript backend, and start the server:
+   ```bash
+   npm install
+   npm run build
+   npm start
+   ```
+3. Open `http://localhost:3000` in your browser.
+4. *(Optional)* Verify live 2-sample `3:4` `#F5F5F5` garment generation and disk-cache latency:
+   ```bash
+   npm run verify:images
+   ```
+
+### Offline / Standalone Preview
+You can still open [`index.html`](index.html) directly in any modern browser; when served without the Node backend or without `GEMINI_API_KEY`, studio product previews and wardrobe recognition fall back cleanly to built-in client-side studio vector previews and canvas CV analysis.
+
+### First-Time Styling Setup
+1. Go to **Profile & Settings**:
    - Choose **Masculine / Male** or **Feminine / Female** dressing style.
    - Choose your **Signature Style Archetype** and desired impression tags.
-   - Upload 1 to 4 photos for automated quality scanning, skin seasonal palette, and face/body shape detection.
+   - Upload 1 to 4 personal photos for automated quality scanning, skin seasonal palette, and face/body shape detection.
    - Enter your Date, Time, and Place of Birth for your Natal Birth Chart.
-3. In **My Wardrobe**:
-   - Click **"🎁 Add Sample Wardrobe"** to populate a capsule, or upload your own clothes.
-4. Check **Today's Outfit**:
-   - See your Wardrobe Illusion stats, diurnal weather projection, cosmic alignment, pre-selected mood, and complete outfit with freshness rating.
+2. In **My Wardrobe**:
+   - Click **"🎁 Add Sample Wardrobe"** to populate a capsule, or upload your own clothes (classified via `gemini-3.8-flash` high-resolution Structured Outputs).
+3. Check **Today's Outfit**:
+   - See your Wardrobe Illusion stats, diurnal weather projection, cosmic alignment, pre-selected mood, and complete outfit with 3-tier top layering & freshness rating.
    - Click **"📌 I'm Wearing This Today!"** to update your wear rotation history.
-5. In **Pieces to Buy**:
-   - Toggle between **Garment View** and **On Model View** to inspect how recommended essentials look standalone and styled on a model figure!
+4. In **Pieces to Buy**:
+   - Inspect each recommended item's cached `3:4` `#F5F5F5` studio product photo and toggle to **🧍 See How It Looks** or **🎨 Exact Shade**.

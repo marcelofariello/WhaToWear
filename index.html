@@ -1813,9 +1813,10 @@ body {
 }
 .shop-visual-stage {
   width: 100%;
-  height: 200px;
+  aspect-ratio: 3 / 4;
+  height: auto;
   border-radius: var(--radius-sm);
-  background: #f7f5f2;
+  background: #F5F5F5;
   border: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -2122,17 +2123,22 @@ body {
 }
 .shop-visual-stage {
   position: relative;
-  height: 250px;
+  aspect-ratio: 3 / 4;
+  height: auto;
   padding: 0;
   overflow: hidden;
-  background: #f3f0ec;
+  background: #F5F5F5;
 }
 .shop-photo-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
+  background: #F5F5F5;
   transition: transform 0.35s ease;
+}
+.shop-photo-img.is-model-view {
+  object-fit: cover;
 }
 .shop-card:hover .shop-photo-img {
   transform: scale(1.03);
@@ -2141,6 +2147,24 @@ body {
   position: absolute;
   inset: 0;
   background: linear-gradient(to top, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.0) 48%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.shop-visual-stage.is-model-mode .shop-photo-overlay {
+  opacity: 1;
+}
+.shop-studio-status {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #1f2937;
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
   pointer-events: none;
 }
 .shop-photo-color-pill {
@@ -8841,6 +8865,206 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName, componentC
   };
 }
 
+let activeModalRecognitionToken = 0;
+
+function shouldAttemptBackendApi() {
+  return typeof window !== 'undefined' && Boolean(window.location) && window.location.protocol !== 'file:';
+}
+
+function normalizeRecognizedSeason(seasonRaw) {
+  const s = String(seasonRaw || '').trim().toLowerCase();
+  if (s === 'fall') return 'autumn';
+  const valid = ['all-season', 'spring-summer', 'autumn-winter', 'spring', 'summer', 'autumn', 'winter'];
+  return valid.includes(s) ? s : 'all-season';
+}
+
+function resolveColorSwatchFromName(colorNameStr, fallbackHex) {
+  const cleanLabel = String(colorNameStr || '').trim();
+  const norm = cleanLabel.toLowerCase().replace(/\bgrey\b/g, 'gray').replace(/[^a-z0-9]+/g, ' ').trim();
+  if (!norm) {
+    return { hex: fallbackHex || '#4a7db5', colorName: cleanLabel || 'Neutral' };
+  }
+
+  let bestPalette = null;
+  let bestScore = 0;
+  const targetTokens = norm.split(' ').filter(Boolean);
+
+  for (const c of COLOR_NAME_PALETTE) {
+    const pNorm = c.name.toLowerCase().replace(/\bgrey\b/g, 'gray').replace(/[^a-z0-9]+/g, ' ').trim();
+    if (pNorm === norm) {
+      bestPalette = c;
+      bestScore = 1000;
+      break;
+    }
+    const pTokens = pNorm.split(' ').filter(Boolean);
+    const shared = targetTokens.filter(t => pTokens.includes(t)).length;
+    const partial = (norm.includes(pNorm) || pNorm.includes(norm)) ? 1.5 : 0;
+    const score = shared * 10 + partial - Math.abs(pTokens.length - targetTokens.length) * 0.5;
+    if (shared > 0 || partial > 0) {
+      if (score > bestScore) {
+        bestScore = score;
+        bestPalette = c;
+      }
+    }
+  }
+
+  if (!bestPalette) {
+    return { hex: fallbackHex || '#4a7db5', colorName: cleanLabel };
+  }
+
+  const toHex2 = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+  return {
+    hex: `#${toHex2(bestPalette.r)}${toHex2(bestPalette.g)}${toHex2(bestPalette.b)}`,
+    colorName: cleanLabel
+  };
+}
+
+function inferFormalityFromRecognizedPiece(category, subType, fallbackFormality = 'casual') {
+  const s = `${category || ''} ${subType || ''}`.toLowerCase();
+  if (/tuxedo|suit|oxford|derby|dress shoe|pump|stiletto|gown|cocktail/.test(s)) return 'formal';
+  if (/dress shirt|poplin|twill|blouse|trouser|slacks|blazer|sport coat|loafer|brogue|trench|overcoat/.test(s)) return 'smart-casual';
+  if (/chino|polo|sweater|knit|cardigan|henley|ankle boot|chelsea|overshirt|midi skirt|silk/.test(s)) return 'smart-casual';
+  if (/jogger|track|athletic|running shoe|legging|yoga|gym|sport/.test(s)) return 'sporty';
+  if (/t-shirt|tee|hoodie|sweatshirt|jean|denim|short|sneaker|sandal|flip-flop|tank/.test(s)) return 'casual';
+  return fallbackFormality || 'casual';
+}
+
+function mapRecognizedCategoryToConfig(rawCat) {
+  const cfg = getStyleConfig();
+  const normalized = String(rawCat || '').trim().toLowerCase();
+  if (cfg.categories[normalized]) return normalized;
+  if (normalized === 'dresses') return cfg.categories.bottoms ? 'bottoms' : 'tops';
+  return cfg.categories.tops ? 'tops' : Object.keys(cfg.categories)[0] || 'tops';
+}
+
+function ensureSubTypeOptionSelected(cat, subType) {
+  updateCategoryDropdown(cat);
+  const catEl = document.getElementById('item-category');
+  if (catEl) catEl.value = cat;
+
+  updateSubTypes(subType);
+  const sel = document.getElementById('item-subtype');
+  if (sel && subType) {
+    const targetLower = subType.toLowerCase();
+    const existingOpt = Array.from(sel.options).find(o => o.value.toLowerCase() === targetLower);
+    if (existingOpt) {
+      sel.value = existingOpt.value;
+    } else {
+      const customOpt = Array.from(sel.options).find(o => o.value === '__custom__');
+      const opt = document.createElement('option');
+      opt.value = subType;
+      opt.textContent = subType;
+      if (customOpt) sel.insertBefore(opt, customOpt);
+      else sel.appendChild(opt);
+      sel.value = subType;
+    }
+  }
+  updateLengthOptions();
+  autoSelectLengthBySubtype();
+}
+
+async function recognizeGarmentViaApi(dataUrl, fileNameHint = '') {
+  if (!shouldAttemptBackendApi() || !dataUrl || !dataUrl.startsWith('data:image/')) {
+    return null;
+  }
+  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  if (!match) return null;
+  const [, mimeType, imageBase64] = match;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+  try {
+    const response = await fetch('/api/recognize-garment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        imageBase64,
+        mimeType,
+        fileNameHint: String(fileNameHint || ''),
+        styleGender: userProfile.styleGender || 'male',
+        availableSubTypes: getSubTypes()
+      })
+    });
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    if (!data || !data.category || !data.subcategory || !data.primaryColor || !data.season || typeof data.confidenceScore !== 'number') {
+      return null;
+    }
+
+    return {
+      category: mapRecognizedCategoryToConfig(data.category),
+      subcategory: String(data.subcategory).trim(),
+      primaryColor: String(data.primaryColor).trim(),
+      season: normalizeRecognizedSeason(data.season),
+      confidenceScore: Math.max(0, Math.min(1, Number(data.confidenceScore)))
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function hydrateModalWithGeminiRecognition(token, dataUrl, fileNameHint, fallbackAnalysis) {
+  const modal = document.getElementById('item-modal');
+  const badge = document.getElementById('detected-color-badge');
+  const editId = document.getElementById('edit-id')?.value;
+
+  if (badge && !editId && shouldAttemptBackendApi()) {
+    badge.textContent = `✨ Refining ID with Gemini AI... (${fallbackAnalysis.colorName} ${fallbackAnalysis.subType})`;
+    badge.style.display = 'inline-flex';
+  }
+
+  const aiResult = await recognizeGarmentViaApi(dataUrl, fileNameHint);
+  if (token !== activeModalRecognitionToken) return;
+  if (!modal || !modal.classList.contains('active')) return;
+
+  if (!aiResult) {
+    if (badge) {
+      badge.textContent = `✨ Identified: ${fallbackAnalysis.colorName} ${fallbackAnalysis.subType}`;
+    }
+    return;
+  }
+
+  const resolvedSwatch = resolveColorSwatchFromName(aiResult.primaryColor, fallbackAnalysis.hex);
+  const pct = Math.round(aiResult.confidenceScore * 100);
+  const currentEditId = document.getElementById('edit-id')?.value;
+
+  const colorInput = document.getElementById('item-color');
+  if (colorInput) colorInput.value = resolvedSwatch.hex;
+
+  if (!currentEditId) {
+    ensureSubTypeOptionSelected(aiResult.category, aiResult.subcategory);
+    const inferredLength = getDefaultLengthForPiece(aiResult.category, aiResult.subcategory);
+    if (inferredLength) updateLengthOptions(inferredLength);
+
+    const inferredFormality = inferFormalityFromRecognizedPiece(aiResult.category, aiResult.subcategory, fallbackAnalysis.formality);
+    updateFormalityDropdown(inferredFormality);
+
+    const seasonSel = document.getElementById('item-season');
+    if (seasonSel) {
+      seasonSel.value = aiResult.season;
+      seasonSel.dataset.userEdited = 'false';
+    }
+
+    const nameInput = document.getElementById('item-name');
+    const selectedSub = document.getElementById('item-subtype')?.value || aiResult.subcategory;
+    if (nameInput && (!nameInput.value.trim() || nameInput.dataset.autoFilled === 'true')) {
+      nameInput.value = `${resolvedSwatch.colorName} ${selectedSub}`;
+      nameInput.dataset.autoFilled = 'true';
+    }
+  }
+
+  if (badge) {
+    badge.textContent = `✨ Gemini AI: ${resolvedSwatch.colorName} ${aiResult.subcategory} (${pct}% match)`;
+    badge.style.display = 'inline-flex';
+  }
+  toast(`🤖 Gemini identified ${resolvedSwatch.colorName} ${aiResult.subcategory} (${pct}% confidence)`);
+}
+
 function isImageFile(file) {
   if (!file) return false;
   if (file.type && file.type.startsWith('image/')) return true;
@@ -8860,6 +9084,7 @@ function handlePhotoUpload(event) {
 }
 
 function loadPhotoIntoItemModalFromSrc(src, fileNameHint = '') {
+  const token = ++activeModalRecognitionToken;
   const img = new Image();
   img.crossOrigin = 'anonymous';
   img.onload = () => {
@@ -8869,7 +9094,7 @@ function loadPhotoIntoItemModalFromSrc(src, fileNameHint = '') {
       currentItemPhoto = prep.dataUrl;
 
       showPhotoPreview(currentItemPhoto, false);
-      autoDetectColorAndDetails(
+      const localAnalysis = autoDetectColorAndDetails(
         prep.ctx,
         prep.width,
         prep.height,
@@ -8878,6 +9103,7 @@ function loadPhotoIntoItemModalFromSrc(src, fileNameHint = '') {
         fileNameHint,
         prep.componentCount || 1
       );
+      hydrateModalWithGeminiRecognition(token, prep.dataUrl, fileNameHint, localAnalysis);
     } catch {
       currentItemOriginalPhoto = src;
       currentItemPhoto = src;
@@ -8916,6 +9142,7 @@ function showPhotoPreview(src) {
 
 function removePhoto(e) {
   if (e) e.stopPropagation();
+  activeModalRecognitionToken++;
   currentItemPhoto = null;
   currentItemOriginalPhoto = null;
   const preview = document.getElementById('photo-preview');
@@ -9003,6 +9230,7 @@ function autoDetectColorAndDetails(ctx, w, h, fgMask, bbox, fileNameHint = '', c
   }
 
   toast(`✨ Identified ${analysis.colorName} ${currentSubtype}!`);
+  return analysis;
 }
 
 function extractDroppedImageUrl(dt) {
@@ -9414,7 +9642,7 @@ function createDraftPieceFromSrc(src, rawFileName) {
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => {
+    img.onload = async () => {
       try {
         const prep = preparePhotoForAnalysis(img);
         const analysis = analyzeGarmentPhotoVision(
@@ -9426,18 +9654,45 @@ function createDraftPieceFromSrc(src, rawFileName) {
           rawFileName,
           prep.componentCount || 1
         );
+
+        let category = analysis.category;
+        let subType = analysis.subType;
+        let length = analysis.length;
+        let season = analysis.season || 'all-season';
+        let hex = analysis.hex;
+        let colorName = analysis.colorName;
+        let formality = analysis.formality;
+        let name = analysis.name;
+        let visionNote = analysis.visionNote || 'Vision ID';
+
+        if (shouldAttemptBackendApi()) {
+          const aiResult = await recognizeGarmentViaApi(prep.dataUrl, rawFileName);
+          if (aiResult) {
+            const swatch = resolveColorSwatchFromName(aiResult.primaryColor, analysis.hex);
+            category = aiResult.category;
+            subType = aiResult.subcategory;
+            length = getDefaultLengthForPiece(category, subType) || length;
+            season = aiResult.season;
+            hex = swatch.hex;
+            colorName = swatch.colorName;
+            formality = inferFormalityFromRecognizedPiece(category, subType, analysis.formality);
+            name = `${colorName} ${subType}`;
+            visionNote = `Gemini 3.8 Flash · ${Math.round(aiResult.confidenceScore * 100)}% match`;
+          }
+        }
+
         resolve({
           draftId: generateId(),
-          name: analysis.name,
+          name,
           autoNamed: analysis.autoNamed,
-          category: analysis.category,
-          subType: analysis.subType,
-          length: analysis.length,
-          season: analysis.season || 'all-season',
-          color: analysis.hex,
-          colorName: analysis.colorName,
-          formality: analysis.formality,
-          visionNote: analysis.visionNote || 'Vision ID',
+          category,
+          subType,
+          length,
+          season,
+          color: hex,
+          colorName,
+          formality,
+          visionNote,
           alternatives: analysis.alternatives || [],
           image: prep.dataUrl
         });
@@ -11019,9 +11274,8 @@ function buildGarmentStudioSvgDataUrl(item) {
 
   let silhouetteSvg = '';
   if (sub.includes('blazer') || sub.includes('coat') || sub.includes('jacket') || sub.includes('trench') || sub.includes('parka') || cat === 'outerwear') {
-    // Tailored Jacket / Blazer / Coat on studio hanger
+    // Tailored Jacket / Blazer / Coat (ghost mannequin / flat-lay presentation, no hanger)
     silhouetteSvg = `
-      <path d="M200 62 C200 46 216 42 220 52 C223 60 208 66 200 72 L152 92 L248 92 Z" fill="none" stroke="#b4834e" stroke-width="5" stroke-linecap="round"/>
       <path d="M138 94 L200 76 L262 94 L298 124 L274 236 L250 232 L254 148 L248 278 L152 278 L146 148 L150 232 L126 236 L102 124 Z" fill="${hex}" stroke="${strokeHex}" stroke-width="4" stroke-linejoin="round"/>
       <path d="M168 86 L200 165 L232 86" fill="none" stroke="${strokeHex}" stroke-width="3.5" stroke-linejoin="round"/>
       <path d="M200 165 L200 278" stroke="${strokeHex}" stroke-width="2.5"/>
@@ -11089,16 +11343,12 @@ function buildGarmentStudioSvgDataUrl(item) {
     `;
   }
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 340">
-    <defs>
-      <radialGradient id="bg" cx="50%" cy="45%" r="60%">
-        <stop offset="0%" stop-color="#ffffff"/>
-        <stop offset="100%" stop-color="#ece7e1"/>
-      </radialGradient>
-    </defs>
-    <rect width="400" height="340" fill="url(#bg)"/>
-    <ellipse cx="200" cy="298" rx="88" ry="12" fill="rgba(0,0,0,0.08)"/>
-    ${silhouetteSvg}
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 480">
+    <rect width="360" height="480" fill="#F5F5F5"/>
+    <ellipse cx="180" cy="398" rx="92" ry="12" fill="rgba(0,0,0,0.06)"/>
+    <g transform="translate(180 232) scale(0.84) translate(-200 -180)">
+      ${silhouetteSvg}
+    </g>
   </svg>`;
   return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
 }
@@ -11169,24 +11419,237 @@ const REAL_FASHION_PHOTOS = {
   }
 };
 
-function getShopPhotoStageHtml(item, mode) {
+const SHOP_PHOTO_DB_NAME = 'wtw_shop_photo_cache_v1';
+const SHOP_PHOTO_STORE_NAME = 'garmentPhotos';
+const shopStudioMemCache = {};
+const shopStudioInflight = new Map();
+let shopRenderSequence = 0;
+let lastRenderedShopItems = [];
+let shopStudioApiCooldownUntil = 0;
+let shopPhotoDbPromise = null;
+
+function getShopStudioItemKey(item) {
+  return [
+    String(item?.name || '').trim().toLowerCase(),
+    String(item?.category || '').trim().toLowerCase(),
+    String(item?.subType || '').trim().toLowerCase(),
+    String(item?.length || '').trim().toLowerCase(),
+    String(item?.formality || '').trim().toLowerCase(),
+    String(item?.color || '').trim().toLowerCase(),
+    String(item?.colorName || '').trim().toLowerCase(),
+    String(userProfile?.styleGender || 'male').trim().toLowerCase(),
+    '3:4'
+  ].join('|');
+}
+
+function openShopPhotoDB() {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+  if (shopPhotoDbPromise) return shopPhotoDbPromise;
+  shopPhotoDbPromise = new Promise((resolve) => {
+    try {
+      const req = indexedDB.open(SHOP_PHOTO_DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(SHOP_PHOTO_STORE_NAME)) {
+          db.createObjectStore(SHOP_PHOTO_STORE_NAME, { keyPath: 'key' });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+  return shopPhotoDbPromise;
+}
+
+async function readShopPhotoCacheIDB(key) {
+  const db = await openShopPhotoDB();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(SHOP_PHOTO_STORE_NAME, 'readonly');
+      const req = tx.objectStore(SHOP_PHOTO_STORE_NAME).get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function writeShopPhotoCacheIDB(key, record) {
+  const db = await openShopPhotoDB();
+  if (!db) return;
+  try {
+    const tx = db.transaction(SHOP_PHOTO_STORE_NAME, 'readwrite');
+    tx.objectStore(SHOP_PHOTO_STORE_NAME).put({ key, ...record });
+  } catch { /* ignore quota or private-mode IDB errors */ }
+}
+
+async function deleteShopPhotoCacheIDB(key) {
+  const db = await openShopPhotoDB();
+  if (!db) return;
+  try {
+    const tx = db.transaction(SHOP_PHOTO_STORE_NAME, 'readwrite');
+    tx.objectStore(SHOP_PHOTO_STORE_NAME).delete(key);
+  } catch { /* ignore */ }
+}
+
+function isShopTabVisible() {
+  return Boolean(document.getElementById('tab-shop')?.classList.contains('active'));
+}
+
+async function requestShopStudioPhoto(item, { allowRemote = true } = {}) {
+  if (!item) return null;
+  const key = getShopStudioItemKey(item);
+  if (shopStudioMemCache[key]?.imageUrl) {
+    item.generatedPhoto = shopStudioMemCache[key].imageUrl;
+    return shopStudioMemCache[key];
+  }
+
+  const cachedIdb = await readShopPhotoCacheIDB(key);
+  if (cachedIdb?.imageUrl) {
+    shopStudioMemCache[key] = cachedIdb;
+    item.generatedPhoto = cachedIdb.imageUrl;
+    return cachedIdb;
+  }
+
+  if (!allowRemote || !shouldAttemptBackendApi() || Date.now() < shopStudioApiCooldownUntil) {
+    return null;
+  }
+
+  if (shopStudioInflight.has(key)) {
+    return shopStudioInflight.get(key);
+  }
+
+  const job = (async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 45000);
+    try {
+      const res = await fetch('/api/recommendations/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          name: item.name,
+          category: item.category,
+          subType: item.subType,
+          length: item.length || '',
+          formality: item.formality || 'smart-casual',
+          color: item.color || '#1f2937',
+          colorName: item.colorName || '',
+          styleGender: userProfile.styleGender || 'male',
+          aspectRatio: '3:4'
+        })
+      });
+
+      if (res.status === 503) {
+        shopStudioApiCooldownUntil = Date.now() + 60000;
+        return null;
+      }
+      if (!res.ok) return null;
+
+      const data = await res.json();
+      if (!data?.imageUrl) return null;
+
+      const record = {
+        imageUrl: data.imageUrl,
+        cacheKey: data.cacheKey,
+        model: data.model,
+        aspectRatio: data.aspectRatio || '3:4',
+        cachedAt: Date.now()
+      };
+      shopStudioMemCache[key] = record;
+      item.generatedPhoto = data.imageUrl;
+      await writeShopPhotoCacheIDB(key, record);
+      return record;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+      shopStudioInflight.delete(key);
+    }
+  })();
+
+  shopStudioInflight.set(key, job);
+  return job;
+}
+
+function handleShopStudioImageError(imgEl, idx) {
+  if (!imgEl) return;
+  imgEl.onerror = null;
+  const item = lastRenderedShopItems[idx];
+  if (!item) return;
+
+  const key = getShopStudioItemKey(item);
+  if (item.generatedPhoto && imgEl.src.includes(item.generatedPhoto)) {
+    delete shopStudioMemCache[key];
+    delete item.generatedPhoto;
+    deleteShopPhotoCacheIDB(key);
+  }
+  imgEl.src = buildGarmentStudioSvgDataUrl(item);
+}
+
+async function hydrateShopStudioPhotos(items, seq) {
+  const allowRemote = isShopTabVisible();
+  const queue = items.map((item, idx) => ({ item, idx }));
+  const workerCount = Math.min(2, queue.length);
+
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (queue.length > 0) {
+      if (seq !== shopRenderSequence) return;
+      const next = queue.shift();
+      if (!next) return;
+      const { item, idx } = next;
+
+      const result = await requestShopStudioPhoto(item, { allowRemote });
+      if (seq !== shopRenderSequence) return;
+
+      const stage = document.getElementById(`shop-stage-${idx}`);
+      const activeMode = shopVisualModes[idx] || 'garment';
+      if (stage && activeMode === 'garment') {
+        if (result?.imageUrl) {
+          item.generatedPhoto = result.imageUrl;
+        }
+        stage.classList.toggle('is-model-mode', false);
+        stage.innerHTML = getShopPhotoStageHtml(item, activeMode, idx);
+      }
+    }
+  });
+
+  await Promise.all(workers);
+}
+
+function getShopPhotoStageHtml(item, mode, idx = 0) {
   const effectiveMode = mode || 'garment'; // Always start with the Garment Photo
   const isModel = effectiveMode === 'model';
   const studioFallback = buildGarmentStudioSvgDataUrl(item);
+  const key = getShopStudioItemKey(item);
+  const cachedRecord = shopStudioMemCache[key];
+  const resolvedStudioUrl = item.generatedPhoto || cachedRecord?.imageUrl || '';
+
   const photoUrl = effectiveMode === 'color-cad'
     ? studioFallback
-    : (isModel ? (item.modelPhoto || item.garmentPhoto) : (item.garmentPhoto || studioFallback));
+    : (isModel ? (item.modelPhoto || resolvedStudioUrl || studioFallback) : (resolvedStudioUrl || studioFallback));
 
   const modeLabel = effectiveMode === 'color-cad'
     ? `🎨 Exact Color & Cut Preview · ${item.subType}`
     : isModel
       ? (userProfile.styleGender === 'female' ? '🧍 How It Looks Worn · Feminine Fit' : '🧍 How It Looks Worn · Masculine Fit')
-      : `🧥 Garment Product Photo · ${item.subType}`;
+      : `🧥 Garment Studio Photo · ${item.subType}`;
+
+  const showGeneratingPill = !isModel
+    && effectiveMode === 'garment'
+    && !resolvedStudioUrl
+    && shouldAttemptBackendApi()
+    && Date.now() >= shopStudioApiCooldownUntil;
 
   return `
-    <img class="shop-photo-img" src="${photoUrl}" alt="${escapeHtml(item.name)}" loading="lazy"
-         onerror="this.onerror=null; this.src='${studioFallback}';">
+    <img class="shop-photo-img ${isModel ? 'is-model-view' : ''}" src="${photoUrl}" alt="${escapeHtml(item.name)}" loading="lazy"
+         onerror="handleShopStudioImageError(this, ${idx});">
     <div class="shop-photo-overlay"></div>
+    ${showGeneratingPill ? '<div class="shop-studio-status">✨ Rendering 3:4 Studio Photo...</div>' : ''}
     <div class="shop-photo-color-pill">
       <span style="width:13px;height:13px;border-radius:50%;background:${item.color};border:1.5px solid rgba(0,0,0,0.2);display:inline-block;"></span>
       <span>Shade: ${escapeHtml(item.colorName)}</span>
@@ -11201,15 +11664,15 @@ function setShopVisualMode(idx, mode) {
   const btnGarment = document.getElementById(`btn-garment-${idx}`);
   const btnModel = document.getElementById(`btn-model-${idx}`);
   const btnCad = document.getElementById(`btn-cad-${idx}`);
-  const items = generateShopRecommendations();
-  const item = items[idx];
+  const item = lastRenderedShopItems[idx] || generateShopRecommendations()[idx];
   if (!stage || !item) return;
 
   if (btnGarment) btnGarment.classList.toggle('active', mode === 'garment');
   if (btnModel) btnModel.classList.toggle('active', mode === 'model');
   if (btnCad) btnCad.classList.toggle('active', mode === 'color-cad');
 
-  stage.innerHTML = getShopPhotoStageHtml(item, mode);
+  stage.classList.toggle('is-model-mode', mode === 'model');
+  stage.innerHTML = getShopPhotoStageHtml(item, mode, idx);
 }
 
 function getWardrobePreferenceSummary() {
@@ -11462,11 +11925,17 @@ function renderShopRecommendations() {
     `;
   }
 
+  const seq = ++shopRenderSequence;
   const items = generateShopRecommendations();
+  lastRenderedShopItems = items;
 
   container.innerHTML = items.map((item, idx) => {
     const mode = shopVisualModes[idx] || 'garment'; // Always start with Garment Photo!
-    const stageHtml = getShopPhotoStageHtml(item, mode);
+    const key = getShopStudioItemKey(item);
+    if (shopStudioMemCache[key]?.imageUrl) {
+      item.generatedPhoto = shopStudioMemCache[key].imageUrl;
+    }
+    const stageHtml = getShopPhotoStageHtml(item, mode, idx);
     const safeSub = (item.subType || '').replace(/'/g, "\\'");
     const safeName = (item.name || '').replace(/'/g, "\\'");
 
@@ -11488,7 +11957,7 @@ function renderShopRecommendations() {
         </div>
 
         <!-- Photographic Stage -->
-        <div class="shop-visual-stage" id="shop-stage-${idx}">
+        <div class="shop-visual-stage ${mode === 'model' ? 'is-model-mode' : ''}" id="shop-stage-${idx}">
           ${stageHtml}
         </div>
 
@@ -11524,12 +11993,16 @@ function renderShopRecommendations() {
       </div>
     `;
   }).join('');
+
+  hydrateShopStudioPhotos(items, seq);
 }
 
 function addShopItemToWardrobe(idx) {
-  const items = generateShopRecommendations();
-  const item = items[idx];
+  const item = lastRenderedShopItems[idx] || generateShopRecommendations()[idx];
   if (!item) return;
+
+  const key = getShopStudioItemKey(item);
+  const studioImageUrl = item.generatedPhoto || shopStudioMemCache[key]?.imageUrl || buildGarmentStudioSvgDataUrl(item);
 
   wardrobe.push({
     id: generateId(),
@@ -11539,7 +12012,7 @@ function addShopItemToWardrobe(idx) {
     length: item.length,
     color: item.color,
     formality: item.formality,
-    image: item.garmentPhoto || null
+    image: studioImageUrl || null
   });
 
   saveData();
