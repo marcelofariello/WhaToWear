@@ -4779,6 +4779,10 @@ function toggleDislikedSubType(subType) {
     userProfile.dislikedSubTypes.splice(idx, 1);
   }
   persistDislikes();
+  if (typeof aiShopRecommendations !== 'undefined' && Array.isArray(aiShopRecommendations)) {
+    aiShopRecommendations = aiShopRecommendations.filter(it => !isItemDisliked(it));
+    if (typeof persistSavedShopList === 'function') persistSavedShopList();
+  }
   renderDislikedStylesUI();
   renderOutfit();
   renderShopRecommendations();
@@ -4800,6 +4804,10 @@ function dislikePieceNow(subType, itemName, itemId) {
     saveData();
   }
   persistDislikes();
+  if (typeof aiShopRecommendations !== 'undefined' && Array.isArray(aiShopRecommendations)) {
+    aiShopRecommendations = aiShopRecommendations.filter(it => !isItemDisliked(it));
+    if (typeof persistSavedShopList === 'function') persistSavedShopList();
+  }
   renderDislikedStylesUI();
   renderWardrobe();
   renderOutfit();
@@ -4828,6 +4836,10 @@ function removeCustomDislikedTerm(term) {
   if (!Array.isArray(userProfile.dislikedItemNames)) return;
   userProfile.dislikedItemNames = userProfile.dislikedItemNames.filter(n => n !== term);
   persistDislikes();
+  if (typeof aiShopRecommendations !== 'undefined' && Array.isArray(aiShopRecommendations)) {
+    aiShopRecommendations = aiShopRecommendations.filter(it => !isItemDisliked(it));
+    if (typeof persistSavedShopList === 'function') persistSavedShopList();
+  }
   renderDislikedStylesUI();
   renderOutfit();
   renderShopRecommendations();
@@ -16509,8 +16521,25 @@ async function addEvaluatedShopItemToWardrobe() {
   clearShopEval();
 }
 
-let aiShopRecommendations = null;
-let aiShopGapSummary = '';
+const _savedShopState = safeJSON('wtw_saved_shop_list', null);
+let aiShopRecommendations = (_savedShopState && Array.isArray(_savedShopState.items) && _savedShopState.items.length) ? _savedShopState.items : null;
+let aiShopGapSummary = (_savedShopState && typeof _savedShopState.gapSummary === 'string') ? _savedShopState.gapSummary : '';
+
+function persistSavedShopList() {
+  try {
+    const cleanItems = (Array.isArray(aiShopRecommendations) ? aiShopRecommendations : []).map(it => {
+      const copy = { ...it };
+      if (copy.generatedPhoto && copy.generatedPhoto.length > 40000) delete copy.generatedPhoto;
+      if (copy.modelPhoto && copy.modelPhoto.length > 40000) delete copy.modelPhoto;
+      return copy;
+    });
+    localStorage.setItem('wtw_saved_shop_list', JSON.stringify({
+      items: cleanItems,
+      gapSummary: aiShopGapSummary || '',
+      savedAt: Date.now()
+    }));
+  } catch {}
+}
 
 async function refreshShopSuggestionsWithAI() {
   const geminiKey = (
@@ -16519,6 +16548,9 @@ async function refreshShopSuggestionsWithAI() {
     ''
   ).trim();
   if (!geminiKey) {
+    aiShopGapSummary = '';
+    aiShopRecommendations = generateShopRecommendations();
+    persistSavedShopList();
     renderShopRecommendations();
     toast('Refreshed local suggestions (add Gemini API key in Settings for full AI analysis)');
     return;
@@ -16535,18 +16567,12 @@ async function refreshShopSuggestionsWithAI() {
   try {
     const bp = buildPersonalStyleBlueprint();
     const sInfo = getLocationSeasonInfo();
-    const compactWardrobe = wardrobe.map(w => ({
-      name: w.name,
-      category: w.category,
-      subType: w.subType,
-      color: w.colorName || getColorNameFromHex(w.color),
-      secondaryColor: w.secondaryColor ? (w.secondaryColorName || getColorNameFromHex(w.secondaryColor)) : null,
-      pattern: w.pattern || 'solid',
-      formality: w.formality,
-      season: w.season || 'all-season',
-      wearCount: getItemWearCount(w),
-      aiDescription: w.aiDescription || ''
-    }));
+    const compactWardrobe = typeof compactWardrobeForAI === 'function'
+      ? compactWardrobeForAI(wardrobe)
+      : wardrobe.map(w => ({
+          name: w.name, category: w.category, subType: w.subType,
+          color: w.colorName || getColorNameFromHex(w.color), formality: w.formality
+        }));
 
     const prompt = [
       `You are a master wardrobe strategist. Perform a FULL analysis of the user's wardrobe and style objectives, then rank the TOP 10 needed items to buy.`,
@@ -16600,6 +16626,7 @@ async function refreshShopSuggestionsWithAI() {
       };
     }).filter(it => !isItemDisliked(it));
 
+    persistSavedShopList();
     renderShopRecommendations();
     toast(`🤖 Ranked top ${aiShopRecommendations.length} needed pieces for your wardrobe!`);
   } catch (err) {
@@ -16654,9 +16681,11 @@ function renderShopRecommendations() {
   }
 
   const seq = ++shopRenderSequence;
-  const items = (Array.isArray(aiShopRecommendations) && aiShopRecommendations.length > 0)
-    ? aiShopRecommendations
-    : generateShopRecommendations();
+  if (!Array.isArray(aiShopRecommendations) || aiShopRecommendations.length === 0) {
+    aiShopRecommendations = generateShopRecommendations();
+    persistSavedShopList();
+  }
+  const items = aiShopRecommendations.filter(it => !isItemDisliked(it));
   lastRenderedShopItems = items;
 
   container.innerHTML = items.map((item, idx) => {
@@ -16745,6 +16774,10 @@ function addShopItemToWardrobe(idx) {
     image: studioImageUrl || null
   });
 
+  if (Array.isArray(aiShopRecommendations)) {
+    aiShopRecommendations = aiShopRecommendations.filter(it => it !== item && !(it.name === item.name && it.subType === item.subType));
+    persistSavedShopList();
+  }
   saveData();
   renderWardrobe();
   renderWardrobeIllusionSection();
