@@ -9969,25 +9969,107 @@ let activeAIDailyOutfit = null;
 let aiDailyOutfitInFlight = false;
 let lastAIDailyAttemptKey = null;
 
+function compactWardrobeForAI(items) {
+  return (items || []).filter(it => it && !isItemDisliked(it)).map(it => {
+    const obj = {
+      id: it.id,
+      name: it.name,
+      category: it.category,
+      subType: it.subType,
+      color: it.colorName || getColorNameFromHex(it.color),
+      formality: it.formality,
+      length: getItemLength(it),
+      wearCount: getItemWearCount(it)
+    };
+    if (it.secondaryColor) obj.secondaryColor = it.secondaryColorName || getColorNameFromHex(it.secondaryColor);
+    if (it.tertiaryColor) obj.tertiaryColor = it.tertiaryColorName || getColorNameFromHex(it.tertiaryColor);
+    if (it.pattern && it.pattern !== 'solid') obj.pattern = it.pattern;
+    if (it.season && it.season !== 'all-season') obj.season = it.season;
+    if (it.aiDescription) obj.aiDescription = String(it.aiDescription).slice(0, 110);
+    return obj;
+  });
+}
+
+function hydrateAIDailyOutfitFromPicked(picked, currentTemp) {
+  if (!picked || !wardrobe || wardrobe.length < 3) return null;
+  const findById = (id) => id ? wardrobe.find(w => w.id === id) || null : null;
+  const top = findById(picked.topId);
+  const bottom = findById(picked.bottomId);
+  const shoe = findById(picked.shoeId);
+  if (!top || !bottom || !shoe) return null;
+
+  const bp = buildPersonalStyleBlueprint();
+  const midLayer = findById(picked.midLayerId);
+  const outerwear = findById(picked.outerwearId);
+  const beltItem = findById(picked.beltId);
+  const accessory = findById(picked.accessoryId);
+  const actualLayers = 1 + (midLayer ? 1 : 0) + (outerwear ? 1 : 0);
+  const beltRec = beltItem
+    ? { beltItem, status: 'matched', summary: `AI paired ${beltItem.name}` }
+    : proposeBeltForOutfit(shoe, bottom, top, outerwear || midLayer, wardrobe.filter(isBeltItem));
+  const outfit = {
+    top,
+    midLayer,
+    outerwear,
+    proposedMidLayer: null,
+    bottom,
+    shoe,
+    beltRec,
+    accessory,
+    targetLayers: actualLayers,
+    layerInfo: { count: actualLayers, temp: currentTemp, reason: `${currentTemp}°C · AI Stylist chose ${actualLayers} layer(s)` },
+    blueprint: bp,
+    personalEval: scoreOutfitPersonalAndStyle(top, midLayer, outerwear, bottom, shoe, beltRec.beltItem, accessory, bp),
+    freshness: evaluateOutfitFreshness(top, midLayer, outerwear, bottom, shoe),
+    aiDailyMeta: {
+      alignmentScore: typeof picked.image_alignment_score === 'number' ? picked.image_alignment_score : 85,
+      alignmentNote: picked.image_alignment_note || '',
+      reason: picked.decision_reason || ''
+    }
+  };
+  outfit.decisionProfile = generateHowToWearGuide(outfit, bp);
+  return outfit;
+}
+
 function getAIDailyOutfitCacheKey() {
   const todayStr = new Date().toISOString().slice(0, 10);
-  const temp = weather && typeof weather.temp === 'number' ? Math.round(weather.temp) : 21;
-  const desc = (weather && (weather.desc || weather.description)) ? (weather.desc || weather.description) : 'clear';
+  const tempBand = weather && typeof weather.temp === 'number' ? Math.round(weather.temp / 3) * 3 : 21;
+  const mainCond = (weather && weather.main) ? weather.main : 'clear';
   const cityKey = (weather && weather.city) || getSettings().city || '';
   const sInfo = typeof getLocationSeasonInfo === 'function' ? getLocationSeasonInfo() : { id: 'spring', hemisphere: 'south' };
   const form = (typeof getDayFormality === 'function') ? getDayFormality() : 'casual';
   const arch = (userProfile && userProfile.personaArchetype) || 'quiet-luxury';
-  return `${todayStr}|${cityKey}|${sInfo.id}|${sInfo.hemisphere}|${temp}|${desc}|${layerOverride}|${form}|${wardrobe.length}|${arch}`;
+  return `${todayStr}|${cityKey}|${sInfo.id}|${sInfo.hemisphere}|${tempBand}|${mainCond}|${layerOverride}|${form}|${arch}`;
+}
+
+function restoreCachedAIDailyOutfit(cacheKey) {
+  try {
+    const saved = safeJSON('wtw_ai_daily_outfit', null);
+    if (saved && saved.cacheKey === cacheKey && saved.picked) {
+      const currentTemp = weather && typeof weather.temp === 'number' ? weather.temp : 21;
+      const outfit = hydrateAIDailyOutfitFromPicked(saved.picked, currentTemp);
+      if (outfit) {
+        activeAIDailyOutfit = { cacheKey, outfit };
+        return true;
+      }
+    }
+  } catch {}
+  return false;
 }
 
 function maybeTriggerAIDailyOutfit(forceRefresh = false, avoidIds = []) {
   if (typeof activeSpecialOccasion !== 'undefined' && activeSpecialOccasion) return;
   if (typeof getActiveTripContext === 'function' && getActiveTripContext()) return;
+  if (!weather) return; // Wait for live weather before spending tokens
   if (!wardrobe || wardrobe.length < 3) return;
   const geminiKey = (localStorage.getItem('wtw_gemini_apikey') || '').trim();
   if (!geminiKey) return;
   const cacheKey = getAIDailyOutfitCacheKey();
   if (!forceRefresh && activeAIDailyOutfit && activeAIDailyOutfit.cacheKey === cacheKey) return;
+  if (!forceRefresh && restoreCachedAIDailyOutfit(cacheKey)) {
+    renderOutfit();
+    return;
+  }
   if (!forceRefresh && lastAIDailyAttemptKey === cacheKey) return;
   if (aiDailyOutfitInFlight) return;
   lastAIDailyAttemptKey = cacheKey;
@@ -9999,28 +10081,14 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [] }) 
   try {
     const bp = buildPersonalStyleBlueprint();
     const currentTemp = weather && typeof weather.temp === 'number' ? weather.temp : 21;
-    const cond = (weather && weather.description) ? weather.description : 'clear';
+    const cond = (weather && (weather.desc || weather.description)) ? (weather.desc || weather.description) : 'clear';
     const sInfo = getLocationSeasonInfo();
     const targetFormality = getDayFormality();
     const layerRuleText = layerOverride === 'auto'
       ? `Choose the most sensible number of top layers (1, 2, or 3) for ${currentTemp}°C ${cond}. Do NOT over-layer in warm weather (23°C+ usually needs 1 layer, maybe 2 only if rain/evening chill).`
       : `User locked ${layerOverride} top layer(s).`;
 
-    const compactWardrobe = wardrobe.filter(it => !isItemDisliked(it)).map(it => ({
-      id: it.id,
-      name: it.name,
-      category: it.category,
-      subType: it.subType,
-      color: it.colorName || getColorNameFromHex(it.color),
-      secondaryColor: it.secondaryColor ? (it.secondaryColorName || getColorNameFromHex(it.secondaryColor)) : null,
-      tertiaryColor: it.tertiaryColor ? (it.tertiaryColorName || getColorNameFromHex(it.tertiaryColor)) : null,
-      pattern: it.pattern || 'solid',
-      formality: it.formality,
-      length: getItemLength(it),
-      season: it.season || 'all-season',
-      wearCount: getItemWearCount(it),
-      aiDescription: it.aiDescription || ''
-    }));
+    const compactWardrobe = compactWardrobeForAI(wardrobe);
 
     const prompt = [
       `You are the master personal stylist for WhaToWear. Pick today's best outfit from the user's wardrobe JSON.`,
@@ -10054,42 +10122,12 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [] }) 
     const jm = raw.match(/\{[\s\S]*\}/);
     if (!jm) return;
     const picked = JSON.parse(jm[0]);
-    const findById = (id) => id ? wardrobe.find(w => w.id === id) || null : null;
-    const top = findById(picked.topId);
-    const bottom = findById(picked.bottomId);
-    const shoe = findById(picked.shoeId);
-    if (!top || !bottom || !shoe) return;
-
-    const midLayer = findById(picked.midLayerId);
-    const outerwear = findById(picked.outerwearId);
-    const beltItem = findById(picked.beltId);
-    const accessory = findById(picked.accessoryId);
-    const actualLayers = 1 + (midLayer ? 1 : 0) + (outerwear ? 1 : 0);
-    const beltRec = beltItem
-      ? { beltItem, status: 'matched', summary: `AI paired ${beltItem.name}` }
-      : proposeBeltForOutfit(shoe, bottom, top, outerwear || midLayer, wardrobe.filter(isBeltItem));
-    const outfit = {
-      top,
-      midLayer,
-      outerwear,
-      proposedMidLayer: null,
-      bottom,
-      shoe,
-      beltRec,
-      accessory,
-      targetLayers: actualLayers,
-      layerInfo: { count: actualLayers, temp: currentTemp, reason: `${currentTemp}°C · AI Stylist chose ${actualLayers} layer(s)` },
-      blueprint: bp,
-      personalEval: scoreOutfitPersonalAndStyle(top, midLayer, outerwear, bottom, shoe, beltRec.beltItem, accessory, bp),
-      freshness: evaluateOutfitFreshness(top, midLayer, outerwear, bottom, shoe),
-      aiDailyMeta: {
-        alignmentScore: typeof picked.image_alignment_score === 'number' ? picked.image_alignment_score : 85,
-        alignmentNote: picked.image_alignment_note || '',
-        reason: picked.decision_reason || ''
-      }
-    };
-    outfit.decisionProfile = generateHowToWearGuide(outfit, bp);
+    const outfit = hydrateAIDailyOutfitFromPicked(picked, currentTemp);
+    if (!outfit) return;
     activeAIDailyOutfit = { cacheKey, outfit };
+    try {
+      localStorage.setItem('wtw_ai_daily_outfit', JSON.stringify({ cacheKey, picked, savedAt: Date.now() }));
+    } catch {}
     renderOutfit();
   } catch (e) {
     console.warn('AI daily outfit error:', e);
@@ -15705,8 +15743,18 @@ async function hydrateShopStudioPhotos(items, seq) {
   await Promise.all(workers);
 }
 
-const shopCardAICache = {};
+const shopCardAICache = safeJSON('wtw_shop_card_ai_cache', {}) || {};
 const shopCardAIInflight = new Set();
+
+function persistShopCardAICache() {
+  try {
+    const keys = Object.keys(shopCardAICache);
+    if (keys.length > 25) {
+      keys.slice(0, keys.length - 25).forEach(k => delete shopCardAICache[k]);
+    }
+    localStorage.setItem('wtw_shop_card_ai_cache', JSON.stringify(shopCardAICache));
+  } catch {}
+}
 
 async function callGeminiImageGenerate(geminiKey, promptText) {
   if (!geminiKey || !promptText) return null;
@@ -15859,6 +15907,7 @@ async function enrichShopCardModeWithAI(idx, mode) {
     console.warn('Shop card AI enrichment error:', err);
   } finally {
     shopCardAIInflight.delete(cacheKey);
+    persistShopCardAICache();
     const liveStage = document.getElementById(`shop-stage-${idx}`);
     if (liveStage && (shopVisualModes[idx] || 'garment') === mode) {
       liveStage.innerHTML = getShopPhotoStageHtml(item, mode, idx, false);
@@ -15966,12 +16015,6 @@ function setShopVisualMode(idx, mode) {
 
   stage.classList.toggle('is-model-mode', mode === 'model');
   stage.innerHTML = getShopPhotoStageHtml(item, mode, idx);
-
-  const geminiKey = (localStorage.getItem('wtw_gemini_apikey') || '').trim();
-  const baseKey = getShopStudioItemKey(item);
-  if (geminiKey && !shopCardAICache[`${baseKey}|${mode}`]) {
-    enrichShopCardModeWithAI(idx, mode);
-  }
 }
 
 function getWardrobePreferenceSummary() {
@@ -18353,7 +18396,7 @@ function buildMasterPersonalContextForAI() {
     `- Disliked Styles/Items (NEVER recommend): ${JSON.stringify({ styles: userProfile.dislikedStyles || [], subTypes: userProfile.dislikedSubTypes || [], names: userProfile.dislikedItemNames || [] })}`
   );
 
-  if (pa.aiDetailedDescription) {
+  if (!own?.master_north_star_description && pa.aiDetailedDescription) {
     lines.push(`- AI PERSONAL COLOR & SILHOUETTE DOSSIER (from user photos): ${pa.aiDetailedDescription}`);
   }
   if (Array.isArray(pa.bestColors) && pa.bestColors.length) {
@@ -18375,7 +18418,7 @@ function buildMasterPersonalContextForAI() {
     lines.push(`- AI Best Metals & Accessories: ${pa.metalsAndAccents}`);
   }
 
-  if (ia.aiDetailedDescription) {
+  if (!own?.master_north_star_description && ia.aiDetailedDescription) {
     lines.push(`- AI PERSONA & DESIRED STYLE DOSSIER (from inspiration photos): ${ia.aiDetailedDescription}`);
   }
   if (Array.isArray(ia.aestheticPillars) && ia.aestheticPillars.length) {
