@@ -7200,10 +7200,18 @@ function setOccasionOverride(formalityId) {
   }
 }
 
+function getItemRichDescriptor(item) {
+  if (!item) return '';
+  return [item.aiDescription, item.subType, item.name, item.pattern, item.formality, item.length]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
 function inferItemSeasonSuitability(item, { forceRecalc = false } = {}) {
   if (!item) return 'all-season';
   if (!forceRecalc && item.season && item.season !== 'auto') return item.season;
-  const sub = cleanGarmentType(item.subType || item.name || '').toLowerCase();
+  const sub = [item.aiDescription, cleanGarmentType(item.subType || item.name || '')].filter(Boolean).join(' ').toLowerCase();
   const cat = String(item.category || '').toLowerCase();
   const len = String(item.length || '').toLowerCase() || getDefaultLengthForPiece(cat, sub);
 
@@ -8239,7 +8247,7 @@ function scoreOutfitPersonalAndStyle(top, midLayer, outer, bottom, shoe, beltIte
   // 2. Face Shape Neckline & Collar Cloth Type Match (Layer 1 + Layer 2/3 framing face)
   let faceAligned = false;
   topStack.forEach((it, idx) => {
-    const text = ((it.subType || '') + ' ' + (it.name || '')).toLowerCase();
+    const text = getItemRichDescriptor(it);
     if (blueprint.faceRule.recommendedRegex.test(text)) {
       personalScore += (idx === 0 ? 22 : 16);
       if (!faceAligned) {
@@ -8253,8 +8261,8 @@ function scoreOutfitPersonalAndStyle(top, midLayer, outer, bottom, shoe, beltIte
   });
 
   // 3. Body Silhouette Cloth Type & Proportion Balance
-  const topComboText = topStack.map(i => (i.subType || '') + ' ' + (i.name || '')).join(' ').toLowerCase();
-  const botText = bottom ? ((bottom.subType || '') + ' ' + (bottom.name || '')).toLowerCase() : '';
+  const topComboText = topStack.map(i => getItemRichDescriptor(i)).join(' ');
+  const botText = bottom ? getItemRichDescriptor(bottom) : '';
   if (blueprint.bodyRule.goodTopRegex.test(topComboText)) {
     personalScore += 24;
   }
@@ -8267,9 +8275,21 @@ function scoreOutfitPersonalAndStyle(top, midLayer, outer, bottom, shoe, beltIte
 
   // 4. Desired Style Decision (Archetype + Impressions + User Style Statement + Inspo Colors)
   const archRule = blueprint.archRule;
-  const fullText = allItems.map(i => (i.subType || '') + ' ' + (i.name || '')).join(' ').toLowerCase();
+  const fullText = allItems.map(i => getItemRichDescriptor(i)).join(' ');
   if (archRule.keywordRegex.test(fullText)) {
     personalScore += 36;
+  }
+
+  // 4b. AI Description Fabric, Texture & Occasion Coherence across paired pieces
+  const aiDescs = allItems.map(i => (i.aiDescription || '').toLowerCase()).filter(Boolean);
+  if (aiDescs.length >= 2) {
+    const lightCount = aiDescs.filter(t => /\b(linen|lightweight|breathable|chambray|cotton|chino|summer)\b/.test(t)).length;
+    const warmCount = aiDescs.filter(t => /\b(wool|cashmere|knit|ribbed|fleece|flannel|corduroy|heavy|winter)\b/.test(t)).length;
+    const tailoredCount = aiDescs.filter(t => /\b(tailored|structured|blazer|oxford|pleated|dress|leather|polished)\b/.test(t)).length;
+    const athleticCount = aiDescs.filter(t => /\b(athletic|gym|sport|sweatpant|jogger|mesh|nylon|running)\b/.test(t)).length;
+    if (lightCount >= 2 || warmCount >= 2) personalScore += 12;
+    if (tailoredCount >= 2) personalScore += 10;
+    if (tailoredCount >= 1 && athleticCount >= 1) personalScore -= 20;
   }
   const neutralRatio = allItems.filter(i => isNeutralColor(i.color)).length / Math.max(1, allItems.length);
   const neutralFit = 1 - Math.abs(neutralRatio - archRule.preferNeutralRatio);
@@ -9943,14 +9963,19 @@ async function reassignOutfitForSpecialOccasion() {
         category: it.category,
         subType: it.subType,
         color: it.colorName || getColorNameFromHex(it.color),
+        secondaryColor: it.secondaryColor ? (it.secondaryColorName || getColorNameFromHex(it.secondaryColor)) : null,
+        tertiaryColor: it.tertiaryColor ? (it.tertiaryColorName || getColorNameFromHex(it.tertiaryColor)) : null,
+        pattern: it.pattern || 'solid',
         formality: it.formality,
         length: getItemLength(it),
-        season: it.season || 'all-season'
+        season: it.season || 'all-season',
+        aiDescription: it.aiDescription || ''
       }));
 
       const prompt = [
         `You are a personal wardrobe stylist. The user has a special occasion: "${occasionText}".`,
         `Current weather: ${currentTemp}°C, ${cond}, Season: ${sInfo.name}.`,
+        `Use each item's aiDescription (alongside colors, pattern, cut, formality, and season) as your primary resource to decide what matches best.`,
         `Pick the best outfit from the user's wardrobe JSON below. You MUST only use exact "id" values from the list.`,
         `Return ONLY valid JSON with keys: topId (required), midLayerId (string or null), outerwearId (string or null), bottomId (required), shoeId (required), beltId (string or null), accessoryId (string or null), reason (1 concise sentence explaining why this works for the occasion and weather).`,
         `Wardrobe: ${JSON.stringify(compactWardrobe)}`
@@ -10070,7 +10095,7 @@ function computeItemPersonaFitRank(item, blueprintOverride) {
     }
   }
 
-  const txt = ((item.subType || '') + ' ' + (item.name || '')).toLowerCase();
+  const txt = getItemRichDescriptor(item);
   if ((item.category === 'tops' || item.category === 'outerwear') && bp.faceRule) {
     if (bp.faceRule.recommendedRegex && bp.faceRule.recommendedRegex.test(txt)) {
       raw += 1.0;
@@ -13467,7 +13492,7 @@ async function runGeminiItemInspection(photoSrc, curName = '', curCat = 'tops', 
     `- pattern: one of solid, stripes, check, dots, graphic, logo, colorblock, textured`,
     `- season: one of all-season, spring-summer, autumn-winter, spring, summer, autumn, winter`,
     `- formality: one of casual, lounge, athleisure, elevated-casual, smart-casual, business-casual, formal, cocktail, black-tie`,
-    `- notes: 1 short sentence summarizing what you observed (colors, lines/marks/brand, cut).`,
+    `- notes: 1-2 concise sentences that explicitly match and summarize ALL fields above (garment type, cut/length, 1st/2nd/3rd colors, pattern/lines/marks/logo, fabric/texture, season, and formality) to serve as the main matching description.`,
     `Return ONLY valid JSON with those exact keys.`
   ].join('\n');
   parts.push({ text: promptText });
@@ -13600,8 +13625,31 @@ async function generateAllMissingAIDescriptions() {
       if (btn) btn.textContent = `🤖 ${i + 1}/${missing.length}...`;
       try {
         const parsed = await runGeminiItemInspection(it.image, it.name, it.category, it.subType, it.id);
-        if (parsed?.notes) {
-          it.aiDescription = parsed.notes;
+        if (parsed) {
+          if (parsed.category && ['tops', 'bottoms', 'shoes', 'outerwear', 'accessories'].includes(parsed.category)) {
+            it.category = parsed.category;
+          }
+          if (parsed.garment_type) it.subType = cleanGarmentType(parsed.garment_type);
+          if (parsed.length) it.length = parsed.length === 'none' ? '' : parsed.length;
+          if (parsed.color_hex && /^#[0-9a-f]{6}$/i.test(parsed.color_hex)) {
+            it.color = parsed.color_hex;
+            it.colorName = parsed.color_name || getColorNameFromHex(parsed.color_hex);
+          }
+          it.secondaryColor = (parsed.secondary_color_hex && /^#[0-9a-f]{6}$/i.test(parsed.secondary_color_hex)) ? parsed.secondary_color_hex : null;
+          it.secondaryColorName = it.secondaryColor ? getColorNameFromHex(it.secondaryColor) : null;
+          it.tertiaryColor = (parsed.tertiary_color_hex && /^#[0-9a-f]{6}$/i.test(parsed.tertiary_color_hex)) ? parsed.tertiary_color_hex : null;
+          it.tertiaryColorName = it.tertiaryColor ? getColorNameFromHex(it.tertiaryColor) : null;
+          if (parsed.pattern) it.pattern = parsed.pattern;
+          if (parsed.season) it.season = parsed.season;
+          if (parsed.formality) it.formality = parsed.formality;
+          it.name = buildStandardGarmentName({
+            category: it.category,
+            subType: it.subType,
+            length: it.length || getDefaultLengthForPiece(it.category, it.subType),
+            color: it.color,
+            colorName: it.colorName
+          });
+          if (parsed.notes) it.aiDescription = parsed.notes;
           updated.push(it);
         }
       } catch (err) {
