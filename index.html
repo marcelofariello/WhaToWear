@@ -7878,12 +7878,13 @@ function logWearToday(topId, bottomId, outerId, midLayerId, beltId, shoeId, acce
     }
   }
 
+  const countLabel = updatedItems.length === 1 ? '1 item worn' : `${updatedItems.length} items worn`;
   const btn = document.getElementById('btn-wear-today');
   if (btn) {
     btn.classList.add('logged');
-    btn.innerHTML = '✓ Logged as Today\'s Look!';
+    btn.innerHTML = `✓ Logged (${countLabel})`;
   }
-  toast('📌 Outfit logged! Wear counts updated & tomorrow will mix a fresh look.');
+  toast(`📌 Outfit logged! Counted ${countLabel} & updated wardrobe wear counts.`);
   renderWardrobeIllusionSection();
   renderWardrobe();
 }
@@ -9836,8 +9837,11 @@ function renderOutfit() {
 
   section.innerHTML = `
     <div class="outfit-display">
-      <div style="margin-bottom:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
         <h2 style="margin:0; text-align:left;">✨ WhaToWear — What to Wear Today</h2>
+        <button id="btn-wear-today" class="btn-wear-today" onclick="logWearToday('${outfit.top.id}', '${outfit.bottom.id}', ${outerIdArg}, ${midIdArg}, ${beltIdArg}, ${shoeIdArg}, ${accIdArg})">
+          📌 I'm Wearing This Today!
+        </button>
       </div>
       <div class="outfit-items">${items}</div>
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-top:12px; margin-bottom:10px;">
@@ -9858,9 +9862,6 @@ function renderOutfit() {
       <div class="outfit-actions">
         <button class="btn btn-primary" onclick="shuffleOutfit()">
           <span id="shuffle-icon">🔀</span> Shuffle Outfit
-        </button>
-        <button id="btn-wear-today" class="btn-wear-today" onclick="logWearToday('${outfit.top.id}', '${outfit.bottom.id}', ${outerIdArg}, ${midIdArg}, ${beltIdArg}, ${shoeIdArg}, ${accIdArg})">
-          📌 I'm Wearing This Today!
         </button>
         <button class="btn btn-secondary" onclick="switchTab('wardrobe')">
           ${getStyleConfig().wardrobeTabIcon} Edit Wardrobe
@@ -10203,6 +10204,7 @@ async function reassignOutfitForSpecialOccasion() {
             sourceLabel: '✨ Gemini AI Stylist'
           };
           renderOutfit();
+          document.getElementById('outfit-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           toast('✨ Gemini AI reassigned today\'s outfit for your occasion!');
           return;
         }
@@ -10214,6 +10216,7 @@ async function reassignOutfitForSpecialOccasion() {
     if (localPick) {
       activeSpecialOccasion = { prompt: occasionText, ...localPick };
       renderOutfit();
+      document.getElementById('outfit-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       toast(geminiKey
         ? '✨ Reassigned with Smart Stylist (Gemini fallback)'
         : '✨ Outfit reassigned for your occasion! (Add Gemini key in Settings for AI mode)');
@@ -10226,6 +10229,7 @@ async function reassignOutfitForSpecialOccasion() {
     if (localPick) {
       activeSpecialOccasion = { prompt: occasionText, ...localPick };
       renderOutfit();
+      document.getElementById('outfit-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       toast('✨ Outfit reassigned using Smart Stylist fallback');
     } else {
       toast('Could not reassign outfit for this occasion');
