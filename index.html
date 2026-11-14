@@ -13107,7 +13107,11 @@ function setSecondaryColorUI(slot, hexVal) {
 }
 
 async function verifyItemWithAI() {
-  const geminiKey = (localStorage.getItem('wtw_gemini_apikey') || '').trim();
+  const geminiKey = (
+    localStorage.getItem('wtw_gemini_apikey') ||
+    document.getElementById('setting-gemini-apikey')?.value ||
+    ''
+  ).trim();
   if (!geminiKey) {
     toast('Add your Gemini API key in Profile & Settings first');
     return;
@@ -13119,23 +13123,27 @@ async function verifyItemWithAI() {
 
   try {
     const parts = [];
+    let attachedPhoto = false;
     if (currentItemPhoto) {
       let dataUrl = currentItemPhoto;
       if (/^https?:\/\//i.test(dataUrl)) {
         try {
           const resp = await fetch(dataUrl, { mode: 'cors' });
-          const blob = await resp.blob();
-          dataUrl = await new Promise((resolve, reject) => {
-            const r = new FileReader();
-            r.onloadend = () => resolve(r.result);
-            r.onerror = reject;
-            r.readAsDataURL(blob);
-          });
+          if (resp.ok) {
+            const blob = await resp.blob();
+            dataUrl = await new Promise((resolve, reject) => {
+              const r = new FileReader();
+              r.onloadend = () => resolve(r.result);
+              r.onerror = reject;
+              r.readAsDataURL(blob);
+            });
+          }
         } catch (e) { /* ignore if CORS blocks fetch */ }
       }
       const m = /^data:([^;]+);base64,(.+)$/.exec(dataUrl || '');
       if (m) {
         parts.push({ inlineData: { mimeType: m[1], data: m[2] } });
+        attachedPhoto = true;
       }
     }
 
@@ -13143,7 +13151,7 @@ async function verifyItemWithAI() {
     const curCat = document.getElementById('item-category')?.value || 'tops';
     const curSub = document.getElementById('item-subtype')?.value || '';
     const promptText = [
-      `Inspect this clothing item${parts.length ? ' photo' : ''} and current description ("${curName}", category: ${curCat}, type: ${curSub}).`,
+      `Inspect this clothing item${attachedPhoto ? ' photo' : ''} and current description ("${curName}", category: ${curCat}, type: ${curSub}).`,
       `Accurately identify:`,
       `- category: one of tops, bottoms, shoes, outerwear, accessories`,
       `- garment_type: concise garment type (e.g. Oxford Shirt, Polo Shirt, Chinos, Sneakers, Blazer)`,
@@ -13159,19 +13167,38 @@ async function verifyItemWithAI() {
     ].join('\n');
     parts.push({ text: promptText });
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: { temperature: 0.2, responseMimeType: 'application/json' }
-      })
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const payload = await res.json();
+    const candidateModels = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    let payload = null;
+    let lastErrMsg = '';
+    for (const modelName of candidateModels) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(geminiKey)}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: { temperature: 0.2, responseMimeType: 'application/json' }
+        })
+      });
+      if (res.ok) {
+        payload = await res.json();
+        break;
+      }
+      let errDetail = `HTTP ${res.status}`;
+      try {
+        const errJson = await res.json();
+        if (errJson?.error?.message) errDetail = `HTTP ${res.status}: ${errJson.error.message}`;
+      } catch (_) {}
+      lastErrMsg = `${modelName} -> ${errDetail}`;
+      if (res.status === 401 || res.status === 403) break;
+    }
+    if (!payload) throw new Error(lastErrMsg || 'No Gemini model responded');
+
     const raw = payload?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const parsed = JSON.parse(raw.replace(/^```json\s*/i, '').replace(/```$/i, '').trim());
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('Gemini returned unexpected format');
+    const parsedRaw = JSON.parse(jsonMatch[0]);
+    const parsed = Array.isArray(parsedRaw) ? parsedRaw[0] : parsedRaw;
 
     if (parsed.category && ['tops', 'bottoms', 'shoes', 'outerwear', 'accessories'].includes(parsed.category)) {
       document.getElementById('item-category').value = parsed.category;
@@ -13206,12 +13233,13 @@ async function verifyItemWithAI() {
       updateFormalityDropdown(parsed.formality);
     }
     syncItemModalAutoFields({ updateTypeProps: false, forceNameRecalc: true });
-    if (statusEl) statusEl.textContent = parsed.notes || 'AI verified & updated fields! Review and click Save Item.';
+    if (statusEl) statusEl.textContent = (parsed.notes || 'AI verified & updated fields!') + (attachedPhoto ? '' : ' (Checked from text — remote photo blocked by CORS)');
     toast('🤖 AI checked & updated item details!');
   } catch (e) {
     console.warn('AI item check failed:', e);
-    if (statusEl) statusEl.textContent = 'AI check failed — verify your Gemini API key or network.';
-    toast('AI check failed — check Gemini API key in Settings');
+    const msg = e && e.message ? e.message : 'Unknown error';
+    if (statusEl) statusEl.textContent = `AI check failed: ${msg}`;
+    toast(`AI check failed: ${msg.slice(0, 90)}`);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '✨ AI Check Item'; }
   }
