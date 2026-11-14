@@ -7994,6 +7994,10 @@ function isLayerPairCompatible(base, mid, outer) {
     if (!mid && outerTier === 'base') return false;
     // If Layer 2 is a formal Blazer, only layer proper long/structured coats over it (never cropped bomber/denim trucker)
     if (mid && isBlazerLike(mid) && !isCoatOverBlazer(outer)) return false;
+    // Never layer a sporty/athleisure windbreaker or nylon shell over a knit sweater/cardigan or formal button-up
+    const outerTxt = ((outer.subType || '') + ' ' + (outer.aiDescription || '') + ' ' + (outer.formality || '')).toLowerCase();
+    const isSportShell = /\b(windbreaker|anorak|track|running|athleisure)\b/.test(outerTxt);
+    if (isSportShell && ((mid && (isSweaterOrCardigan(mid) || isBlazerLike(mid))) || isShirtBaseTop(base))) return false;
   }
 
   return true;
@@ -8444,10 +8448,13 @@ function getAutoTopLayersFromTemp(wxOverride) {
     return { count: 3, temp: currentTemp, reason: `${currentTemp}°C Cool (${minHourly}°–${maxHourly}°C) — 3 adaptable layers on top` };
   }
   if (wc.isRain) {
+    if (currentTemp >= 20) {
+      return { count: 2, temp: currentTemp, reason: `${currentTemp}°C Warm Rain — 2 top layers (Base + Light Weather Shell)` };
+    }
     return { count: 3, temp: currentTemp, reason: `${currentTemp}°C Rainy forecast — 3 top layers (Base + Mid-Layer + Weather Shell)` };
   }
-  if (wc.cat === 'hot' || (currentTemp >= 26 && minHourly >= 20)) {
-    return { count: 1, temp: currentTemp, reason: `${currentTemp}°C Hot weather (${minHourly}°–${maxHourly}°C) — 1 breathable top layer` };
+  if (wc.cat === 'hot' || (currentTemp >= 24 && minHourly >= 17)) {
+    return { count: 1, temp: currentTemp, reason: `${currentTemp}°C Warm/Hot weather (${minHourly}°–${maxHourly}°C) — 1 breathable top layer` };
   }
   return { count: 2, temp: currentTemp, reason: `${currentTemp}°C Mild/Warm (${minHourly}°–${maxHourly}°C) — 2 top layers (Base + Light/AC Layer)` };
 }
@@ -8909,6 +8916,11 @@ function generateOutfit() {
 
   if (byCategory.tops.length === 0 || byCategory.bottoms.length === 0 || byCategory.shoes.length === 0) {
     return null;
+  }
+
+  // If an AI Daily Stylist outfit is cached for today's weather/settings, return it
+  if (!activeSpecialOccasion && typeof activeAIDailyOutfit === 'object' && activeAIDailyOutfit && activeAIDailyOutfit.cacheKey === getAIDailyOutfitCacheKey() && activeAIDailyOutfit.outfit) {
+    return activeAIDailyOutfit.outfit;
   }
 
   // If a Special Occasion AI assignment is active, return those reassigned pieces
@@ -9804,6 +9816,23 @@ function renderOutfit() {
       </div>
     </div>`;
 
+  const imageMatchPct = (outfit.aiDailyMeta && typeof outfit.aiDailyMeta.alignmentScore === 'number')
+    ? Math.max(0, Math.min(100, Math.round(outfit.aiDailyMeta.alignmentScore)))
+    : Math.max(45, Math.min(98, Math.round(62 + ((outfit.personalEval?.personalScore || 40) / 140) * 35)));
+  const imageMatchColor = imageMatchPct >= 82 ? '#6ee7b7' : (imageMatchPct >= 65 ? '#fcd34d' : '#fca5a5');
+  const aiStatusPillHtml = outfit.aiDailyMeta
+    ? `<span class="badge" style="background:rgba(0,229,192,0.14); color:#00e5c0; border:1px solid rgba(0,229,192,0.35); font-size:0.74rem; padding:4px 10px;">🤖 AI Daily Stylist</span>`
+    : (aiDailyOutfitInFlight
+      ? `<span class="badge" style="background:rgba(148,163,184,0.14); color:#cbd5e1; border:1px solid rgba(148,163,184,0.3); font-size:0.74rem; padding:4px 10px;">⏳ 🤖 AI Stylist optimizing...</span>`
+      : '');
+
+  const aiInsightBannerHtml = (outfit.aiDailyMeta && (outfit.aiDailyMeta.reason || outfit.aiDailyMeta.alignmentNote))
+    ? `<div style="margin-bottom:10px; padding:10px 12px; border-radius:10px; background:rgba(0,229,192,0.07); border:1px solid rgba(0,229,192,0.28); font-size:0.78rem; line-height:1.45;">
+         ${outfit.aiDailyMeta.reason ? `<div><strong>🤖 AI Stylist Verdict:</strong> ${escapeHtml(outfit.aiDailyMeta.reason)}</div>` : ''}
+         ${outfit.aiDailyMeta.alignmentNote ? `<div style="margin-top:3px; color:var(--text-secondary);"><strong>🎯 Personal Image Match (${imageMatchPct}%):</strong> ${escapeHtml(outfit.aiDailyMeta.alignmentNote)}</div>` : ''}
+       </div>`
+    : '';
+
   section.innerHTML = `
     <div class="outfit-display">
       <div style="margin-bottom:12px;">
@@ -9815,9 +9844,12 @@ function renderOutfit() {
           Ordered from <strong>Top to Bottom</strong> · 🌡️ <strong>${currentTemp}°C</strong> &amp; ${sInfo.icon} <strong>${escapeHtml(sInfo.name)}</strong> in ${escapeHtml(cityLabel)} → <strong>${targetLayers} Top Layer${targetLayers > 1 ? 's' : ''}</strong>
         </div>
         <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+          <span class="badge" style="background:rgba(15,23,42,0.65); color:${imageMatchColor}; border:1px solid rgba(255,255,255,0.16); font-size:0.74rem; padding:4px 10px; font-weight:700;" title="How close this outfit is to your Personal Image & Style">🎯 Image Match: ${imageMatchPct}%</span>
+          ${aiStatusPillHtml}
           ${freshnessHtml}
         </div>
       </div>
+      ${aiInsightBannerHtml}
       ${specialOccasionBannerHtml}
       ${outfit.seasonMessage ? `<div style="margin-bottom:8px;"><span class="badge" style="background:${sInfo.badgeBg}; color:${sInfo.badgeText}; font-weight:600; font-size:0.76rem; padding:5px 12px; border-radius:14px; border:1px solid ${sInfo.badgeBorder}; display:inline-block;">${escapeHtml(outfit.seasonMessage)}</span></div>` : ''}
       ${outfit.personaMessage ? `<div style="margin-bottom:8px;"><span class="badge" style="background:#e8f4ec; color:#2e6945; font-weight:600; font-size:0.78rem; padding:4px 12px; border-radius:14px; border:1px solid #cce5d4;">${escapeHtml(outfit.personaMessage)}</span></div>` : ''}
@@ -9842,12 +9874,147 @@ function renderOutfit() {
     </div>`;
 
   renderWardrobeIllusionSection();
+  maybeTriggerAIDailyOutfit();
+}
+
+let activeAIDailyOutfit = null;
+let aiDailyOutfitInFlight = false;
+
+function getAIDailyOutfitCacheKey() {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const temp = weather && typeof weather.temp === 'number' ? Math.round(weather.temp) : 21;
+  const desc = (weather && weather.description) ? weather.description : 'clear';
+  const form = (typeof getDayFormality === 'function') ? getDayFormality() : 'casual';
+  const arch = (userProfile && userProfile.personaArchetype) || 'quiet-luxury';
+  return `${todayStr}|${temp}|${desc}|${layerOverride}|${form}|${wardrobe.length}|${arch}`;
+}
+
+function maybeTriggerAIDailyOutfit(forceRefresh = false, avoidIds = []) {
+  if (typeof activeSpecialOccasion !== 'undefined' && activeSpecialOccasion) return;
+  if (!wardrobe || wardrobe.length < 3) return;
+  const geminiKey = (localStorage.getItem('wtw_gemini_apikey') || '').trim();
+  if (!geminiKey) return;
+  const cacheKey = getAIDailyOutfitCacheKey();
+  if (!forceRefresh && activeAIDailyOutfit && activeAIDailyOutfit.cacheKey === cacheKey) return;
+  if (aiDailyOutfitInFlight) return;
+  runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds });
+}
+
+async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [] }) {
+  aiDailyOutfitInFlight = true;
+  try {
+    const bp = buildPersonalStyleBlueprint();
+    const currentTemp = weather && typeof weather.temp === 'number' ? weather.temp : 21;
+    const cond = (weather && weather.description) ? weather.description : 'clear';
+    const sInfo = getLocationSeasonInfo();
+    const targetFormality = getDayFormality();
+    const layerRuleText = layerOverride === 'auto'
+      ? `Choose the most sensible number of top layers (1, 2, or 3) for ${currentTemp}°C ${cond}. Do NOT over-layer in warm weather (23°C+ usually needs 1 layer, maybe 2 only if rain/evening chill).`
+      : `User locked ${layerOverride} top layer(s).`;
+
+    const compactWardrobe = wardrobe.filter(it => !isItemDisliked(it)).map(it => ({
+      id: it.id,
+      name: it.name,
+      category: it.category,
+      subType: it.subType,
+      color: it.colorName || getColorNameFromHex(it.color),
+      secondaryColor: it.secondaryColor ? (it.secondaryColorName || getColorNameFromHex(it.secondaryColor)) : null,
+      tertiaryColor: it.tertiaryColor ? (it.tertiaryColorName || getColorNameFromHex(it.tertiaryColor)) : null,
+      pattern: it.pattern || 'solid',
+      formality: it.formality,
+      length: getItemLength(it),
+      season: it.season || 'all-season',
+      wearCount: getItemWearCount(it),
+      aiDescription: it.aiDescription || ''
+    }));
+
+    const prompt = [
+      `You are the master personal stylist for WhaToWear. Pick today's best outfit from the user's wardrobe JSON.`,
+      `Weather: ${currentTemp}°C, ${cond}, Season: ${sInfo.name}. Target Formality: ${targetFormality}.`,
+      `Layering Rule: ${layerRuleText} Never put an athleisure/sport windbreaker over a chunky knit sweater/cardigan or formal shirt. Keep fabrics, formality, and colors coherent.`,
+      avoidIds.length ? `Avoid repeating these item IDs as main pieces so the user gets a fresh alternative: ${JSON.stringify(avoidIds)}.` : '',
+      `User Personal Image & Preferences: Palette="${bp.palette.name}", Contrast="${bp.contrastLabel}", Face="${bp.faceRule?.label || ''}", Body="${bp.bodyRule?.label || ''}", Archetype="${bp.archRule?.name || ''}", Impressions=${JSON.stringify(bp.impressions || [])}, Statement="${bp.statement || ''}".`,
+      `Use each item's aiDescription as your primary resource alongside colors, pattern, formality, and season.`,
+      `Wardrobe: ${JSON.stringify(compactWardrobe)}`,
+      `Return ONLY valid JSON with exact keys:`,
+      `- topId (required exact id)`,
+      `- midLayerId (exact id or null)`,
+      `- outerwearId (exact id or null)`,
+      `- bottomId (required exact id)`,
+      `- shoeId (required exact id)`,
+      `- beltId (exact id or null)`,
+      `- accessoryId (exact id or null)`,
+      `- image_alignment_score (integer 0-100: how close this outfit is to the user's Personal Image & Style)`,
+      `- image_alignment_note (1 concise sentence explaining the Personal Image match)`,
+      `- decision_reason (1 concise sentence explaining why these pieces & layer count fit today's weather & occasion).`
+    ].filter(Boolean).join('\n');
+
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.35, responseMimeType: 'application/json' }
+      })
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jm = raw.match(/\{[\s\S]*\}/);
+    if (!jm) return;
+    const picked = JSON.parse(jm[0]);
+    const findById = (id) => id ? wardrobe.find(w => w.id === id) || null : null;
+    const top = findById(picked.topId);
+    const bottom = findById(picked.bottomId);
+    const shoe = findById(picked.shoeId);
+    if (!top || !bottom || !shoe) return;
+
+    const midLayer = findById(picked.midLayerId);
+    const outerwear = findById(picked.outerwearId);
+    const beltItem = findById(picked.beltId);
+    const accessory = findById(picked.accessoryId);
+    const actualLayers = 1 + (midLayer ? 1 : 0) + (outerwear ? 1 : 0);
+    const beltRec = beltItem
+      ? { beltItem, status: 'matched', summary: `AI paired ${beltItem.name}` }
+      : proposeBeltForOutfit(shoe, bottom, top, outerwear || midLayer, wardrobe.filter(isBeltItem));
+    const outfit = {
+      top,
+      midLayer,
+      outerwear,
+      proposedMidLayer: null,
+      bottom,
+      shoe,
+      beltRec,
+      accessory,
+      targetLayers: actualLayers,
+      layerInfo: { count: actualLayers, temp: currentTemp, reason: `${currentTemp}°C · AI Stylist chose ${actualLayers} layer(s)` },
+      blueprint: bp,
+      personalEval: scoreOutfitPersonalAndStyle(top, midLayer, outerwear, bottom, shoe, beltRec.beltItem, accessory, bp),
+      freshness: evaluateOutfitFreshness(top, midLayer, outerwear, bottom, shoe),
+      aiDailyMeta: {
+        alignmentScore: typeof picked.image_alignment_score === 'number' ? picked.image_alignment_score : 85,
+        alignmentNote: picked.image_alignment_note || '',
+        reason: picked.decision_reason || ''
+      }
+    };
+    outfit.decisionProfile = generateHowToWearGuide(outfit, bp);
+    activeAIDailyOutfit = { cacheKey, outfit };
+  } catch (e) {
+    console.warn('AI daily outfit error:', e);
+  } finally {
+    aiDailyOutfitInFlight = false;
+    renderOutfit();
+  }
 }
 
 function shuffleOutfit() {
   if (typeof activeSpecialOccasion !== 'undefined' && activeSpecialOccasion) {
     activeSpecialOccasion = null;
   }
+  const prevAvoid = activeAIDailyOutfit?.outfit
+    ? [activeAIDailyOutfit.outfit.top?.id, activeAIDailyOutfit.outfit.bottom?.id].filter(Boolean)
+    : [];
+  activeAIDailyOutfit = null;
   const icon = document.getElementById('shuffle-icon');
   if (icon) {
     icon.classList.remove('shuffle-spin');
@@ -9855,6 +10022,7 @@ function shuffleOutfit() {
     icon.classList.add('shuffle-spin');
   }
   renderOutfit();
+  if (prevAvoid.length) maybeTriggerAIDailyOutfit(true, prevAvoid);
 }
 
 /* ===== Special Occasion AI Outfit Reassignment ===== */
