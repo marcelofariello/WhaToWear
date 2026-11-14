@@ -14614,10 +14614,9 @@ function removeUserPhoto(idx) {
     try { localStorage.removeItem('wtw_personal_analysis'); } catch {}
   }
   persistUserSelfies();
+  renderUserProfileUI();
   if (userProfile.selfies.length > 0) {
     analyzeUploadedPhotos(userProfile.selfies, { silent: true });
-  } else {
-    renderUserProfileUI();
   }
   toast('Photo removed');
 }
@@ -16590,17 +16589,22 @@ function handleInspoUpload(event) {
 }
 
 function removeInspoPhoto(i) {
+  if (!Array.isArray(userProfile.inspoPhotos)) return;
   userProfile.inspoPhotos.splice(i, 1);
   if (userProfile.inspoPhotos.length) {
     persistInspo();
+    renderInspoUI();
     runInspirationAnalysis();
   } else {
     userProfile.inspoPalette = [];
     userProfile.inspoAnalysis = null;
     persistInspo();
     renderInspoUI();
+    if (typeof renderPersonalBlueprintUI === 'function') renderPersonalBlueprintUI();
+    if (typeof renderFloatingPersonaCard === 'function') renderFloatingPersonaCard();
     renderOutfit();
   }
+  toast('Reference photo removed');
 }
 
 function clearInspoPhotos() {
@@ -16610,7 +16614,10 @@ function clearInspoPhotos() {
   userProfile.inspoAnalysis = null;
   persistInspo();
   renderInspoUI();
+  if (typeof renderPersonalBlueprintUI === 'function') renderPersonalBlueprintUI();
+  if (typeof renderFloatingPersonaCard === 'function') renderFloatingPersonaCard();
   renderOutfit();
+  toast('All reference photos cleared');
 }
 
 const ARCHETYPE_IMPRESSIONS = {
