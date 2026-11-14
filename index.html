@@ -4507,26 +4507,42 @@ input[type="text"]:focus, select:focus, textarea:focus {
       <img id="lightbox-img" src="" alt="Saved Photo" style="max-width:100%; max-height:62vh; object-fit:contain; display:block;">
     </div>
     <div id="lightbox-trim-wrap" style="display:none;">
-      <p style="font-size:0.76rem; color:var(--text-secondary); margin-bottom:8px;">Drag on the image or slide each edge inward to trim.</p>
-      <div class="lightbox-trim-stage">
-        <div class="lb-trim-side lb-trim-side-top">
-          <label for="lb-crop-top"><span>Top</span><span id="lb-crop-lbl-top">0%</span></label>
-          <input type="range" id="lb-crop-top" min="0" max="45" value="0" oninput="updateLightboxCropSlider()" title="Slide down to trim top">
+      <p style="font-size:0.76rem; color:var(--text-secondary); margin-bottom:8px;">Drag any edge or corner handle directly on the photo, or fine-tune 1% at a time below.</p>
+      <div class="crop-canvas-wrap" style="margin-bottom:10px;">
+        <canvas id="lightbox-crop-canvas" style="max-width:100%; max-height:340px; cursor:grab; touch-action:none; border-radius:6px;"></canvas>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(115px, 1fr)); gap:6px; margin-bottom:8px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px; padding:4px 8px; font-size:0.74rem;">
+          <span style="color:var(--text-secondary);">Top</span>
+          <div style="display:flex; align-items:center; gap:5px;">
+            <button type="button" class="btn btn-secondary btn-sm" style="padding:1px 7px; font-size:0.75rem;" onclick="nudgeLightboxTrim('top', -1)">−</button>
+            <strong id="lb-crop-lbl-top" style="min-width:28px; text-align:center;">0%</strong>
+            <button type="button" class="btn btn-secondary btn-sm" style="padding:1px 7px; font-size:0.75rem;" onclick="nudgeLightboxTrim('top', 1)">+</button>
+          </div>
         </div>
-        <div class="lb-trim-side lb-trim-side-left">
-          <label for="lb-crop-left"><span>Left</span><span id="lb-crop-lbl-left">0%</span></label>
-          <input type="range" id="lb-crop-left" min="0" max="45" value="0" oninput="updateLightboxCropSlider()" title="Slide right to trim left">
+        <div style="display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px; padding:4px 8px; font-size:0.74rem;">
+          <span style="color:var(--text-secondary);">Bottom</span>
+          <div style="display:flex; align-items:center; gap:5px;">
+            <button type="button" class="btn btn-secondary btn-sm" style="padding:1px 7px; font-size:0.75rem;" onclick="nudgeLightboxTrim('bottom', -1)">−</button>
+            <strong id="lb-crop-lbl-bottom" style="min-width:28px; text-align:center;">0%</strong>
+            <button type="button" class="btn btn-secondary btn-sm" style="padding:1px 7px; font-size:0.75rem;" onclick="nudgeLightboxTrim('bottom', 1)">+</button>
+          </div>
         </div>
-        <div class="crop-canvas-wrap lb-trim-canvas-cell">
-          <canvas id="lightbox-crop-canvas" style="max-width:100%; max-height:300px; cursor:crosshair; touch-action:none; border-radius:6px;"></canvas>
+        <div style="display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px; padding:4px 8px; font-size:0.74rem;">
+          <span style="color:var(--text-secondary);">Left</span>
+          <div style="display:flex; align-items:center; gap:5px;">
+            <button type="button" class="btn btn-secondary btn-sm" style="padding:1px 7px; font-size:0.75rem;" onclick="nudgeLightboxTrim('left', -1)">−</button>
+            <strong id="lb-crop-lbl-left" style="min-width:28px; text-align:center;">0%</strong>
+            <button type="button" class="btn btn-secondary btn-sm" style="padding:1px 7px; font-size:0.75rem;" onclick="nudgeLightboxTrim('left', 1)">+</button>
+          </div>
         </div>
-        <div class="lb-trim-side lb-trim-side-right">
-          <label for="lb-crop-right"><span>Right</span><span id="lb-crop-lbl-right">0%</span></label>
-          <input type="range" id="lb-crop-right" min="0" max="45" value="0" oninput="updateLightboxCropSlider()" title="Slide left to trim right">
-        </div>
-        <div class="lb-trim-side lb-trim-side-bottom">
-          <input type="range" id="lb-crop-bottom" min="0" max="45" value="0" oninput="updateLightboxCropSlider()" title="Slide up to trim bottom">
-          <label for="lb-crop-bottom"><span>Bottom</span><span id="lb-crop-lbl-bottom">0%</span></label>
+        <div style="display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px; padding:4px 8px; font-size:0.74rem;">
+          <span style="color:var(--text-secondary);">Right</span>
+          <div style="display:flex; align-items:center; gap:5px;">
+            <button type="button" class="btn btn-secondary btn-sm" style="padding:1px 7px; font-size:0.75rem;" onclick="nudgeLightboxTrim('right', -1)">−</button>
+            <strong id="lb-crop-lbl-right" style="min-width:28px; text-align:center;">0%</strong>
+            <button type="button" class="btn btn-secondary btn-sm" style="padding:1px 7px; font-size:0.75rem;" onclick="nudgeLightboxTrim('right', 1)">+</button>
+          </div>
         </div>
       </div>
     </div>
@@ -13029,12 +13045,27 @@ function updateLightboxCropSlider() {
   drawLightboxCropCanvas();
 }
 
+function syncLightboxTrimLabels() {
+  ['left', 'right', 'top', 'bottom'].forEach(side => {
+    const lbl = document.getElementById(`lb-crop-lbl-${side}`);
+    if (lbl) lbl.textContent = `${lightboxState[side] || 0}%`;
+  });
+}
+
+function nudgeLightboxTrim(side, delta) {
+  const opp = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' }[side];
+  const nextVal = Math.max(0, Math.min(85 - (lightboxState[opp] || 0), (lightboxState[side] || 0) + delta));
+  lightboxState[side] = nextVal;
+  syncLightboxTrimLabels();
+  drawLightboxCropCanvas();
+}
+
 function drawLightboxCropCanvas() {
   const canvas = document.getElementById('lightbox-crop-canvas');
   const img = lightboxState.img;
   if (!canvas || !img) return;
   const maxW = 480;
-  const maxH = 310;
+  const maxH = 340;
   const scale = Math.min(maxW / img.width, maxH / img.height, 1);
   canvas.width = Math.max(1, Math.round(img.width * scale));
   canvas.height = Math.max(1, Math.round(img.height * scale));
@@ -13046,16 +13077,52 @@ function drawLightboxCropCanvas() {
   const y1 = (lightboxState.top / 100) * canvas.height;
   const x2 = canvas.width - (lightboxState.right / 100) * canvas.width;
   const y2 = canvas.height - (lightboxState.bottom / 100) * canvas.height;
+  const w = Math.max(8, x2 - x1);
+  const h = Math.max(8, y2 - y1);
 
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.58)';
   ctx.fillRect(0, 0, canvas.width, y1);
   ctx.fillRect(0, y2, canvas.width, canvas.height - y2);
   ctx.fillRect(0, y1, x1, y2 - y1);
   ctx.fillRect(x2, y1, canvas.width - x2, y2 - y1);
 
+  // Rule of thirds subtle guides
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x1 + w / 3, y1); ctx.lineTo(x1 + w / 3, y2);
+  ctx.moveTo(x1 + (2 * w) / 3, y1); ctx.lineTo(x1 + (2 * w) / 3, y2);
+  ctx.moveTo(x1, y1 + h / 3); ctx.lineTo(x2, y1 + h / 3);
+  ctx.moveTo(x1, y1 + (2 * h) / 3); ctx.lineTo(x2, y1 + (2 * h) / 3);
+  ctx.stroke();
+
+  // Crop border
   ctx.strokeStyle = '#00e5c0';
   ctx.lineWidth = 2;
-  ctx.strokeRect(x1, y1, Math.max(4, x2 - x1), Math.max(4, y2 - y1));
+  ctx.strokeRect(x1, y1, w, h);
+
+  // Edge grab pills & corner handles for effortless 1:1 dragging
+  ctx.fillStyle = '#00e5c0';
+  const cornerLen = Math.min(16, w / 3, h / 3);
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  // NW
+  ctx.moveTo(x1, y1 + cornerLen); ctx.lineTo(x1, y1); ctx.lineTo(x1 + cornerLen, y1);
+  // NE
+  ctx.moveTo(x2 - cornerLen, y1); ctx.lineTo(x2, y1); ctx.lineTo(x2, y1 + cornerLen);
+  // SW
+  ctx.moveTo(x1, y2 - cornerLen); ctx.lineTo(x1, y2); ctx.lineTo(x1 + cornerLen, y2);
+  // SE
+  ctx.moveTo(x2 - cornerLen, y2); ctx.lineTo(x2, y2); ctx.lineTo(x2, y2 - cornerLen);
+  ctx.stroke();
+
+  // Edge midpoint grab bars
+  const barLen = Math.min(26, w / 3);
+  const barH = Math.min(26, h / 3);
+  ctx.fillRect((x1 + x2) / 2 - barLen / 2, y1 - 2.5, barLen, 5);
+  ctx.fillRect((x1 + x2) / 2 - barLen / 2, y2 - 2.5, barLen, 5);
+  ctx.fillRect(x1 - 2.5, (y1 + y2) / 2 - barH / 2, 5, barH);
+  ctx.fillRect(x2 - 2.5, (y1 + y2) / 2 - barH / 2, 5, barH);
 }
 
 function lightboxApplyTrim() {
@@ -13100,38 +13167,96 @@ function lightboxApplyTrim() {
   if (!canvas) return;
   const getPt = (e) => {
     const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const src = e.touches && e.touches[0] ? e.touches[0] : (e.changedTouches && e.changedTouches[0] ? e.changedTouches[0] : e);
     return {
-      x: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
-      y: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+      x: Math.max(0, Math.min(1, (src.clientX - rect.left) / Math.max(1, rect.width))),
+      y: Math.max(0, Math.min(1, (src.clientY - rect.top) / Math.max(1, rect.height)))
     };
+  };
+  const hitTestMode = (p) => {
+    const l = lightboxState.left / 100;
+    const r = 1 - (lightboxState.right / 100);
+    const t = lightboxState.top / 100;
+    const b = 1 - (lightboxState.bottom / 100);
+    const tol = 0.065;
+    const nearL = Math.abs(p.x - l) <= tol && p.y >= t - tol && p.y <= b + tol;
+    const nearR = Math.abs(p.x - r) <= tol && p.y >= t - tol && p.y <= b + tol;
+    const nearT = Math.abs(p.y - t) <= tol && p.x >= l - tol && p.x <= r + tol;
+    const nearB = Math.abs(p.y - b) <= tol && p.x >= l - tol && p.x <= r + tol;
+    if (nearT && nearL) return 'nw';
+    if (nearT && nearR) return 'ne';
+    if (nearB && nearL) return 'sw';
+    if (nearB && nearR) return 'se';
+    if (nearT) return 'n';
+    if (nearB) return 's';
+    if (nearL) return 'w';
+    if (nearR) return 'e';
+    if (p.x > l && p.x < r && p.y > t && p.y < b) return 'move';
+    return 'new';
+  };
+  const cursorMap = {
+    nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize',
+    n: 'ns-resize', s: 'ns-resize', w: 'ew-resize', e: 'ew-resize',
+    move: 'grab', new: 'crosshair'
   };
   const onStart = (e) => {
     if (!lightboxState.isTrimMode) return;
-    lightboxState.dragging = true;
     const p = getPt(e);
+    lightboxState.dragging = true;
+    lightboxState.dragMode = hitTestMode(p);
     lightboxState.startX = p.x;
     lightboxState.startY = p.y;
+    lightboxState.origLeft = lightboxState.left;
+    lightboxState.origRight = lightboxState.right;
+    lightboxState.origTop = lightboxState.top;
+    lightboxState.origBottom = lightboxState.bottom;
   };
   const onMove = (e) => {
-    if (!lightboxState.dragging || !lightboxState.isTrimMode) return;
+    if (!lightboxState.isTrimMode) return;
     const p = getPt(e);
-    const minX = Math.min(lightboxState.startX, p.x);
-    const maxX = Math.max(lightboxState.startX, p.x);
-    const minY = Math.min(lightboxState.startY, p.y);
-    const maxY = Math.max(lightboxState.startY, p.y);
-    if (maxX - minX < 0.08 || maxY - minY < 0.08) return;
-    lightboxState.left = Math.min(45, Math.round(minX * 100));
-    lightboxState.right = Math.min(45, Math.round((1 - maxX) * 100));
-    lightboxState.top = Math.min(45, Math.round(minY * 100));
-    lightboxState.bottom = Math.min(45, Math.round((1 - maxY) * 100));
-    ['left', 'right', 'top', 'bottom'].forEach(side => {
-      const el = document.getElementById(`lb-crop-${side}`);
-      const lbl = document.getElementById(`lb-crop-lbl-${side}`);
-      if (el) el.value = lightboxState[side];
-      if (lbl) lbl.textContent = `${lightboxState[side]}%`;
-    });
+    if (!lightboxState.dragging) {
+      const m = hitTestMode(p);
+      canvas.style.cursor = cursorMap[m] || 'crosshair';
+      return;
+    }
+    const mode = lightboxState.dragMode || 'new';
+    const minSpan = 12; // minimum 12% width/height so edges never invert
+    if (mode === 'move') {
+      const dxPct = Math.round((p.x - lightboxState.startX) * 100);
+      const dyPct = Math.round((p.y - lightboxState.startY) * 100);
+      const boxW = 100 - lightboxState.origLeft - lightboxState.origRight;
+      const boxH = 100 - lightboxState.origTop - lightboxState.origBottom;
+      const nextL = Math.max(0, Math.min(100 - boxW, lightboxState.origLeft + dxPct));
+      const nextT = Math.max(0, Math.min(100 - boxH, lightboxState.origTop + dyPct));
+      lightboxState.left = nextL;
+      lightboxState.right = 100 - boxW - nextL;
+      lightboxState.top = nextT;
+      lightboxState.bottom = 100 - boxH - nextT;
+    } else if (mode === 'new') {
+      const minX = Math.min(lightboxState.startX, p.x);
+      const maxX = Math.max(lightboxState.startX, p.x);
+      const minY = Math.min(lightboxState.startY, p.y);
+      const maxY = Math.max(lightboxState.startY, p.y);
+      if (maxX - minX < 0.1 || maxY - minY < 0.1) return;
+      lightboxState.left = Math.round(minX * 100);
+      lightboxState.right = Math.round((1 - maxX) * 100);
+      lightboxState.top = Math.round(minY * 100);
+      lightboxState.bottom = Math.round((1 - maxY) * 100);
+    } else {
+      if (mode.includes('w')) {
+        lightboxState.left = Math.max(0, Math.min(100 - lightboxState.right - minSpan, Math.round(p.x * 100)));
+      }
+      if (mode.includes('e')) {
+        lightboxState.right = Math.max(0, Math.min(100 - lightboxState.left - minSpan, Math.round((1 - p.x) * 100)));
+      }
+      if (mode.includes('n')) {
+        lightboxState.top = Math.max(0, Math.min(100 - lightboxState.bottom - minSpan, Math.round(p.y * 100)));
+      }
+      if (mode.includes('s')) {
+        lightboxState.bottom = Math.max(0, Math.min(100 - lightboxState.top - minSpan, Math.round((1 - p.y) * 100)));
+      }
+    }
+    syncLightboxTrimLabels();
     drawLightboxCropCanvas();
   };
   const onEnd = () => { lightboxState.dragging = false; };
