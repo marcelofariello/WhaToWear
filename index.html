@@ -6289,6 +6289,14 @@ function sanitizeWardrobeItemForFirestore(item, scope, timestamp) {
     length: item.length || '',
     season: item.season || 'all-season',
     color: item.color,
+    colorName: item.colorName || null,
+    secondaryColor: item.secondaryColor || null,
+    secondaryColorName: item.secondaryColorName || null,
+    tertiaryColor: item.tertiaryColor || null,
+    tertiaryColorName: item.tertiaryColorName || null,
+    pattern: item.pattern || 'solid',
+    wearCount: typeof item.wearCount === 'number' ? item.wearCount : 0,
+    imageTransform: item.imageTransform || null,
     formality: item.formality,
     image: candidateUrl,
     imageUrl: candidateUrl,
@@ -13167,11 +13175,28 @@ async function verifyItemWithAI() {
     ].join('\n');
     parts.push({ text: promptText });
 
-    const candidateModels = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    // Discover active generateContent models for this API key (0 tokens, free)
+    let candidateModels = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
+    try {
+      const mRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(geminiKey)}`);
+      if (mRes.ok) {
+        const mData = await mRes.json();
+        const available = (mData.models || [])
+          .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+          .map(m => String(m.name || '').replace(/^models\//, ''))
+          .filter(n => /gemini/i.test(n) && !/embedding|imagen|veo|tts|audio|live|thinking/i.test(n));
+        if (available.length > 0) {
+          const preferred = available.filter(n => /2\.5-flash|2\.0-flash|flash-latest|flash/i.test(n));
+          const others = available.filter(n => !preferred.includes(n));
+          candidateModels = [...new Set([...preferred, ...others])].slice(0, 6);
+        }
+      }
+    } catch (_) {}
+
     let payload = null;
-    let lastErrMsg = '';
+    const errors = [];
     for (const modelName of candidateModels) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(geminiKey)}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(geminiKey)}`;
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -13189,10 +13214,10 @@ async function verifyItemWithAI() {
         const errJson = await res.json();
         if (errJson?.error?.message) errDetail = `HTTP ${res.status}: ${errJson.error.message}`;
       } catch (_) {}
-      lastErrMsg = `${modelName} -> ${errDetail}`;
+      errors.push(`${modelName}: ${errDetail}`);
       if (res.status === 401 || res.status === 403) break;
     }
-    if (!payload) throw new Error(lastErrMsg || 'No Gemini model responded');
+    if (!payload) throw new Error(errors[0] || 'No Gemini model responded');
 
     const raw = payload?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
@@ -13227,14 +13252,20 @@ async function verifyItemWithAI() {
       document.getElementById('item-pattern').value = parsed.pattern;
     }
     if (parsed.season && document.getElementById('item-season')) {
-      document.getElementById('item-season').value = parsed.season;
+      const seasonSel = document.getElementById('item-season');
+      seasonSel.dataset.userEdited = 'true';
+      seasonSel.value = parsed.season;
     }
     if (parsed.formality) {
+      const formSel = document.getElementById('item-formality');
+      if (formSel) formSel.dataset.userEdited = 'true';
       updateFormalityDropdown(parsed.formality);
     }
+    const nameEl = document.getElementById('item-name');
+    if (nameEl) nameEl.dataset.autoFilled = 'true';
     syncItemModalAutoFields({ updateTypeProps: false, forceNameRecalc: true });
-    if (statusEl) statusEl.textContent = (parsed.notes || 'AI verified & updated fields!') + (attachedPhoto ? '' : ' (Checked from text — remote photo blocked by CORS)');
-    toast('🤖 AI checked & updated item details!');
+    if (statusEl) statusEl.textContent = (parsed.notes || 'AI verified & updated all fields!') + (attachedPhoto ? '' : ' (Checked from text — remote photo blocked by CORS)');
+    toast('🤖 AI redefined all item fields — click Save Item to keep!');
   } catch (e) {
     console.warn('AI item check failed:', e);
     const msg = e && e.message ? e.message : 'Unknown error';
