@@ -9879,6 +9879,7 @@ function renderOutfit() {
 
 let activeAIDailyOutfit = null;
 let aiDailyOutfitInFlight = false;
+let lastAIDailyAttemptKey = null;
 
 function getAIDailyOutfitCacheKey() {
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -9896,7 +9897,9 @@ function maybeTriggerAIDailyOutfit(forceRefresh = false, avoidIds = []) {
   if (!geminiKey) return;
   const cacheKey = getAIDailyOutfitCacheKey();
   if (!forceRefresh && activeAIDailyOutfit && activeAIDailyOutfit.cacheKey === cacheKey) return;
+  if (!forceRefresh && lastAIDailyAttemptKey === cacheKey) return;
   if (aiDailyOutfitInFlight) return;
+  lastAIDailyAttemptKey = cacheKey;
   runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds });
 }
 
@@ -9999,11 +10002,11 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [] }) 
     };
     outfit.decisionProfile = generateHowToWearGuide(outfit, bp);
     activeAIDailyOutfit = { cacheKey, outfit };
+    renderOutfit();
   } catch (e) {
     console.warn('AI daily outfit error:', e);
   } finally {
     aiDailyOutfitInFlight = false;
-    renderOutfit();
   }
 }
 
