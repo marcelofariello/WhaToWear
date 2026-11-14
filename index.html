@@ -885,6 +885,21 @@ body {
   box-shadow: 0 2px 5px rgba(0,0,0,0.22);
 }
 
+.outfit-item .item-visual-wrap .mini-dots-row {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.outfit-item .item-visual-wrap .mini-dots-row .mini-dot {
+  position: static;
+  width: 20px;
+  height: 20px;
+}
+
 .outfit-item .item-visual-wrap .photo-source-tag {
   position: absolute;
   top: 4px;
@@ -1104,6 +1119,24 @@ body {
   right: 8px;
   width: 22px;
   height: 22px;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: var(--shadow-sm);
+}
+
+.card-color-dots-row {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.card-color-dots-row .card-color-dot {
+  position: static;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   border: 2px solid white;
   box-shadow: var(--shadow-sm);
@@ -9268,13 +9301,19 @@ function renderOutfitItem(item, label, stepBadge) {
   const safeName = (item.name || '').replace(/'/g, "\\'");
   const safeId = (item.id || '').replace(/'/g, "\\'");
 
+  const colorDotsHtml = [
+    item.color ? { hex: item.color, label: '1st Color' } : null,
+    item.secondaryColor ? { hex: item.secondaryColor, label: '2nd Color' } : null,
+    item.tertiaryColor ? { hex: item.tertiaryColor, label: '3rd Color' } : null
+  ].filter(Boolean).map(c => `<span class="mini-dot" style="background:${c.hex}" title="${c.label}: ${c.hex}"></span>`).join('');
+
   const visualHtml = photoSrc
     ? `<div class="item-visual-wrap" onclick="openPhotoLightbox(getItemDisplayPhotoSrc(wardrobe.find(w=>w.id==='${safeId}') || {name:'${safeName}',subType:'${safeSub}',category:'${item.category}',color:'${item.color}'}), '${safeName}', '${safeId}')" title="Tap to zoom, rotate or trim photo">
          <img class="item-photo" src="${photoSrc}" alt="${escapeHtml(item.name)}" style="${getItemImageTransformStyle(item)}">
          <span class="photo-source-tag">${hasRealPhoto ? '📷 Photo' : '🧥 Preview'}</span>
-         <span class="mini-dot" style="background:${item.color}" title="Item Color: ${item.color}"></span>
+         <div class="mini-dots-row">${colorDotsHtml}</div>
        </div>`
-    : `<div class="item-color" style="background:${item.color}"></div>`;
+    : `<div class="item-color" style="background:${item.color}; position:relative;">${(item.secondaryColor || item.tertiaryColor) ? `<div class="mini-dots-row" style="bottom:4px; right:4px;">${colorDotsHtml}</div>` : ''}</div>`;
 
   return `
     <div class="outfit-item">
@@ -10034,15 +10073,23 @@ function renderWardrobe() {
       graphic: '🎨 Graphic', logo: '🏷️ Brand/Logo', colorblock: '🟨 Colorblock', textured: '🧶 Textured'
     };
     const patternBadge = item.pattern && item.pattern !== 'solid' ? (patternLabels[item.pattern] || item.pattern) : '';
+    const orderedColors = [
+      item.color ? { hex: item.color, label: '1st (Primary) Color' } : null,
+      item.secondaryColor ? { hex: item.secondaryColor, label: '2nd (Secondary) Color' } : null,
+      item.tertiaryColor ? { hex: item.tertiaryColor, label: '3rd (Accent) Color' } : null
+    ].filter(Boolean);
+    const cardColorDotsHtml = orderedColors.map(c =>
+      `<span class="card-color-dot" style="background:${c.hex}" title="${c.label}: ${c.hex}"></span>`
+    ).join('');
     const extraSwatches = [item.secondaryColor, item.tertiaryColor].filter(Boolean).map(c =>
       `<span class="card-actions-swatch" style="background:${c}" title="Secondary/Accent Color"></span>`
     ).join('');
     const visualContent = item.image
       ? `<div class="card-photo-wrap" onclick="openPhotoLightbox(wardrobe.find(w=>w.id==='${item.id}')?.image, '${escapeHtml(item.name).replace(/'/g, "\\'")}', '${item.id}')" style="cursor:zoom-in;" title="Tap to zoom, rotate or trim photo">
            <img src="${item.image}" alt="${escapeHtml(item.name)}" style="${getItemImageTransformStyle(item)}">
-           <span class="card-color-dot" style="background:${item.color}" title="Color"></span>
+           <div class="card-color-dots-row">${cardColorDotsHtml}</div>
          </div>`
-      : `<div class="card-color" style="background:${item.color}"></div>
+      : `<div class="card-color" style="background:${item.color}; position:relative;">${orderedColors.length > 1 ? `<div class="card-color-dots-row" style="bottom:6px; right:6px;">${cardColorDotsHtml}</div>` : ''}</div>
          <div class="card-emoji">${emoji}</div>`;
 
     return `
