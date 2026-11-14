@@ -10013,16 +10013,11 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [] }) 
       `- decision_reason (1 concise sentence explaining why these pieces & layer count fit today's weather & occasion).`
     ].filter(Boolean).join('\n');
 
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.35, responseMimeType: 'application/json' }
-      })
+    const data = await callGeminiGenerateContent(geminiKey, {
+      parts: [{ text: prompt }],
+      temperature: 0.35,
+      responseMimeType: 'application/json'
     });
-    if (!res.ok) return;
-    const data = await res.json();
     const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const jm = raw.match(/\{[\s\S]*\}/);
     if (!jm) return;
@@ -10247,18 +10242,12 @@ async function reassignOutfitForSpecialOccasion() {
         `Wardrobe: ${JSON.stringify(compactWardrobe)}`
       ].join('\n');
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.35, responseMimeType: 'application/json' }
-        })
-      });
-
-      if (res.ok) {
-        const payload = await res.json();
+      try {
+        const payload = await callGeminiGenerateContent(geminiKey, {
+          parts: [{ text: prompt }],
+          temperature: 0.35,
+          responseMimeType: 'application/json'
+        });
         const rawText = payload?.candidates?.[0]?.content?.parts?.[0]?.text || '';
         const parsed = JSON.parse(rawText.replace(/^```json\s*/i, '').replace(/```$/i, '').trim());
         const validIds = new Set(wardrobe.map(w => w.id));
@@ -10282,6 +10271,8 @@ async function reassignOutfitForSpecialOccasion() {
           toast('✨ Gemini AI reassigned today\'s outfit for your occasion!');
           return;
         }
+      } catch (aiErr) {
+        console.warn('Special occasion Gemini error, using local fallback:', aiErr);
       }
     }
 
@@ -11640,26 +11631,16 @@ async function recognizeGarmentViaGeminiDirect(imageBase64, mimeType, fileNameHi
     'Return ONLY JSON with keys: category, garment_type, length (short|long|sleeveless|shorts|cropped|none), color_name, color_hex (#RRGGBB), season (all-season|spring-summer|autumn-winter|spring|summer|autumn|winter), formality (casual|lounge|athleisure|elevated-casual|smart-casual|business-casual|formal|cocktail|black-tie), confidenceScore (0..1).'
   ].filter(Boolean).join('\n');
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`;
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal,
-    body: JSON.stringify({
-      contents: [{
-        parts: [
-          { inline_data: { mime_type: mimeType, data: imageBase64 } },
-          { text: prompt }
-        ]
-      }],
-      generationConfig: {
-        temperature: 0.1,
-        responseMimeType: 'application/json'
-      }
-    })
-  });
-  if (!resp.ok) return null;
-  const payload = await resp.json();
+  const payload = await callGeminiGenerateContent(geminiKey, {
+    parts: [
+      { inline_data: { mime_type: mimeType, data: imageBase64 } },
+      { text: prompt }
+    ],
+    temperature: 0.1,
+    responseMimeType: 'application/json',
+    signal
+  }).catch(() => null);
+  if (!payload) return null;
   const rawText = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!rawText) return null;
   return JSON.parse(rawText);
@@ -13731,6 +13712,60 @@ function setSecondaryColorUI(slot, hexVal) {
   }
 }
 
+const _geminiModelCache = new Map();
+
+async function getGeminiCandidateModels(geminiKey) {
+  const cached = _geminiModelCache.get(geminiKey);
+  if (cached && (Date.now() - cached.ts) < 600000) return cached.models;
+  let candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-flash-latest'];
+  try {
+    const mRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(geminiKey)}`);
+    if (mRes.ok) {
+      const mData = await mRes.json();
+      const available = (mData.models || [])
+        .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+        .map(m => String(m.name || '').replace(/^models\//, ''))
+        .filter(n => /gemini/i.test(n) && !/embedding|imagen|veo|tts|audio|live|thinking/i.test(n));
+      if (available.length > 0) {
+        const preferred = available.filter(n => /2\.5-flash|2\.0-flash|flash-latest|flash/i.test(n));
+        const others = available.filter(n => !preferred.includes(n));
+        candidateModels = [...new Set([...preferred, ...others])].slice(0, 8);
+      }
+    }
+  } catch (_) {}
+  _geminiModelCache.set(geminiKey, { models: candidateModels, ts: Date.now() });
+  return candidateModels;
+}
+
+async function callGeminiGenerateContent(geminiKey, { parts, temperature = 0.3, responseMimeType = 'application/json', signal = undefined } = {}) {
+  const candidateModels = await getGeminiCandidateModels(geminiKey);
+  const errors = [];
+  for (const modelName of candidateModels) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(geminiKey)}`;
+    const fetchOpts = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: { temperature, responseMimeType }
+      })
+    };
+    if (signal) fetchOpts.signal = signal;
+    const res = await fetch(url, fetchOpts);
+    if (res.ok) {
+      return await res.json();
+    }
+    let errDetail = `HTTP ${res.status}`;
+    try {
+      const errJson = await res.json();
+      if (errJson?.error?.message) errDetail = `HTTP ${res.status}: ${errJson.error.message}`;
+    } catch (_) {}
+    errors.push(`${modelName}: ${errDetail}`);
+    if (res.status === 401 || res.status === 403) break;
+  }
+  throw new Error(errors[0] || 'No Gemini model responded');
+}
+
 async function runGeminiItemInspection(photoSrc, curName = '', curCat = 'tops', curSub = '', itemId = null) {
   const geminiKey = (
     localStorage.getItem('wtw_gemini_apikey') ||
@@ -13792,48 +13827,11 @@ async function runGeminiItemInspection(photoSrc, curName = '', curCat = 'tops', 
   ].join('\n');
   parts.push({ text: promptText });
 
-  let candidateModels = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
-  try {
-    const mRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(geminiKey)}`);
-    if (mRes.ok) {
-      const mData = await mRes.json();
-      const available = (mData.models || [])
-        .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
-        .map(m => String(m.name || '').replace(/^models\//, ''))
-        .filter(n => /gemini/i.test(n) && !/embedding|imagen|veo|tts|audio|live|thinking/i.test(n));
-      if (available.length > 0) {
-        const preferred = available.filter(n => /2\.5-flash|2\.0-flash|flash-latest|flash/i.test(n));
-        const others = available.filter(n => !preferred.includes(n));
-        candidateModels = [...new Set([...preferred, ...others])].slice(0, 6);
-      }
-    }
-  } catch (_) {}
-
-  let payload = null;
-  const errors = [];
-  for (const modelName of candidateModels) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(geminiKey)}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: { temperature: 0.2, responseMimeType: 'application/json' }
-      })
-    });
-    if (res.ok) {
-      payload = await res.json();
-      break;
-    }
-    let errDetail = `HTTP ${res.status}`;
-    try {
-      const errJson = await res.json();
-      if (errJson?.error?.message) errDetail = `HTTP ${res.status}: ${errJson.error.message}`;
-    } catch (_) {}
-    errors.push(`${modelName}: ${errDetail}`);
-    if (res.status === 401 || res.status === 403) break;
-  }
-  if (!payload) throw new Error(errors[0] || 'No Gemini model responded');
+  const payload = await callGeminiGenerateContent(geminiKey, {
+    parts,
+    temperature: 0.2,
+    responseMimeType: 'application/json'
+  });
 
   const raw = payload?.candidates?.[0]?.content?.parts?.[0]?.text || '';
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
@@ -16047,20 +16045,14 @@ async function evaluateShopCandidateWithAI() {
 
     let aiEval = null;
     try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: evalPrompt }] }],
-          generationConfig: { temperature: 0.25, responseMimeType: 'application/json' }
-        })
+      const data = await callGeminiGenerateContent(geminiKey, {
+        parts: [{ text: evalPrompt }],
+        temperature: 0.25,
+        responseMimeType: 'application/json'
       });
-      if (res.ok) {
-        const data = await res.json();
-        const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const jm = raw.match(/\{[\s\S]*\}/);
-        if (jm) aiEval = JSON.parse(jm[0]);
-      }
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const jm = raw.match(/\{[\s\S]*\}/);
+      if (jm) aiEval = JSON.parse(jm[0]);
     } catch (_) {}
 
     const prefRank = Math.max(1, Math.min(10, Math.round(aiEval?.preference_rank || localFit.score)));
@@ -16160,16 +16152,11 @@ async function refreshShopSuggestionsWithAI() {
       `- items: array of EXACTLY 10 objects ranked 1 (highest priority) to 10, each with keys: rank (1-10), need_score (1-100), name, category (tops|bottoms|shoes|outerwear|accessories), subType, color_hex (#RRGGBB), color_name, formality, length (short|long|shorts|cropped|none), season, reason (1-2 sentences explaining the wardrobe gap, objective fit, and owned pieces it unlocks).`
     ].join('\n');
 
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, responseMimeType: 'application/json' }
-      })
+    const data = await callGeminiGenerateContent(geminiKey, {
+      parts: [{ text: prompt }],
+      temperature: 0.3,
+      responseMimeType: 'application/json'
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
     const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const jm = raw.match(/\{[\s\S]*\}/);
     if (!jm) throw new Error('Unexpected AI response format');
@@ -18064,16 +18051,11 @@ async function analyzePersonalColorAndSilhouetteWithAI(opts = {}) {
       `- detailed_ai_description: A comprehensive, richly detailed 2-paragraph stylist dossier (130-200 words) covering exact seasonal color palette, undertone, contrast, facial structure, body silhouette proportions, ideal garment cuts, necklines, fabrics, and hardware so any AI stylist reading this alone knows exactly how to dress this person.`
     ].join('\n');
 
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [...parts, { text: prompt }] }],
-        generationConfig: { temperature: 0.25, responseMimeType: 'application/json' }
-      })
+    const payload = await callGeminiGenerateContent(geminiKey, {
+      parts: [...parts, { text: prompt }],
+      temperature: 0.25,
+      responseMimeType: 'application/json'
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const payload = await res.json();
     const raw = payload?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const jm = raw.match(/\{[\s\S]*\}/);
     if (!jm) throw new Error('Unexpected AI response format');
@@ -18208,16 +18190,11 @@ async function analyzePersonaAndDesiredStyleWithAI(opts = {}) {
       `- detailed_ai_description: A comprehensive, richly detailed 2-paragraph persona & desired style dossier (130-200 words) describing the exact aesthetic mood, silhouette language, color harmony, fabric textures, formality sweet spot, and styling rules so any AI stylist reading this knows exactly how to dress this person.`
     ].join('\n');
 
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [...parts, { text: prompt }] }],
-        generationConfig: { temperature: 0.3, responseMimeType: 'application/json' }
-      })
+    const payload = await callGeminiGenerateContent(geminiKey, {
+      parts: [...parts, { text: prompt }],
+      temperature: 0.3,
+      responseMimeType: 'application/json'
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const payload = await res.json();
     const raw = payload?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const jm = raw.match(/\{[\s\S]*\}/);
     if (!jm) throw new Error('Unexpected AI response format');
