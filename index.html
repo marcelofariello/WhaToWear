@@ -13905,7 +13905,7 @@ const _geminiModelCache = new Map();
 async function getGeminiCandidateModels(geminiKey) {
   const cached = _geminiModelCache.get(geminiKey);
   if (cached && (Date.now() - cached.ts) < 600000) return cached.models;
-  let candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-flash-latest'];
+  let candidateModels = ['gemini-2.5-flash-lite', 'gemini-2.0-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-latest'];
   try {
     const mRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(geminiKey)}`);
     if (mRes.ok) {
@@ -13913,11 +13913,12 @@ async function getGeminiCandidateModels(geminiKey) {
       const available = (mData.models || [])
         .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
         .map(m => String(m.name || '').replace(/^models\//, ''))
-        .filter(n => /gemini/i.test(n) && !/embedding|imagen|veo|tts|audio|live|thinking/i.test(n));
+        .filter(n => /gemini/i.test(n) && !/embedding|imagen|veo|tts|audio|live|thinking|image/i.test(n));
       if (available.length > 0) {
-        const preferred = available.filter(n => /2\.5-flash|2\.0-flash|flash-latest|flash/i.test(n));
-        const others = available.filter(n => !preferred.includes(n));
-        candidateModels = [...new Set([...preferred, ...others])].slice(0, 8);
+        const flashLite = available.filter(n => /flash-lite/i.test(n));
+        const flash = available.filter(n => !flashLite.includes(n) && /2\.5-flash|2\.0-flash|flash-latest|flash/i.test(n));
+        const others = available.filter(n => !flashLite.includes(n) && !flash.includes(n));
+        candidateModels = [...new Set([...flashLite, ...flash, ...others])].slice(0, 8);
       }
     }
   } catch (_) {}
