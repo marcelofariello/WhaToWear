@@ -7979,6 +7979,12 @@ function isHoodieOrSweatshirt(it) {
   return /\b(hoodie|sweatshirt|fleece)\b/.test(txt);
 }
 
+function isSweaterOrCardigan(it) {
+  if (!it) return false;
+  const txt = ((it.subType || '') + ' ' + (it.name || '') + ' ' + (it.aiDescription || '')).toLowerCase();
+  return /\b(sweater|cardigan|knit|pullover|jumper|turtleneck|mock neck|quarter-zip|v-neck knit)\b/.test(txt);
+}
+
 function isCoatOverBlazer(it) {
   if (!it) return false;
   const txt = ((it.subType || '') + ' ' + (it.name || '')).toLowerCase();
