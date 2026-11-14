@@ -3365,6 +3365,202 @@ input[type="text"]:focus, select:focus, textarea:focus {
   border-radius: 999px !important;
 }
 
+/* ===== Special Occasion AI Box (Today's Outfit) ===== */
+.special-occasion-box {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(0, 229, 192, 0.28);
+}
+.special-occasion-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 8px;
+}
+.special-occasion-row input {
+  flex: 1;
+  min-width: 220px;
+}
+.special-occasion-active-banner {
+  margin-bottom: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(0, 229, 192, 0.12);
+  border: 1px solid rgba(0, 229, 192, 0.35);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+}
+
+/* ===== Wardrobe Wear Count, Fit Rank & Sort ===== */
+.badge-wear-count {
+  background: rgba(56, 189, 248, 0.14);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  font-weight: 700;
+}
+.badge-fit-high {
+  background: rgba(16, 185, 129, 0.16);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  font-weight: 700;
+}
+.badge-fit-mid {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  font-weight: 700;
+}
+.badge-fit-low {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.38);
+  font-weight: 700;
+}
+.wardrobe-sort-select {
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: rgba(15, 23, 42, 0.75);
+  color: var(--text);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+
+/* ===== Photo Crop & Rotate Modal ===== */
+.crop-canvas-wrap {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: rgba(8, 12, 20, 0.85);
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  padding: 10px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  user-select: none;
+}
+#crop-canvas {
+  max-width: 100%;
+  max-height: 340px;
+  cursor: crosshair;
+  touch-action: none;
+  border-radius: 6px;
+}
+.crop-sliders-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 14px;
+  margin-bottom: 12px;
+  font-size: 0.76rem;
+}
+.crop-sliders-grid label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 2px;
+  color: var(--text-secondary);
+}
+.crop-sliders-grid input[type="range"] {
+  width: 100%;
+}
+
+/* ===== Collapsible Settings Cards & API Status ===== */
+.settings-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.settings-collapse-card {
+  padding: 0 !important;
+  overflow: hidden;
+}
+.settings-collapse-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.settings-collapse-header:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.settings-collapse-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.settings-collapse-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+.settings-collapse-chevron {
+  font-size: 0.9rem;
+  transition: transform 0.2s ease;
+  opacity: 0.8;
+}
+.settings-collapse-card.open .settings-collapse-chevron {
+  transform: rotate(90deg);
+}
+.settings-collapse-body {
+  display: none;
+  padding: 0 20px 20px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.settings-collapse-card.open .settings-collapse-body {
+  display: block;
+  padding-top: 16px;
+}
+.api-status-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.api-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.8rem;
+}
+.api-status-pill {
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.api-status-ok { background: rgba(16,185,129,0.18); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.35); }
+.api-status-err { background: rgba(239,68,68,0.18); color: #fca5a5; border: 1px solid rgba(239,68,68,0.35); }
+.api-status-idle { background: rgba(148,163,184,0.15); color: #cbd5e1; border: 1px solid rgba(148,163,184,0.28); }
+
 </style>
 </head>
 <body>
@@ -3386,10 +3582,6 @@ input[type="text"]:focus, select:focus, textarea:focus {
         </div>
       </div>
       <div class="header-status-pills slim-status-pills" id="header-status-pills">
-        <span class="header-pill status-pill-season" id="header-season-pill" title="Local Season & Weather Context">
-          <span class="pill-dot glow-yellow"></span>
-          <span class="pill-text" id="header-season-text">Spring - Bathurst</span>
-        </span>
         <span class="header-pill status-pill-cloud" id="header-cloud-pill" style="cursor:pointer;" onclick="switchTab('settings')" title="Firebase Cloud Database Sync">
           <span class="pill-dot glow-yellow"></span>
           <span class="pill-text" id="header-cloud-text">Connecting...</span>
@@ -3438,7 +3630,14 @@ input[type="text"]:focus, select:focus, textarea:focus {
     <input type="file" id="mass-wardrobe-photo-input" accept="image/*" multiple style="display:none" onchange="handleMassWardrobeUpload(event)">
     <div class="wardrobe-toolbar">
       <div class="filter-group" id="filter-group"></div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <select id="wardrobe-sort-select" class="wardrobe-sort-select" onchange="setWardrobeSort(this.value)" title="Sort wardrobe items">
+          <option value="default">Sort: Default</option>
+          <option value="fit-desc">⭐ Fit Rank: High → Low</option>
+          <option value="fit-asc">⚠️ Fit Rank: Low → High (Declutter)</option>
+          <option value="wear-desc">👕 Most Worn</option>
+          <option value="wear-asc">🧺 Least Worn</option>
+        </select>
         <button type="button" class="btn btn-accent btn-sm" onclick="openMassUploadPicker()">📚 Mass Upload Photos</button>
         <button type="button" class="btn btn-secondary btn-sm" onclick="openSavedImagesModal('wardrobe')">🖼️ Saved Images</button>
         <button type="button" class="btn btn-primary btn-sm" onclick="openAddModal()">＋ Add Item</button>
@@ -3497,10 +3696,20 @@ input[type="text"]:focus, select:focus, textarea:focus {
 
   <!-- Settings Tab -->
   <div class="tab-content" id="tab-settings">
-    <!-- My Persona Card (Moved from Main Page into Profile & Settings) -->
-    <section class="floating-persona-card" id="floating-persona-hero" aria-label="My Persona Style Profile">
+    <div class="settings-toolbar">
+      <div style="font-size:0.84rem; color:var(--text-secondary);">
+        Tap any section header to expand or collapse it.
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAllSettingsCards(true)">▾ Expand All</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAllSettingsCards(false)">▴ Collapse All</button>
+      </div>
+    </div>
+
+    <!-- My Persona Card (Collapsed by default) -->
+    <section class="floating-persona-card collapsed" id="floating-persona-hero" aria-label="My Persona Style Profile">
       <div class="floating-persona-ambient-glow"></div>
-      <div class="persona-card-header">
+      <div class="persona-card-header" onclick="togglePersonaCollapse()" style="cursor:pointer;">
         <div class="persona-title-area">
           <div class="persona-subheading">✨ Biometric &amp; Aesthetic Twin</div>
           <h2 class="persona-heading">My Persona</h2>
@@ -3510,7 +3719,7 @@ input[type="text"]:focus, select:focus, textarea:focus {
             <span class="pill-dot glow-yellow"></span>
             <span id="persona-glow-badge-text">Spring · Quiet Luxury</span>
           </div>
-          <button type="button" class="persona-collapse-btn" id="persona-collapse-btn" onclick="togglePersonaCollapse()" title="Minimize / Expand My Persona card">▴ Collapse</button>
+          <button type="button" class="persona-collapse-btn" id="persona-collapse-btn" onclick="event.stopPropagation(); togglePersonaCollapse()" title="Expand My Persona card">▾ Expand</button>
         </div>
       </div>
 
@@ -3576,9 +3785,16 @@ input[type="text"]:focus, select:focus, textarea:focus {
     </section>
 
     <!-- Persona & Style Identity Profile ("How I want to be seen") -->
-    <div class="card">
+    <div class="card settings-collapse-card" id="settings-card-persona-style">
+      <button type="button" class="settings-collapse-header" onclick="toggleSettingsCard(this)">
+        <span class="settings-collapse-title">🎭 My Persona &amp; Desired Style Profile</span>
+        <span class="settings-collapse-meta">
+          <span>Archetype, Inspo &amp; Dislikes</span>
+          <span class="settings-collapse-chevron">▸</span>
+        </span>
+      </button>
+      <div class="settings-collapse-body">
       <div class="settings-section">
-        <h3>🎭 My Persona & Desired Style Profile</h3>
         <p class="settings-note" style="margin-bottom:12px;">
           Define how you would like to be perceived. WhaToWear harmonizes your desired aura, archetype, and impressions into every daily outfit recommendation.
         </p>
@@ -3634,15 +3850,20 @@ input[type="text"]:focus, select:focus, textarea:focus {
           <div id="disliked-custom-terms" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
         </div>
       </div>
+      </div>
     </div>
 
     <!-- Personal Style, Multi-Photo & Silhouette Analysis -->
-    <div class="card">
-      <div class="settings-section">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-          <h3>👤 Personal Color, Multi-Photo &amp; Silhouette Scanner (Unlimited Photos)</h3>
+    <div class="card settings-collapse-card" id="settings-card-biometrics">
+      <button type="button" class="settings-collapse-header" onclick="toggleSettingsCard(this)">
+        <span class="settings-collapse-title">👤 Personal Color, Multi-Photo &amp; Silhouette Scanner</span>
+        <span class="settings-collapse-meta">
           <span id="selfie-photo-count-badge" class="badge badge-category" style="font-size:0.72rem;">0 photos</span>
-        </div>
+          <span class="settings-collapse-chevron">▸</span>
+        </span>
+      </button>
+      <div class="settings-collapse-body">
+      <div class="settings-section">
         <p class="settings-note" style="margin-bottom:12px;">
           Upload or drop <strong>as many photos as you like — unlimited</strong> (portrait selfies, full body shots, natural daylight, different angles). WhaToWear checks lighting clarity, identifies your skin undertone season, and auto-detects your face shape and body silhouette!
         </p>
@@ -3707,12 +3928,20 @@ input[type="text"]:focus, select:focus, textarea:focus {
           <div id="personal-blueprint-box" class="persona-blueprint-box" style="display:none;"></div>
         </div>
       </div>
+      </div>
     </div>
 
     <!-- Natal Birth Chart Profile -->
-    <div class="card">
+    <div class="card settings-collapse-card" id="settings-card-astral">
+      <button type="button" class="settings-collapse-header" onclick="toggleSettingsCard(this)">
+        <span class="settings-collapse-title">🌌 Natal Birth Chart &amp; Astral Coordinates</span>
+        <span class="settings-collapse-meta">
+          <span>Sun, Moon &amp; Rising</span>
+          <span class="settings-collapse-chevron">▸</span>
+        </span>
+      </button>
+      <div class="settings-collapse-body">
       <div class="settings-section">
-        <h3>🌌 Natal Birth Chart & Astral Coordinates</h3>
         <label class="toggle-row" for="setting-astral-enabled">
           <input type="checkbox" id="setting-astral-enabled" checked onchange="setAstralActive(this.checked)">
           <span><strong>Let my natal chart influence outfit decisions</strong>
@@ -3737,15 +3966,20 @@ input[type="text"]:focus, select:focus, textarea:focus {
           </div>
         </div>
       </div>
+      </div>
     </div>
 
     <!-- Cloud Sync & Shared Multi-Device Memory -->
-    <div class="card">
-      <div class="settings-section">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-          <h3>☁️ Multi-Device Cloud Sync (Common Memory)</h3>
+    <div class="card settings-collapse-card" id="settings-card-cloud">
+      <button type="button" class="settings-collapse-header" onclick="toggleSettingsCard(this)">
+        <span class="settings-collapse-title">☁️ Multi-Device Cloud Sync (Common Memory)</span>
+        <span class="settings-collapse-meta">
           <span id="cloud-status-badge" class="badge" style="background:#e0f2fe; color:#0369a1; font-size:0.75rem; border:1px solid #bae6fd;">☁️ Connecting...</span>
-        </div>
+          <span class="settings-collapse-chevron">▸</span>
+        </span>
+      </button>
+      <div class="settings-collapse-body">
+      <div class="settings-section">
         <p class="settings-note" style="margin-bottom:12px;">
           All changes made on your PC (wardrobe items, photos, personal palette, body shapes, dislike filters, and settings) synchronize automatically with your phone and second PC via Firebase Firestore.
         </p>
@@ -3769,62 +4003,92 @@ input[type="text"]:focus, select:focus, textarea:focus {
         <div id="cloud-diagnostics-panel" style="display:none; margin-top:12px;"></div>
         <div id="cloud-failed-panel" style="display:none; margin-top:12px;"></div>
       </div>
+      </div>
     </div>
 
     <!-- Weather & API Key -->
-    <div class="card">
-      <div class="settings-section">
-        <h3>🌍 Weather Location</h3>
-        <div class="form-group">
-          <label for="setting-city">City</label>
-          <input type="text" id="setting-city" placeholder="e.g. London, New York, Tokyo">
+    <div class="card settings-collapse-card" id="settings-card-apis">
+      <button type="button" class="settings-collapse-header" onclick="toggleSettingsCard(this)">
+        <span class="settings-collapse-title">🌍 Weather Location &amp; API Keys</span>
+        <span class="settings-collapse-meta">
+          <span id="api-summary-pill" class="api-status-pill api-status-idle">Not checked</span>
+          <span class="settings-collapse-chevron">▸</span>
+        </span>
+      </button>
+      <div class="settings-collapse-body">
+        <div class="settings-section">
+          <h3>🌍 Weather Location</h3>
+          <div class="form-group">
+            <label for="setting-city">City</label>
+            <input type="text" id="setting-city" placeholder="e.g. London, New York, Tokyo">
+          </div>
         </div>
-      </div>
-      <div class="settings-section">
-        <h3>🔑 OpenWeatherMap API Key</h3>
-        <div class="form-group">
-          <label for="setting-apikey">API Key</label>
-          <input type="text" id="setting-apikey" placeholder="Paste your API key here">
-          <p class="settings-note">Get a free key at <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a></p>
+        <div class="settings-section">
+          <h3>🔑 OpenWeatherMap API Key</h3>
+          <div class="form-group">
+            <label for="setting-apikey">API Key</label>
+            <input type="text" id="setting-apikey" placeholder="Paste your API key here">
+            <p class="settings-note">Get a free key at <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a></p>
+          </div>
         </div>
-      </div>
-      <div class="settings-section">
-        <h3>✨ Gemini Vision API Key (Optional)</h3>
-        <div class="form-group">
-          <label for="setting-gemini-apikey">Gemini API Key</label>
-          <input type="password" id="setting-gemini-apikey" placeholder="Paste Gemini API key for AI photo recognition">
-          <p class="settings-note">Used directly in your browser when hosted on GitHub Pages (no backend server). Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a></p>
+        <div class="settings-section">
+          <h3>✨ Gemini Vision API Key (Optional)</h3>
+          <div class="form-group">
+            <label for="setting-gemini-apikey">Gemini API Key</label>
+            <input type="password" id="setting-gemini-apikey" placeholder="Paste Gemini API key for AI photo recognition">
+            <p class="settings-note">Used directly in your browser when hosted on GitHub Pages (no backend server). Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a></p>
+          </div>
         </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <button class="btn btn-primary" onclick="saveSettings()">💾 Save All Settings</button>
+          <button type="button" class="btn btn-secondary" onclick="checkAllApiStatuses()">🔌 Check API Status (Free)</button>
+        </div>
+        <div id="api-status-results" class="api-status-list" style="display:none;"></div>
       </div>
-      <button class="btn btn-primary" onclick="saveSettings()">💾 Save All Settings</button>
     </div>
 
     <!-- Data Management -->
-    <div class="card">
-      <div class="settings-section">
-        <h3>📦 Data Management</h3>
-        <div class="data-actions">
-          <button class="btn btn-accent btn-sm" onclick="loadSampleWardrobe()">🎁 Add Sample Wardrobe</button>
-          <button class="btn btn-secondary btn-sm" onclick="exportWardrobe()">📤 Export</button>
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-file').click()">📥 Import</button>
-          <input type="file" id="import-file" accept=".json" style="display:none" onchange="importWardrobe(event)">
-          <button class="btn btn-secondary btn-sm" onclick="runRetroactiveWardrobeCleanup()">✨ Clean &amp; Sync Item Titles</button>
-          <button class="btn btn-secondary btn-sm" onclick="reidentifyAllWardrobePhotos()">🔄 Re-Identify All Photos</button>
-          <button class="btn btn-danger btn-sm" onclick="clearWardrobe()">🗑️ Clear All</button>
+    <div class="card settings-collapse-card" id="settings-card-data">
+      <button type="button" class="settings-collapse-header" onclick="toggleSettingsCard(this)">
+        <span class="settings-collapse-title">📦 Data Management</span>
+        <span class="settings-collapse-meta">
+          <span>Export, Import &amp; Cleanup</span>
+          <span class="settings-collapse-chevron">▸</span>
+        </span>
+      </button>
+      <div class="settings-collapse-body">
+        <div class="settings-section">
+          <div class="data-actions">
+            <button class="btn btn-accent btn-sm" onclick="loadSampleWardrobe()">🎁 Add Sample Wardrobe</button>
+            <button class="btn btn-secondary btn-sm" onclick="exportWardrobe()">📤 Export</button>
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-file').click()">📥 Import</button>
+            <input type="file" id="import-file" accept=".json" style="display:none" onchange="importWardrobe(event)">
+            <button class="btn btn-secondary btn-sm" onclick="runRetroactiveWardrobeCleanup()">✨ Clean &amp; Sync Item Titles</button>
+            <button class="btn btn-secondary btn-sm" onclick="reidentifyAllWardrobePhotos()">🔄 Re-Identify All Photos</button>
+            <button class="btn btn-danger btn-sm" onclick="clearWardrobe()">🗑️ Clear All</button>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- iPhone App Installation Card -->
-    <div class="card">
-      <div class="settings-section">
-        <h3>📱 Install WhaToWear on iPhone</h3>
-        <p class="settings-note" style="margin-bottom:12px;">
-          WhaToWear is configured as an iOS Progressive Web App (PWA) with a custom Home Screen icon, full-screen standalone display, and offline wardrobe storage.
-        </p>
-        <button type="button" class="btn btn-primary btn-sm" onclick="openIosInstallModal()">
-          📲 View iPhone Installation Guide
-        </button>
+    <div class="card settings-collapse-card" id="settings-card-ios">
+      <button type="button" class="settings-collapse-header" onclick="toggleSettingsCard(this)">
+        <span class="settings-collapse-title">📱 Install WhaToWear on iPhone</span>
+        <span class="settings-collapse-meta">
+          <span>iOS Home Screen App</span>
+          <span class="settings-collapse-chevron">▸</span>
+        </span>
+      </button>
+      <div class="settings-collapse-body">
+        <div class="settings-section">
+          <p class="settings-note" style="margin-bottom:12px;">
+            WhaToWear is configured as an iOS Progressive Web App (PWA) with a custom Home Screen icon, full-screen standalone display, and offline wardrobe storage.
+          </p>
+          <button type="button" class="btn btn-primary btn-sm" onclick="openIosInstallModal()">
+            📲 View iPhone Installation Guide
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -3894,7 +4158,10 @@ input[type="text"]:focus, select:focus, textarea:focus {
       </div>
       <div id="photo-controls" class="photo-badge-bar" style="display:none; flex-wrap:wrap; gap:6px;">
         <span id="detected-color-badge" class="auto-badge">✨ Garment &amp; Color Identified</span>
-        <div style="display:flex; gap:6px; align-items:center;">
+        <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="rotateModalPhoto(-90)" style="padding:3px 9px; font-size:0.72rem;" title="Rotate 90° left">↺ Rotate</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="rotateModalPhoto(90)" style="padding:3px 9px; font-size:0.72rem;" title="Rotate 90° right">↻ Rotate</button>
+          <button type="button" class="btn btn-accent btn-sm" onclick="openPhotoCropModal()" style="padding:3px 9px; font-size:0.72rem;" title="Trim / crop image">✂️ Trim</button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="removePhoto(event)" style="padding:3px 9px; font-size:0.72rem;">✕ Remove</button>
         </div>
         <div id="cv-alternatives-bar" class="cv-alt-chips" style="display:none; width:100%;"></div>
@@ -3977,6 +4244,46 @@ input[type="text"]:focus, select:focus, textarea:focus {
     <div class="form-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveItem()">Save Item</button>
+    </div>
+  </div>
+</div>
+
+<!-- Photo Rotate & Trim/Crop Modal -->
+<div class="modal-overlay" id="photo-crop-modal" onclick="if(event.target===event.currentTarget)closePhotoCropModal()">
+  <div class="modal" style="max-width:560px; width:95%;">
+    <h2 style="margin-bottom:6px;">✂️ Rotate &amp; Trim Item Photo</h2>
+    <p style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:10px;">
+      Drag on the image or use the edge sliders to trim, and rotate 90° as needed.
+    </p>
+    <div class="crop-canvas-wrap">
+      <canvas id="crop-canvas"></canvas>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-bottom:12px;">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="cropModalRotate(-90)">↺ Rotate -90°</button>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="cropModalRotate(90)">↻ Rotate +90°</button>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="resetCropBounds()">↺ Reset Trim</button>
+    </div>
+    <div class="crop-sliders-grid">
+      <div>
+        <label><span>Left Trim</span><span id="crop-lbl-left">0%</span></label>
+        <input type="range" id="crop-left" min="0" max="45" value="0" oninput="updateCropSlider()">
+      </div>
+      <div>
+        <label><span>Right Trim</span><span id="crop-lbl-right">0%</span></label>
+        <input type="range" id="crop-right" min="0" max="45" value="0" oninput="updateCropSlider()">
+      </div>
+      <div>
+        <label><span>Top Trim</span><span id="crop-lbl-top">0%</span></label>
+        <input type="range" id="crop-top" min="0" max="45" value="0" oninput="updateCropSlider()">
+      </div>
+      <div>
+        <label><span>Bottom Trim</span><span id="crop-lbl-bottom">0%</span></label>
+        <input type="range" id="crop-bottom" min="0" max="45" value="0" oninput="updateCropSlider()">
+      </div>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-secondary" onclick="closePhotoCropModal()">Cancel</button>
+      <button type="button" class="btn btn-primary" onclick="applyPhotoCrop()">✓ Apply Trim &amp; Save</button>
     </div>
   </div>
 </div>
@@ -6642,6 +6949,9 @@ function getLocationSeasonInfo(dateInput, wxOverride) {
 }
 
 function updateHeaderSeasonPill() {
+  if (typeof renderFloatingPersonaCard === 'function') {
+    renderFloatingPersonaCard();
+  }
   const pill = document.getElementById('header-season-pill');
   if (!pill) return;
   const sInfo = getLocationSeasonInfo();
@@ -7271,7 +7581,37 @@ function getWearLog() {
   }
 }
 
-function logWearToday(topId, bottomId, outerId, midLayerId, beltId) {
+function getItemWearCount(item) {
+  if (!item) return 0;
+  if (typeof item.wearCount === 'number' && !Number.isNaN(item.wearCount)) {
+    return item.wearCount;
+  }
+  const log = getWearLog();
+  let count = 0;
+  for (const entry of log) {
+    if (!entry) continue;
+    if (entry.topId === item.id || entry.midLayerId === item.id || entry.bottomId === item.id ||
+        entry.outerId === item.id || entry.beltId === item.id || entry.shoeId === item.id ||
+        entry.accessoryId === item.id) {
+      count++;
+    }
+  }
+  return count;
+}
+
+function incrementItemWear(itemId) {
+  const item = wardrobe.find(w => w.id === itemId);
+  if (!item) return;
+  item.wearCount = getItemWearCount(item) + 1;
+  saveLocalDataOnly();
+  renderWardrobe();
+  if (typeof syncWardrobeItemsToCloud === 'function') {
+    syncWardrobeItemsToCloud([item]).catch(() => {});
+  }
+  toast(`👕 "${item.name}" worn count updated to ${item.wearCount}×`);
+}
+
+function logWearToday(topId, bottomId, outerId, midLayerId, beltId, shoeId, accessoryId) {
   const log = getWearLog();
   const todayStr = new Date().toISOString().split('T')[0];
   log.unshift({
@@ -7281,18 +7621,37 @@ function logWearToday(topId, bottomId, outerId, midLayerId, beltId) {
     bottomId,
     outerId: outerId || null,
     beltId: beltId || null,
+    shoeId: shoeId || null,
+    accessoryId: accessoryId || null,
     timestamp: Date.now()
   });
   if (log.length > 40) log.pop();
   localStorage.setItem('wtw_wear_log', JSON.stringify(log));
+
+  const wornIds = [topId, midLayerId, bottomId, outerId, beltId, shoeId, accessoryId].filter(Boolean);
+  const updatedItems = [];
+  wornIds.forEach(id => {
+    const it = wardrobe.find(w => w.id === id);
+    if (it) {
+      it.wearCount = (typeof it.wearCount === 'number' ? it.wearCount : Math.max(0, getItemWearCount(it) - 1)) + 1;
+      updatedItems.push(it);
+    }
+  });
+  if (updatedItems.length > 0) {
+    saveLocalDataOnly();
+    if (typeof syncWardrobeItemsToCloud === 'function') {
+      syncWardrobeItemsToCloud(updatedItems).catch(() => {});
+    }
+  }
 
   const btn = document.getElementById('btn-wear-today');
   if (btn) {
     btn.classList.add('logged');
     btn.innerHTML = '✓ Logged as Today\'s Look!';
   }
-  toast('📌 Outfit logged! Tomorrow WhaToWear will automatically mix a fresh combination.');
+  toast('📌 Outfit logged! Wear counts updated & tomorrow will mix a fresh look.');
   renderWardrobeIllusionSection();
+  renderWardrobe();
 }
 
 /* ===== Multi-Layer (Strict 3-Tier Top Hierarchy) & Belt Coordination Helpers ===== */
@@ -8270,6 +8629,46 @@ function generateOutfit() {
     return null;
   }
 
+  // If a Special Occasion AI assignment is active, return those reassigned pieces
+  if (typeof activeSpecialOccasion === 'object' && activeSpecialOccasion && activeSpecialOccasion.outfitIds) {
+    const ids = activeSpecialOccasion.outfitIds;
+    const findById = (id) => id ? wardrobe.find(w => w.id === id) || null : null;
+    const aiTop = findById(ids.topId);
+    const aiBottom = findById(ids.bottomId);
+    const aiShoe = findById(ids.shoeId);
+    if (aiTop && aiBottom && aiShoe) {
+      const aiMid = findById(ids.midLayerId);
+      const aiOuter = findById(ids.outerwearId);
+      const aiAcc = findById(ids.accessoryId);
+      const aiBelt = findById(ids.beltId);
+      const aiBeltRec = aiBelt
+        ? { beltItem: aiBelt, status: 'matched', summary: `AI paired ${aiBelt.name} for ${activeSpecialOccasion.prompt}` }
+        : proposeBeltForOutfit(aiShoe, aiBottom, aiTop, aiOuter || aiMid, byCategory.accessories);
+      const aiLayerCount = 1 + (aiMid ? 1 : 0) + (aiOuter ? 1 : 0);
+      const locName = (weather && weather.city) ? weather.city.split(',')[0] : (getSettings().city || 'your location');
+      const aiOutfit = {
+        top: aiTop,
+        midLayer: aiMid,
+        proposedMidLayer: null,
+        bottom: aiBottom,
+        shoe: aiShoe,
+        outerwear: aiOuter,
+        beltRec: aiBeltRec,
+        accessory: aiAcc,
+        targetLayers: aiLayerCount,
+        layerReason: `Tailored for "${activeSpecialOccasion.prompt}"`,
+        seasonMessage: `${sInfo.icon} ${sInfo.name} in ${locName} · Special Occasion: ${activeSpecialOccasion.prompt}`,
+        seasonInfo: sInfo,
+        personaMessage: activeSpecialOccasion.reason || `Reassigned for "${activeSpecialOccasion.prompt}"`,
+        isNeverWorn: true,
+        specialOccasion: activeSpecialOccasion,
+        blueprint
+      };
+      aiOutfit.decisionProfile = generateHowToWearGuide(aiOutfit, blueprint);
+      return aiOutfit;
+    }
+  }
+
   const filter = (items) => {
     const allowed = items.filter(it => !isItemDisliked(it));
     const pool = allowed.length > 0 ? allowed : items;
@@ -9060,8 +9459,22 @@ function renderOutfit() {
   const midIdArg = outfit.midLayer ? `'${outfit.midLayer.id}'` : 'null';
   const outerIdArg = outfit.outerwear ? `'${outfit.outerwear.id}'` : 'null';
   const beltIdArg = outfit.beltRec && outfit.beltRec.beltItem ? `'${outfit.beltRec.beltItem.id}'` : 'null';
+  const shoeIdArg = outfit.shoe ? `'${outfit.shoe.id}'` : 'null';
+  const accIdArg = outfit.accessory ? `'${outfit.accessory.id}'` : 'null';
 
   const dp = outfit.decisionProfile || generateHowToWearGuide(outfit, outfit.blueprint || buildPersonalStyleBlueprint());
+  const specialOccasionBannerHtml = outfit.specialOccasion
+    ? `<div class="special-occasion-active-banner">
+         <div>
+           <strong>🎯 Special Occasion Active:</strong> "${escapeHtml(outfit.specialOccasion.prompt)}"
+           <div style="font-size:0.76rem; color:var(--text-secondary); margin-top:2px;">
+             ${escapeHtml(outfit.specialOccasion.sourceLabel || 'AI Stylist')}: ${escapeHtml(outfit.specialOccasion.reason || '')}
+           </div>
+         </div>
+         <button type="button" class="btn btn-secondary btn-sm" onclick="clearSpecialOccasion()">✕ Clear Occasion</button>
+       </div>`
+    : '';
+
   const decisionCardHtml = `
     <div class="outfit-decision-card" id="outfit-decision-card">
       <div class="outfit-decision-title">
@@ -9083,6 +9496,25 @@ function renderOutfit() {
       </div>
     </div>`;
 
+  const savedOccasionVal = (typeof activeSpecialOccasion === 'object' && activeSpecialOccasion && activeSpecialOccasion.prompt)
+    ? activeSpecialOccasion.prompt
+    : '';
+
+  const specialOccasionBoxHtml = `
+    <div class="special-occasion-box" id="special-occasion-box">
+      <div style="font-size:0.84rem; font-weight:700; color:var(--text);">
+        🎯 Special Occasion? Ask AI to Reassign Today's Outfit
+      </div>
+      <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">
+        Describe where you're going (e.g., <em>"Going to a cricket game outside"</em>, <em>"Outdoor cocktail party"</em>, <em>"Client dinner"</em>) and AI will reassign the best pieces from your wardrobe.
+      </div>
+      <div class="special-occasion-row">
+        <input type="text" id="special-occasion-input" value="${escapeHtml(savedOccasionVal)}" placeholder="e.g. Going to a cricket game outside in the sun..." onkeydown="if(event.key==='Enter'){event.preventDefault();reassignOutfitForSpecialOccasion();}">
+        <button type="button" class="btn btn-primary btn-sm" id="btn-special-occasion" onclick="reassignOutfitForSpecialOccasion()">✨ Check with AI &amp; Reassign</button>
+        ${savedOccasionVal ? `<button type="button" class="btn btn-secondary btn-sm" onclick="clearSpecialOccasion()">✕ Reset</button>` : ''}
+      </div>
+    </div>`;
+
   section.innerHTML = `
     <div class="outfit-display">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
@@ -9096,16 +9528,16 @@ function renderOutfit() {
           ${freshnessHtml}
         </div>
       </div>
+      ${specialOccasionBannerHtml}
       ${outfit.seasonMessage ? `<div style="margin-bottom:8px;"><span class="badge" style="background:${sInfo.badgeBg}; color:${sInfo.badgeText}; font-weight:600; font-size:0.76rem; padding:5px 12px; border-radius:14px; border:1px solid ${sInfo.badgeBorder}; display:inline-block;">${escapeHtml(outfit.seasonMessage)}</span></div>` : ''}
       ${outfit.personaMessage ? `<div style="margin-bottom:8px;"><span class="badge" style="background:#e8f4ec; color:#2e6945; font-weight:600; font-size:0.78rem; padding:4px 12px; border-radius:14px; border:1px solid #cce5d4;">${escapeHtml(outfit.personaMessage)}</span></div>` : ''}
       ${outfit.astralAligned && outfit.astralMessage ? `<div style="margin-bottom:10px;"><span class="astral-outfit-badge">${outfit.astralMessage}</span></div>` : ''}
       <div class="outfit-items">${items}</div>
-      ${decisionCardHtml}
       <div class="outfit-actions">
         <button class="btn btn-primary" onclick="shuffleOutfit()">
           <span id="shuffle-icon">🔀</span> Shuffle Outfit
         </button>
-        <button id="btn-wear-today" class="btn-wear-today" onclick="logWearToday('${outfit.top.id}', '${outfit.bottom.id}', ${outerIdArg}, ${midIdArg}, ${beltIdArg})">
+        <button id="btn-wear-today" class="btn-wear-today" onclick="logWearToday('${outfit.top.id}', '${outfit.bottom.id}', ${outerIdArg}, ${midIdArg}, ${beltIdArg}, ${shoeIdArg}, ${accIdArg})">
           📌 I'm Wearing This Today!
         </button>
         <button class="btn btn-secondary" onclick="switchTab('wardrobe')">
@@ -9115,13 +9547,18 @@ function renderOutfit() {
           🛍️ See Pieces to Buy
         </button>
       </div>
+      ${decisionCardHtml}
       ${bottomSettingsHtml}
+      ${specialOccasionBoxHtml}
     </div>`;
 
   renderWardrobeIllusionSection();
 }
 
 function shuffleOutfit() {
+  if (typeof activeSpecialOccasion !== 'undefined' && activeSpecialOccasion) {
+    activeSpecialOccasion = null;
+  }
   const icon = document.getElementById('shuffle-icon');
   if (icon) {
     icon.classList.remove('shuffle-spin');
@@ -9129,6 +9566,269 @@ function shuffleOutfit() {
     icon.classList.add('shuffle-spin');
   }
   renderOutfit();
+}
+
+/* ===== Special Occasion AI Outfit Reassignment ===== */
+let activeSpecialOccasion = null;
+
+function clearSpecialOccasion() {
+  activeSpecialOccasion = null;
+  renderOutfit();
+  toast('🔄 Special occasion cleared — back to daily outfit');
+}
+
+function reassignOutfitLocalForOccasion(occasionText) {
+  const txt = (occasionText || '').toLowerCase();
+  const isOutdoorSport = /\b(cricket|football|soccer|tennis|golf|game|match|stadium|park|picnic|hike|hiking|outdoor|outside|beach|bbq|barbecue|sun|walk|festival|race)\b/.test(txt);
+  const isFormalEvent = /\b(wedding|gala|black tie|cocktail|formal|ceremony|award|opera|theatre|theater|dinner|date|anniversary|upscale|restaurant)\b/.test(txt);
+  const isWorkEvent = /\b(meeting|office|interview|conference|presentation|client|business|work|workshop)\b/.test(txt);
+  const isRainCold = /\b(rain|storm|wind|cold|chilly|night|evening|winter|snow)\b/.test(txt);
+
+  const byCat = { tops: [], bottoms: [], shoes: [], outerwear: [], accessories: [] };
+  wardrobe.forEach(it => {
+    if (isItemDisliked(it)) return;
+    if (byCat[it.category]) byCat[it.category].push(it);
+    else byCat.accessories.push(it);
+  });
+  const tops = byCat.tops.length ? byCat.tops : wardrobe.filter(i => i.category === 'tops');
+  const bottoms = byCat.bottoms.length ? byCat.bottoms : wardrobe.filter(i => i.category === 'bottoms');
+  const shoes = byCat.shoes.length ? byCat.shoes : wardrobe.filter(i => i.category === 'shoes');
+  if (!tops.length || !bottoms.length || !shoes.length) return null;
+
+  const scoreForOccasion = (it) => {
+    let s = 0;
+    const sub = ((it.subType || '') + ' ' + (it.name || '')).toLowerCase();
+    const form = (it.formality || 'casual').toLowerCase();
+    const len = getItemLength(it);
+    if (isOutdoorSport) {
+      if (['casual', 'athleisure', 'elevated-casual', 'smart-casual'].includes(form)) s += 25;
+      if (['formal', 'black-tie', 'cocktail'].includes(form)) s -= 30;
+      if (/\b(t-shirt|tee|polo|chino|short|shorts|sneaker|trainer|cap|hat|sunglass|denim|linen|breathable)\b/.test(sub)) s += 22;
+      if (len === 'short' || len === 'shorts') s += 12;
+      if (/\b(oxford|heel|stiletto|tuxedo|suit)\b/.test(sub)) s -= 25;
+    } else if (isFormalEvent) {
+      if (['formal', 'cocktail', 'black-tie', 'business-casual', 'smart-casual'].includes(form)) s += 28;
+      if (['lounge', 'athleisure'].includes(form)) s -= 30;
+      if (/\b(blazer|shirt|trousers|dress|loafer|oxford|derby|heel|coat|trench)\b/.test(sub)) s += 20;
+    } else if (isWorkEvent) {
+      if (['business-casual', 'smart-casual', 'formal', 'elevated-casual'].includes(form)) s += 26;
+      if (['lounge', 'athleisure'].includes(form)) s -= 25;
+      if (/\b(shirt|oxford|blazer|chino|trousers|loafer|derby|blouse|skirt)\b/.test(sub)) s += 18;
+    }
+    if (isRainCold && /\b(jacket|coat|hoodie|sweater|cardigan|rain|windbreaker|parka|boot)\b/.test(sub)) s += 20;
+    if (weatherSuitable(it)) s += 10;
+    return s + Math.random() * 6;
+  };
+
+  const pickBest = (arr) => [...arr].sort((a, b) => scoreForOccasion(b) - scoreForOccasion(a))[0] || null;
+  const baseTops = tops.filter(isBaseTop);
+  const top = pickBest(baseTops.length ? baseTops : tops);
+  const bottom = pickBest(bottoms);
+  const shoe = pickBest(shoes);
+
+  const midCandidates = [...tops, ...byCat.outerwear].filter(isMidLayerCandidate);
+  const outerCandidates = byCat.outerwear.filter(isOuterShellCandidate);
+  const needLayer = isRainCold || isFormalEvent || isWorkEvent || getTargetTopLayers().count >= 2;
+  const midLayer = (needLayer && midCandidates.length && (!isOutdoorSport || isRainCold)) ? pickBest(midCandidates) : null;
+  const outerwear = (isRainCold && outerCandidates.length) ? pickBest(outerCandidates) : null;
+
+  const nonBelts = byCat.accessories.filter(a => !isBeltItem(a));
+  let accessory = null;
+  if (isOutdoorSport && nonBelts.length) {
+    const sunAcc = nonBelts.filter(a => /\b(sunglass|cap|hat|watch)\b/i.test((a.subType || '') + ' ' + (a.name || '')));
+    accessory = pickBest(sunAcc.length ? sunAcc : nonBelts);
+  } else if (nonBelts.length) {
+    accessory = pickBest(nonBelts);
+  }
+
+  let reason = `Selected breathable, comfortable pieces matched to "${occasionText}"`;
+  if (isOutdoorSport) reason = `Picked outdoor-friendly, comfortable layers & footwear suited for "${occasionText}".`;
+  else if (isFormalEvent) reason = `Elevated to polished, occasion-ready silhouettes for "${occasionText}".`;
+  else if (isWorkEvent) reason = `Balanced smart-professional pieces tailored for "${occasionText}".`;
+
+  return {
+    outfitIds: {
+      topId: top.id,
+      midLayerId: midLayer ? midLayer.id : null,
+      outerwearId: outerwear ? outerwear.id : null,
+      bottomId: bottom.id,
+      shoeId: shoe.id,
+      beltId: null,
+      accessoryId: accessory ? accessory.id : null
+    },
+    reason,
+    sourceLabel: 'Smart Stylist Engine'
+  };
+}
+
+async function reassignOutfitForSpecialOccasion() {
+  const input = document.getElementById('special-occasion-input');
+  const occasionText = (input ? input.value : '').trim();
+  if (!occasionText) {
+    toast('Describe your special occasion first (e.g. "Going to a cricket game outside")');
+    if (input) input.focus();
+    return;
+  }
+  if (wardrobe.length < 3) {
+    toast('Add at least a top, bottom, and shoes to your wardrobe first');
+    return;
+  }
+
+  const btn = document.getElementById('btn-special-occasion');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '🤖 Checking with AI...';
+  }
+
+  try {
+    const geminiKey = (localStorage.getItem('wtw_gemini_apikey') || '').trim();
+    const currentTemp = weather && typeof weather.temp === 'number' ? weather.temp : 21;
+    const cond = (weather && weather.description) ? weather.description : 'clear';
+    const sInfo = getLocationSeasonInfo();
+
+    if (geminiKey) {
+      const compactWardrobe = wardrobe.filter(it => !isItemDisliked(it)).map(it => ({
+        id: it.id,
+        name: it.name,
+        category: it.category,
+        subType: it.subType,
+        color: it.colorName || getColorNameFromHex(it.color),
+        formality: it.formality,
+        length: getItemLength(it),
+        season: it.season || 'all-season'
+      }));
+
+      const prompt = [
+        `You are a personal wardrobe stylist. The user has a special occasion: "${occasionText}".`,
+        `Current weather: ${currentTemp}°C, ${cond}, Season: ${sInfo.name}.`,
+        `Pick the best outfit from the user's wardrobe JSON below. You MUST only use exact "id" values from the list.`,
+        `Return ONLY valid JSON with keys: topId (required), midLayerId (string or null), outerwearId (string or null), bottomId (required), shoeId (required), beltId (string or null), accessoryId (string or null), reason (1 concise sentence explaining why this works for the occasion and weather).`,
+        `Wardrobe: ${JSON.stringify(compactWardrobe)}`
+      ].join('\n');
+
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.35, responseMimeType: 'application/json' }
+        })
+      });
+
+      if (res.ok) {
+        const payload = await res.json();
+        const rawText = payload?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const parsed = JSON.parse(rawText.replace(/^```json\s*/i, '').replace(/```$/i, '').trim());
+        const validIds = new Set(wardrobe.map(w => w.id));
+        if (parsed && validIds.has(parsed.topId) && validIds.has(parsed.bottomId) && validIds.has(parsed.shoeId)) {
+          activeSpecialOccasion = {
+            prompt: occasionText,
+            outfitIds: {
+              topId: parsed.topId,
+              midLayerId: validIds.has(parsed.midLayerId) ? parsed.midLayerId : null,
+              outerwearId: validIds.has(parsed.outerwearId) ? parsed.outerwearId : null,
+              bottomId: parsed.bottomId,
+              shoeId: parsed.shoeId,
+              beltId: validIds.has(parsed.beltId) ? parsed.beltId : null,
+              accessoryId: validIds.has(parsed.accessoryId) ? parsed.accessoryId : null
+            },
+            reason: parsed.reason || `Tailored by Gemini AI for "${occasionText}".`,
+            sourceLabel: '✨ Gemini AI Stylist'
+          };
+          renderOutfit();
+          toast('✨ Gemini AI reassigned today\'s outfit for your occasion!');
+          return;
+        }
+      }
+    }
+
+    // Fallback: smart local occasion reassignment
+    const localPick = reassignOutfitLocalForOccasion(occasionText);
+    if (localPick) {
+      activeSpecialOccasion = { prompt: occasionText, ...localPick };
+      renderOutfit();
+      toast(geminiKey
+        ? '✨ Reassigned with Smart Stylist (Gemini fallback)'
+        : '✨ Outfit reassigned for your occasion! (Add Gemini key in Settings for AI mode)');
+    } else {
+      toast('Not enough matching items in wardrobe to reassign');
+    }
+  } catch (err) {
+    console.warn('Special occasion AI error:', err);
+    const localPick = reassignOutfitLocalForOccasion(occasionText);
+    if (localPick) {
+      activeSpecialOccasion = { prompt: occasionText, ...localPick };
+      renderOutfit();
+      toast('✨ Outfit reassigned using Smart Stylist fallback');
+    } else {
+      toast('Could not reassign outfit for this occasion');
+    }
+  } finally {
+    const b = document.getElementById('btn-special-occasion');
+    if (b) {
+      b.disabled = false;
+      b.textContent = '✨ Check with AI & Reassign';
+    }
+  }
+}
+
+/* ===== Wardrobe Persona Fit Rank (1–10) & Sorting ===== */
+let wardrobeSort = 'default';
+
+function setWardrobeSort(val) {
+  wardrobeSort = val || 'default';
+  renderWardrobe();
+}
+
+function computeItemPersonaFitRank(item, blueprintOverride) {
+  if (!item) return { score: 5, reason: 'Neutral baseline' };
+  if (typeof isItemDisliked === 'function' && isItemDisliked(item)) {
+    return { score: 1, reason: 'Matches your disliked styles list' };
+  }
+  const bp = blueprintOverride || buildPersonalStyleBlueprint();
+  let raw = 5.5;
+  const reasons = [];
+
+  const sigHexes = (bp.signatureColors || []).map(c => c.hex);
+  const avoidHexes = bp.avoidHexes || [];
+  if (sigHexes.length && isColorNameMatch(item.color, sigHexes)) {
+    raw += 2.0;
+    reasons.push(`${bp.palette.name} signature color`);
+  } else if (isNeutralColor(item.color)) {
+    raw += 0.9;
+    reasons.push('versatile neutral');
+  } else if (avoidHexes.length && isColorNameMatch(item.color, avoidHexes)) {
+    raw -= 2.2;
+    reasons.push('off-palette tone');
+  }
+
+  const txt = ((item.subType || '') + ' ' + (item.name || '')).toLowerCase();
+  if ((item.category === 'tops' || item.category === 'outerwear') && bp.faceRule) {
+    if (bp.faceRule.recommendedRegex && bp.faceRule.recommendedRegex.test(txt)) {
+      raw += 1.0;
+      reasons.push(`flatters ${bp.faceRule.label}`);
+    } else if (bp.faceRule.avoidRegex && bp.faceRule.avoidRegex.test(txt)) {
+      raw -= 1.2;
+    }
+  }
+
+  if (bp.bodyRule) {
+    if ((item.category === 'tops' || item.category === 'outerwear') && bp.bodyRule.goodTopRegex && bp.bodyRule.goodTopRegex.test(txt)) {
+      raw += 0.8;
+    } else if (item.category === 'bottoms' && bp.bodyRule.goodBottomRegex && bp.bodyRule.goodBottomRegex.test(txt)) {
+      raw += 0.8;
+    }
+  }
+
+  if (bp.archRule && bp.archRule.keywordRegex && bp.archRule.keywordRegex.test(txt)) {
+    raw += 1.4;
+    reasons.push(`${bp.archRule.name || 'archetype'} match`);
+  }
+
+  const score = Math.max(1, Math.min(10, Math.round(raw)));
+  const reason = reasons.length ? reasons.slice(0, 2).join(' · ') : `${bp.desiredTone || 'Personal'} fit`;
+  return { score, reason: `${score}/10 · ${reason}` };
 }
 
 /* ===== Wardrobe Rendering ===== */
@@ -9153,7 +9853,7 @@ function setFilter(f) {
 function renderWardrobe() {
   const grid = document.getElementById('wardrobe-grid');
   const empty = document.getElementById('wardrobe-empty');
-  const items = activeFilter === 'all' ? wardrobe : wardrobe.filter(it => it.category === activeFilter);
+  let items = activeFilter === 'all' ? [...wardrobe] : wardrobe.filter(it => it.category === activeFilter);
 
   if (wardrobe.length === 0) {
     grid.style.display = 'none';
@@ -9169,12 +9869,26 @@ function renderWardrobe() {
     return;
   }
 
-  grid.innerHTML = items.map((item, idx) => {
+  const bp = buildPersonalStyleBlueprint();
+  const enriched = items.map(item => ({
+    item,
+    wearCount: getItemWearCount(item),
+    fit: computeItemPersonaFitRank(item, bp)
+  }));
+
+  if (wardrobeSort === 'fit-desc') enriched.sort((a, b) => b.fit.score - a.fit.score);
+  else if (wardrobeSort === 'fit-asc') enriched.sort((a, b) => a.fit.score - b.fit.score);
+  else if (wardrobeSort === 'wear-desc') enriched.sort((a, b) => b.wearCount - a.wearCount);
+  else if (wardrobeSort === 'wear-asc') enriched.sort((a, b) => a.wearCount - b.wearCount);
+
+  grid.innerHTML = enriched.map(({ item, wearCount, fit }, idx) => {
     const emoji = getCategoryEmoji(item.category);
     const len = getItemLength(item);
     const lenLabel = getLengthLabel(len, item.category);
     const itemSeason = item.season || inferItemSeasonSuitability(item);
     const seasonBadge = itemSeason && itemSeason !== 'all-season' ? getSeasonBadgeLabel(itemSeason) : '';
+    const fitBadgeClass = fit.score >= 8 ? 'badge-fit-high' : (fit.score >= 5 ? 'badge-fit-mid' : 'badge-fit-low');
+    const fitIcon = fit.score >= 8 ? '⭐' : (fit.score >= 5 ? '✨' : '⚠️');
     const visualContent = item.image
       ? `<div class="card-photo-wrap" onclick="openPhotoLightbox(wardrobe.find(w=>w.id==='${item.id}')?.image, '${escapeHtml(item.name).replace(/'/g, "\\'")}')" style="cursor:zoom-in;" title="Tap to view photo">
            <img src="${item.image}" alt="${escapeHtml(item.name)}">
@@ -9191,6 +9905,7 @@ function renderWardrobe() {
             <span class="card-actions-cat">${escapeHtml(getCategoryLabel(item.category))}</span>
           </div>
           <div class="card-actions-btns">
+            ${item.image ? `<button type="button" class="icon-btn icon-btn-edit" onclick="event.stopPropagation(); openCropForWardrobeItem('${item.id}')" title="Rotate &amp; Trim photo" aria-label="Rotate and trim photo">✂️</button>` : ''}
             <button type="button" class="icon-btn icon-btn-edit" onclick="event.stopPropagation(); openEditModal('${item.id}')" title="Edit ${escapeHtml(item.name)}" aria-label="Edit">✏️</button>
             <button type="button" class="icon-btn icon-btn-delete" onclick="event.stopPropagation(); deleteItem('${item.id}')" title="Delete ${escapeHtml(item.name)}" aria-label="Delete">✕</button>
           </div>
@@ -9199,6 +9914,8 @@ function renderWardrobe() {
         <div class="card-name">${escapeHtml(item.name)}</div>
         <div class="card-sub">${escapeHtml(item.subType)}</div>
         <div class="card-badges">
+          <span class="badge badge-wear-count" onclick="event.stopPropagation(); incrementItemWear('${item.id}')" style="cursor:pointer;" title="Times worn (tap to add +1)">👕 Worn ${wearCount}×</span>
+          <span class="badge ${fitBadgeClass}" title="${escapeHtml(fit.reason)}">${fitIcon} ${fit.score}/10 Fit</span>
           <span class="badge badge-category">${escapeHtml(getCategoryLabel(item.category))}</span>
           <span class="badge badge-formality">${escapeHtml(getFormalityDisplayLabel(item.formality))}</span>
           ${lenLabel ? `<span class="badge badge-length">${lenLabel}</span>` : ''}
@@ -15167,13 +15884,438 @@ async function reanalyzePersonaProfile() {
 }
 
 
+/* ===== Collapsible Settings Cards & Cost-Free API Status Check ===== */
+
+function toggleSettingsCard(headerBtn) {
+  const card = headerBtn ? headerBtn.closest('.settings-collapse-card') : null;
+  if (!card) return;
+  card.classList.toggle('open');
+}
+
+function toggleAllSettingsCards(expand) {
+  document.querySelectorAll('#tab-settings .settings-collapse-card').forEach(card => {
+    card.classList.toggle('open', Boolean(expand));
+  });
+  if (typeof togglePersonaCollapse === 'function') {
+    togglePersonaCollapse(!expand);
+  }
+}
+
+async function checkAllApiStatuses() {
+  const resultsEl = document.getElementById('api-status-results');
+  const summaryPill = document.getElementById('api-summary-pill');
+  if (!resultsEl) return;
+  resultsEl.style.display = 'grid';
+  resultsEl.innerHTML = `<div class="api-status-row"><span>⏳ Checking APIs (cost-free)...</span></div>`;
+  if (summaryPill) {
+    summaryPill.className = 'api-status-pill api-status-idle';
+    summaryPill.textContent = 'Checking...';
+  }
+
+  const geminiInput = document.getElementById('setting-gemini-apikey');
+  const owmInput = document.getElementById('setting-apikey');
+  const cityInput = document.getElementById('setting-city');
+  const geminiKey = (geminiInput ? geminiInput.value : (localStorage.getItem('wtw_gemini_apikey') || '')).trim();
+  const owmKey = (owmInput ? owmInput.value : (localStorage.getItem('wtw_apikey') || '')).trim();
+  const city = (cityInput ? cityInput.value : (localStorage.getItem('wtw_city') || 'Bathurst')).trim() || 'Bathurst';
+
+  const rows = [];
+  let activeCount = 0;
+  let errorCount = 0;
+
+  // 1. Gemini API (0-token, completely free models list endpoint)
+  if (!geminiKey) {
+    rows.push({
+      name: '✨ Gemini Vision & Stylist AI',
+      detail: 'No API key set (using local fallback)',
+      statusClass: 'api-status-idle',
+      statusText: '⚪ Not configured'
+    });
+  } else {
+    const t0 = performance.now();
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(geminiKey)}`);
+      const ms = Math.round(performance.now() - t0);
+      if (res.ok) {
+        activeCount++;
+        rows.push({
+          name: '✨ Gemini Vision & Stylist AI',
+          detail: `Verified via free models list · ${ms}ms · 0 tokens used`,
+          statusClass: 'api-status-ok',
+          statusText: '🟢 Active'
+        });
+      } else {
+        errorCount++;
+        rows.push({
+          name: '✨ Gemini Vision & Stylist AI',
+          detail: `HTTP ${res.status} — Check API key`,
+          statusClass: 'api-status-err',
+          statusText: '🔴 Error'
+        });
+      }
+    } catch (e) {
+      errorCount++;
+      rows.push({
+        name: '✨ Gemini Vision & Stylist AI',
+        detail: 'Network error / offline',
+        statusClass: 'api-status-err',
+        statusText: '🔴 Offline'
+      });
+    }
+  }
+
+  // 2. OpenWeatherMap API
+  if (!owmKey) {
+    rows.push({
+      name: '🔑 OpenWeatherMap API',
+      detail: 'No key set (using free Open-Meteo fallback)',
+      statusClass: 'api-status-idle',
+      statusText: '⚪ Not configured'
+    });
+  } else {
+    const t0 = performance.now();
+    try {
+      const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${encodeURIComponent(owmKey)}&units=metric`);
+      const ms = Math.round(performance.now() - t0);
+      if (res.ok) {
+        activeCount++;
+        rows.push({
+          name: '🔑 OpenWeatherMap API',
+          detail: `Connected for "${city}" · ${ms}ms`,
+          statusClass: 'api-status-ok',
+          statusText: '🟢 Active'
+        });
+      } else {
+        errorCount++;
+        rows.push({
+          name: '🔑 OpenWeatherMap API',
+          detail: `HTTP ${res.status} — Invalid key or city`,
+          statusClass: 'api-status-err',
+          statusText: '🔴 Error'
+        });
+      }
+    } catch (e) {
+      errorCount++;
+      rows.push({
+        name: '🔑 OpenWeatherMap API',
+        detail: 'Network error',
+        statusClass: 'api-status-err',
+        statusText: '🔴 Offline'
+      });
+    }
+  }
+
+  // 3. Open-Meteo Free Weather API (always free, no key)
+  {
+    const t0 = performance.now();
+    try {
+      const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=-33.42&longitude=149.58&current_weather=true');
+      const ms = Math.round(performance.now() - t0);
+      if (res.ok) {
+        activeCount++;
+        rows.push({
+          name: '🌤️ Open-Meteo Weather (Free Fallback)',
+          detail: `Reachable · ${ms}ms · No key required`,
+          statusClass: 'api-status-ok',
+          statusText: '🟢 Active'
+        });
+      } else {
+        errorCount++;
+        rows.push({
+          name: '🌤️ Open-Meteo Weather (Free Fallback)',
+          detail: `HTTP ${res.status}`,
+          statusClass: 'api-status-err',
+          statusText: '🔴 Error'
+        });
+      }
+    } catch (e) {
+      errorCount++;
+      rows.push({
+        name: '🌤️ Open-Meteo Weather (Free Fallback)',
+        detail: 'Network error',
+        statusClass: 'api-status-err',
+        statusText: '🔴 Offline'
+      });
+    }
+  }
+
+  // 4. Firebase Cloud Sync
+  {
+    const cloudBadge = document.getElementById('cloud-status-badge');
+    const cloudTxt = cloudBadge ? cloudBadge.textContent.trim() : 'Unknown';
+    const isOk = /synced|connected|online|ready/i.test(cloudTxt);
+    if (isOk) activeCount++;
+    rows.push({
+      name: '☁️ Firebase Cloud Sync',
+      detail: cloudTxt,
+      statusClass: isOk ? 'api-status-ok' : 'api-status-idle',
+      statusText: isOk ? '🟢 Active' : '⚪ ' + cloudTxt
+    });
+  }
+
+  resultsEl.innerHTML = rows.map(r => `
+    <div class="api-status-row">
+      <div>
+        <strong>${escapeHtml(r.name)}</strong>
+        <div style="font-size:0.74rem; color:var(--text-secondary);">${escapeHtml(r.detail)}</div>
+      </div>
+      <span class="api-status-pill ${r.statusClass}">${escapeHtml(r.statusText)}</span>
+    </div>
+  `).join('');
+
+  if (summaryPill) {
+    if (errorCount > 0) {
+      summaryPill.className = 'api-status-pill api-status-err';
+      summaryPill.textContent = `${errorCount} Issue${errorCount > 1 ? 's' : ''}`;
+    } else {
+      summaryPill.className = 'api-status-pill api-status-ok';
+      summaryPill.textContent = `${activeCount} Active`;
+    }
+  }
+}
+
+/* ===== Photo Rotate & Trim / Crop Engine ===== */
+let cropState = {
+  dataUrl: null,
+  targetItemId: null,
+  img: null,
+  rotation: 0,
+  left: 0,
+  right: 0,
+  top: 0,
+  bottom: 0,
+  dragging: false,
+  startX: 0,
+  startY: 0
+};
+
+function rotateDataUrl90(dataUrl, deg) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const rad = (deg * Math.PI) / 180;
+      const swap = Math.abs(deg) % 180 === 90;
+      canvas.width = swap ? img.height : img.width;
+      canvas.height = swap ? img.width : img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(rad);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+      resolve(canvas.toDataURL('image/jpeg', 0.88));
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
+async function rotateModalPhoto(deg) {
+  if (!currentItemPhoto) return;
+  try {
+    const rotated = await rotateDataUrl90(currentItemPhoto, deg);
+    currentItemPhoto = rotated;
+    currentItemOriginalPhoto = rotated;
+    showPhotoPreview(rotated);
+    toast(`🔄 Photo rotated ${deg > 0 ? '+90°' : '-90°'}`);
+  } catch (e) {
+    toast('Could not rotate this image (CORS or format issue)');
+  }
+}
+
+function openPhotoCropModal(directItemId = null) {
+  const src = directItemId
+    ? (wardrobe.find(w => w.id === directItemId)?.image || null)
+    : currentItemPhoto;
+  if (!src) {
+    toast('No photo to trim');
+    return;
+  }
+  cropState.targetItemId = directItemId;
+  cropState.dataUrl = src;
+  cropState.rotation = 0;
+  resetCropBounds(false);
+
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    cropState.img = img;
+    document.getElementById('photo-crop-modal').classList.add('active');
+    drawCropCanvas();
+  };
+  img.onerror = () => toast('Unable to load image for trimming');
+  img.src = src;
+}
+
+function openCropForWardrobeItem(itemId) {
+  openPhotoCropModal(itemId);
+}
+
+function closePhotoCropModal() {
+  const m = document.getElementById('photo-crop-modal');
+  if (m) m.classList.remove('active');
+}
+
+function resetCropBounds(redraw = true) {
+  cropState.left = 0;
+  cropState.right = 0;
+  cropState.top = 0;
+  cropState.bottom = 0;
+  ['left', 'right', 'top', 'bottom'].forEach(side => {
+    const el = document.getElementById(`crop-${side}`);
+    const lbl = document.getElementById(`crop-lbl-${side}`);
+    if (el) el.value = 0;
+    if (lbl) lbl.textContent = '0%';
+  });
+  if (redraw) drawCropCanvas();
+}
+
+function updateCropSlider() {
+  ['left', 'right', 'top', 'bottom'].forEach(side => {
+    const el = document.getElementById(`crop-${side}`);
+    const lbl = document.getElementById(`crop-lbl-${side}`);
+    const val = el ? parseInt(el.value, 10) || 0 : 0;
+    cropState[side] = val;
+    if (lbl) lbl.textContent = `${val}%`;
+  });
+  drawCropCanvas();
+}
+
+async function cropModalRotate(deg) {
+  if (!cropState.dataUrl) return;
+  try {
+    const rotated = await rotateDataUrl90(cropState.dataUrl, deg);
+    cropState.dataUrl = rotated;
+    const img = new Image();
+    img.onload = () => {
+      cropState.img = img;
+      drawCropCanvas();
+    };
+    img.src = rotated;
+  } catch (e) {
+    toast('Could not rotate image');
+  }
+}
+
+function drawCropCanvas() {
+  const canvas = document.getElementById('crop-canvas');
+  const img = cropState.img;
+  if (!canvas || !img) return;
+  const maxW = 460;
+  const maxH = 320;
+  const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+  canvas.width = Math.round(img.width * scale);
+  canvas.height = Math.round(img.height * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+  const x1 = (cropState.left / 100) * canvas.width;
+  const y1 = (cropState.top / 100) * canvas.height;
+  const x2 = canvas.width - (cropState.right / 100) * canvas.width;
+  const y2 = canvas.height - (cropState.bottom / 100) * canvas.height;
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+  ctx.fillRect(0, 0, canvas.width, y1);
+  ctx.fillRect(0, y2, canvas.width, canvas.height - y2);
+  ctx.fillRect(0, y1, x1, y2 - y1);
+  ctx.fillRect(x2, y1, canvas.width - x2, y2 - y1);
+
+  ctx.strokeStyle = '#00e5c0';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x1, y1, Math.max(4, x2 - x1), Math.max(4, y2 - y1));
+}
+
+(function initCropCanvasDrag() {
+  const canvas = document.getElementById('crop-canvas');
+  if (!canvas) return;
+  const getPt = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+      x: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+    };
+  };
+  const onStart = (e) => {
+    cropState.dragging = true;
+    const p = getPt(e);
+    cropState.startX = p.x;
+    cropState.startY = p.y;
+  };
+  const onMove = (e) => {
+    if (!cropState.dragging) return;
+    const p = getPt(e);
+    const minX = Math.min(cropState.startX, p.x);
+    const maxX = Math.max(cropState.startX, p.x);
+    const minY = Math.min(cropState.startY, p.y);
+    const maxY = Math.max(cropState.startY, p.y);
+    if (maxX - minX < 0.08 || maxY - minY < 0.08) return;
+    cropState.left = Math.min(45, Math.round(minX * 100));
+    cropState.right = Math.min(45, Math.round((1 - maxX) * 100));
+    cropState.top = Math.min(45, Math.round(minY * 100));
+    cropState.bottom = Math.min(45, Math.round((1 - maxY) * 100));
+    ['left', 'right', 'top', 'bottom'].forEach(side => {
+      const el = document.getElementById(`crop-${side}`);
+      const lbl = document.getElementById(`crop-lbl-${side}`);
+      if (el) el.value = cropState[side];
+      if (lbl) lbl.textContent = `${cropState[side]}%`;
+    });
+    drawCropCanvas();
+  };
+  const onEnd = () => { cropState.dragging = false; };
+  canvas.addEventListener('mousedown', onStart);
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onEnd);
+  canvas.addEventListener('touchstart', onStart, { passive: true });
+  window.addEventListener('touchmove', onMove, { passive: true });
+  window.addEventListener('touchend', onEnd);
+})();
+
+async function applyPhotoCrop() {
+  const img = cropState.img;
+  if (!img) return;
+  const sx = Math.round((cropState.left / 100) * img.width);
+  const sy = Math.round((cropState.top / 100) * img.height);
+  const sw = Math.max(20, img.width - sx - Math.round((cropState.right / 100) * img.width));
+  const sh = Math.max(20, img.height - sy - Math.round((cropState.bottom / 100) * img.height));
+
+  const maxOut = 900;
+  const outScale = Math.min(1, maxOut / Math.max(sw, sh));
+  const outCanvas = document.createElement('canvas');
+  outCanvas.width = Math.round(sw * outScale);
+  outCanvas.height = Math.round(sh * outScale);
+  const ctx = outCanvas.getContext('2d');
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outCanvas.width, outCanvas.height);
+
+  const trimmedUrl = outCanvas.toDataURL('image/jpeg', 0.86);
+
+  if (cropState.targetItemId) {
+    const idx = wardrobe.findIndex(w => w.id === cropState.targetItemId);
+    if (idx !== -1) {
+      wardrobe[idx].image = trimmedUrl;
+      wardrobe[idx].imageUrl = null;
+      saveLocalDataOnly();
+      renderWardrobe();
+      renderOutfit();
+      if (typeof syncWardrobeItemsToCloud === 'function') {
+        syncWardrobeItemsToCloud([wardrobe[idx]]).catch(() => {});
+      }
+      toast('✂️ Photo rotated & trimmed!');
+    }
+  } else {
+    currentItemPhoto = trimmedUrl;
+    currentItemOriginalPhoto = trimmedUrl;
+    showPhotoPreview(trimmedUrl);
+    toast('✂️ Photo trimmed — click Save Item to keep changes');
+  }
+  closePhotoCropModal();
+}
+
 /* ===== Tabs ===== */
 
 function switchTab(tabId) {
-  if (tabId === 'settings' && typeof togglePersonaCollapse === 'function') {
-    togglePersonaCollapse(false);
-  }
-
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabId));
   document.querySelectorAll('.tab-content').forEach(tc => tc.classList.toggle('active', tc.id === `tab-${tabId}`));
   if (tabId === 'today') {
@@ -15223,6 +16365,7 @@ document.getElementById('item-modal').addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeModal();
+    closePhotoCropModal();
     closeMassValidateModal();
     closeIosInstallModal();
     closeCameraModal();
