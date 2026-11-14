@@ -3729,6 +3729,7 @@ input[type="text"]:focus, select:focus, textarea:focus {
           <option value="wear-desc">👕 Most Worn</option>
           <option value="wear-asc">🧺 Least Worn</option>
         </select>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-batch-ai-describe" onclick="generateAllMissingAIDescriptions()" title="Generate AI descriptions for items missing one">🤖 AI Describe Missing</button>
         <button type="button" class="btn btn-accent btn-sm" onclick="openMassUploadPicker()">📚 Mass Upload Photos</button>
         <button type="button" class="btn btn-secondary btn-sm" onclick="openSavedImagesModal('wardrobe')">🖼️ Saved Images</button>
         <button type="button" class="btn btn-primary btn-sm" onclick="openAddModal()">＋ Add Item</button>
@@ -4366,6 +4367,11 @@ input[type="text"]:focus, select:focus, textarea:focus {
           <button type="button" class="btn btn-primary btn-sm" style="padding:7px 12px; font-size:0.76rem;" onclick="addCustomFormalityFromModal()">Add</button>
         </div>
       </div>
+    </div>
+
+    <div class="form-group">
+      <label for="item-ai-description">AI Description <span style="font-size:0.74rem; color:var(--text-secondary); font-weight:500;">(Observed fabric, cut, colors &amp; details)</span></label>
+      <textarea id="item-ai-description" rows="2" placeholder="Auto-filled by AI Check Item (e.g. Slate gray chino shorts with flat front and side pockets.)" style="width:100%; resize:vertical;"></textarea>
     </div>
 
     <div id="ai-item-check-box" style="margin-bottom:12px; padding:10px 12px; border-radius:10px; background:rgba(0,229,192,0.08); border:1px solid rgba(0,229,192,0.28); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
@@ -5841,6 +5847,7 @@ function normalizeRemoteWardrobeItem(raw, scope) {
     tertiaryColor: raw.tertiaryColor || '',
     tertiaryColorName: raw.tertiaryColorName || '',
     pattern: raw.pattern || 'solid',
+    aiDescription: raw.aiDescription || '',
     formality: raw.formality || 'casual',
     wearCount: raw.wearCount || 0,
     image: imgUrl,
@@ -6411,6 +6418,7 @@ function sanitizeWardrobeItemForFirestore(item, scope, timestamp) {
     tertiaryColor: item.tertiaryColor || null,
     tertiaryColorName: item.tertiaryColorName || null,
     pattern: item.pattern || 'solid',
+    aiDescription: item.aiDescription || '',
     wearCount: typeof item.wearCount === 'number' ? item.wearCount : 0,
     imageTransform: item.imageTransform || null,
     formality: item.formality,
@@ -9408,6 +9416,7 @@ function renderOutfitItem(item, label, stepBadge) {
           ${lenLabel ? `· <span class="badge badge-length" style="font-size:0.68rem; padding:2px 6px;">${lenLabel}</span>` : ''}
           ${seasonBadge ? `· <span class="badge" style="font-size:0.68rem; padding:2px 6px; background:#f4efe6; color:#5a4632;">${seasonBadge}</span>` : ''}
         </div>
+        ${item.aiDescription ? `<div style="font-size:0.72rem; color:var(--text-secondary); margin-top:3px; line-height:1.3;">🤖 ${escapeHtml(item.aiDescription)}</div>` : ''}
       </div>
       <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
         ${!hasRealPhoto && item.id ? `
@@ -10187,6 +10196,7 @@ function renderWardrobe() {
         ${visualContent}
         <div class="card-name">${escapeHtml(item.name)}</div>
         <div class="card-sub">${escapeHtml(item.subType)}</div>
+        ${item.aiDescription ? `<div style="font-size:0.72rem; color:var(--text-secondary); margin:-4px 0 8px; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;" title="${escapeHtml(item.aiDescription)}">🤖 ${escapeHtml(item.aiDescription)}</div>` : ''}
         <div class="card-badges">
           <span class="badge badge-wear-count" onclick="event.stopPropagation(); incrementItemWear('${item.id}')" style="cursor:pointer;" title="Times worn (tap to add +1)">👕 Worn ${wearCount}×</span>
           <span class="badge ${fitBadgeClass}" title="${escapeHtml(fit.reason)}">${fitIcon} ${fit.score}/10 Fit</span>
@@ -12571,6 +12581,13 @@ async function approveSingleMassDraft(draftId) {
     length: resolvedLength,
     season: d.season || inferItemSeasonSuitability({ category: d.category, subType: d.subType, length: resolvedLength }),
     color: d.color,
+    colorName: d.colorName || getColorNameFromHex(d.color),
+    secondaryColor: d.secondaryColor || null,
+    secondaryColorName: d.secondaryColor ? (d.secondaryColorName || getColorNameFromHex(d.secondaryColor)) : null,
+    tertiaryColor: d.tertiaryColor || null,
+    tertiaryColorName: d.tertiaryColor ? (d.tertiaryColorName || getColorNameFromHex(d.tertiaryColor)) : null,
+    pattern: d.pattern || 'solid',
+    aiDescription: d.aiDescription || '',
     formality: d.formality || inferFormalityFromRecognizedPiece(d.category, d.subType, 'casual'),
     image: d.image
   };
@@ -13550,6 +13567,7 @@ async function verifyMassDraftWithAI(draftId) {
     if (parsed.season) { d.season = parsed.season; d.seasonEdited = true; }
     if (parsed.formality) { d.formality = parsed.formality; d.formalityEdited = true; }
     d.visionNote = parsed.notes || 'AI Verified';
+    d.aiDescription = parsed.notes || '';
     d.nameEdited = false;
     refreshMassDraftDerivedFields(d, { updateTypeProps: false, forceNameRecalc: true });
     renderMassValidateCards();
@@ -13563,6 +13581,48 @@ async function verifyMassDraftWithAI(draftId) {
   } finally {
     const b = document.getElementById(`btn-ai-draft-${draftId}`);
     if (b) { b.disabled = false; b.textContent = '✨ AI Check'; }
+  }
+}
+
+async function generateAllMissingAIDescriptions() {
+  const missing = wardrobe.filter(it => !it.aiDescription && it.image);
+  if (missing.length === 0) {
+    toast('All items with photos already have an AI description!');
+    return;
+  }
+  const btn = document.getElementById('btn-batch-ai-describe');
+  if (btn) btn.disabled = true;
+  const updated = [];
+  let failed = 0;
+  try {
+    for (let i = 0; i < missing.length; i++) {
+      const it = missing[i];
+      if (btn) btn.textContent = `🤖 ${i + 1}/${missing.length}...`;
+      try {
+        const parsed = await runGeminiItemInspection(it.image, it.name, it.category, it.subType, it.id);
+        if (parsed?.notes) {
+          it.aiDescription = parsed.notes;
+          updated.push(it);
+        }
+      } catch (err) {
+        if (err?.message === 'NO_GEMINI_KEY') {
+          toast('Add your Gemini API key in Profile & Settings first');
+          return;
+        }
+        failed++;
+      }
+    }
+    if (updated.length > 0) {
+      saveLocalDataOnly();
+      renderWardrobe();
+      renderOutfit();
+      if (typeof syncWardrobeItemsToCloud === 'function') {
+        syncWardrobeItemsToCloud(updated).catch(() => {});
+      }
+    }
+    toast(`🤖 Added AI descriptions to ${updated.length} item(s)${failed ? ` (${failed} failed)` : ''}`);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🤖 AI Describe Missing'; }
   }
 }
 
@@ -13618,6 +13678,8 @@ async function verifyItemWithAI() {
     }
     const nameEl = document.getElementById('item-name');
     if (nameEl) nameEl.dataset.autoFilled = 'true';
+    const aiDescEl = document.getElementById('item-ai-description');
+    if (aiDescEl && parsed.notes) aiDescEl.value = parsed.notes;
     syncItemModalAutoFields({ updateTypeProps: false, forceNameRecalc: true });
     if (statusEl) statusEl.textContent = (parsed.notes || 'AI verified & updated all fields!') + (attachedPhoto ? '' : ' (Checked from text — remote photo blocked by CORS)');
     toast('🤖 AI redefined all item fields — click Save Item to keep!');
@@ -13655,6 +13717,7 @@ function openAddModal() {
   setSecondaryColorUI(2, null);
   setSecondaryColorUI(3, null);
   if (document.getElementById('item-pattern')) document.getElementById('item-pattern').value = 'solid';
+  if (document.getElementById('item-ai-description')) document.getElementById('item-ai-description').value = '';
   const aiStatus = document.getElementById('ai-item-check-status');
   if (aiStatus) aiStatus.textContent = 'Have AI inspect this photo & description to verify type, colors, pattern, length & formality.';
   updateCategoryDropdown('tops');
@@ -13712,6 +13775,9 @@ function openEditModal(id) {
   if (document.getElementById('item-pattern')) {
     document.getElementById('item-pattern').value = item.pattern || 'solid';
   }
+  if (document.getElementById('item-ai-description')) {
+    document.getElementById('item-ai-description').value = item.aiDescription || '';
+  }
   const aiStatus = document.getElementById('ai-item-check-status');
   if (aiStatus) aiStatus.textContent = 'Have AI inspect this photo & description to verify type, colors, pattern, length & formality.';
   updateFormalityDropdown(item.formality || inferFormalityFromRecognizedPiece(item.category, item.subType, 'casual'));
@@ -13748,6 +13814,7 @@ async function saveItem() {
   const secondaryColor = c2On ? (document.getElementById('item-color-2')?.value || null) : null;
   const tertiaryColor = c3On ? (document.getElementById('item-color-3')?.value || null) : null;
   const pattern = document.getElementById('item-pattern')?.value || 'solid';
+  const aiDescription = (document.getElementById('item-ai-description')?.value || '').trim();
   const editId = document.getElementById('edit-id').value;
   const lengthSel = document.getElementById('item-length');
   const lengthRow = document.getElementById('length-row');
@@ -13773,6 +13840,7 @@ async function saveItem() {
     tertiaryColor,
     tertiaryColorName: tertiaryColor ? getColorNameFromHex(tertiaryColor) : null,
     pattern,
+    aiDescription,
     formality,
     image: currentItemPhoto || null
   };
