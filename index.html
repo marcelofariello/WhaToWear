@@ -3768,6 +3768,25 @@ input[type="text"]:focus, select:focus, textarea:focus {
 
   <!-- Pieces to Buy Tab -->
   <div class="tab-content" id="tab-shop">
+    <div id="shop-buy-advisor-card" class="card" style="margin-bottom:18px; border:1px solid rgba(0,229,192,0.3); background:rgba(0,229,192,0.05);">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
+        <div>
+          <h2 style="font-size:1.08rem; color:var(--primary-dark); font-weight:700; margin:0;">🛒 Should I Buy This? (AI Store Checker)</h2>
+          <p style="font-size:0.8rem; color:var(--text-secondary); margin:4px 0 0;">
+            Take a picture of an item you're considering — AI inspects its full description, ranks it for your preferences, and compares it against your wardrobe to tell you if you need it or if it adds value.
+          </p>
+        </div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <input type="file" id="shop-eval-photo-input" accept="image/*" style="display:none;" onchange="handleShopEvalFileInput(event)">
+          <button type="button" class="btn btn-primary btn-sm" onclick="openCameraCapture('shop-eval')">📷 Take Photo</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('shop-eval-photo-input').click()">🖼️ Photo Library</button>
+          <button type="button" class="btn btn-accent btn-sm" id="btn-shop-eval-run" style="display:none;" onclick="evaluateShopCandidateWithAI()">✨ Re-Check with AI</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-shop-eval-clear" style="display:none;" onclick="clearShopEval()">✕ Clear</button>
+        </div>
+      </div>
+      <div id="shop-eval-result-wrap" style="display:none; margin-top:14px;"></div>
+    </div>
+
     <div class="shop-toolbar">
       <div>
         <h2 style="font-size:1.15rem; color:var(--primary-dark); font-weight:700;">🛍️ Recommended Pieces to Buy</h2>
@@ -11942,7 +11961,8 @@ function fallbackToNativeCameraInput() {
   const idMap = {
     item: 'item-camera-input',
     selfie: 'user-selfie-camera-input',
-    inspo: 'inspo-camera-input'
+    inspo: 'inspo-camera-input',
+    'shop-eval': 'shop-eval-photo-input'
   };
   const input = document.getElementById(idMap[activeCameraTarget] || 'item-camera-input');
   if (input) input.click();
@@ -11969,6 +11989,8 @@ function snapCameraPhoto() {
     addUserSelfieFromSrc(dataUrl);
   } else if (activeCameraTarget === 'inspo') {
     addInspoPhotoFromSrc(dataUrl);
+  } else if (activeCameraTarget === 'shop-eval') {
+    loadShopEvalPhoto(dataUrl);
   }
 }
 
@@ -15516,6 +15538,282 @@ function generateShopRecommendations() {
   // Filter out any item whose subType or name matches the user's Disliked / Never Suggest list
   const filteredRecs = recommendations.filter(rec => !isItemDisliked(rec));
   return filteredRecs.length ? filteredRecs : recommendations;
+}
+
+/* ===== "Should I Buy This?" AI Store Checker ===== */
+let shopEvalState = {
+  photoDataUrl: null,
+  candidateItem: null,
+  analysis: null
+};
+
+function handleShopEvalFileInput(e) {
+  const file = e?.target?.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const raw = ev.target?.result;
+    if (raw) loadShopEvalPhoto(raw);
+  };
+  reader.readAsDataURL(file);
+  if (e.target) e.target.value = '';
+}
+
+async function loadShopEvalPhoto(rawDataUrl) {
+  let compressed = rawDataUrl;
+  try {
+    compressed = await compressImageForCloudUpload(rawDataUrl);
+  } catch (_) {}
+  shopEvalState.photoDataUrl = compressed;
+  shopEvalState.candidateItem = null;
+  shopEvalState.analysis = null;
+  const runBtn = document.getElementById('btn-shop-eval-run');
+  const clrBtn = document.getElementById('btn-shop-eval-clear');
+  if (runBtn) runBtn.style.display = 'inline-flex';
+  if (clrBtn) clrBtn.style.display = 'inline-flex';
+  renderShopEvalUI({ loading: true });
+  await evaluateShopCandidateWithAI();
+}
+
+function clearShopEval() {
+  shopEvalState = { photoDataUrl: null, candidateItem: null, analysis: null };
+  const wrap = document.getElementById('shop-eval-result-wrap');
+  const runBtn = document.getElementById('btn-shop-eval-run');
+  const clrBtn = document.getElementById('btn-shop-eval-clear');
+  if (wrap) { wrap.style.display = 'none'; wrap.innerHTML = ''; }
+  if (runBtn) runBtn.style.display = 'none';
+  if (clrBtn) clrBtn.style.display = 'none';
+}
+
+function renderShopEvalUI({ loading = false, errorMsg = '' } = {}) {
+  const wrap = document.getElementById('shop-eval-result-wrap');
+  if (!wrap) return;
+  if (!shopEvalState.photoDataUrl) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'block';
+
+  if (loading) {
+    wrap.innerHTML = `
+      <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; padding:10px; border-radius:10px; background:rgba(15,23,42,0.55); border:1px solid var(--border);">
+        <img src="${shopEvalState.photoDataUrl}" alt="Candidate" style="width:92px; height:92px; object-fit:cover; border-radius:8px; cursor:zoom-in;" onclick="openPhotoLightbox(shopEvalState.photoDataUrl, 'Item Under Consideration')">
+        <div style="flex:1; min-width:200px;">
+          <strong style="display:block; margin-bottom:4px;">🤖 Inspecting item &amp; comparing with your ${wardrobe.length}-piece wardrobe...</strong>
+          <span style="font-size:0.78rem; color:var(--text-secondary);">Checking garment details, personal style rank, duplicates, and outfit pairings.</span>
+        </div>
+      </div>`;
+    return;
+  }
+
+  if (errorMsg) {
+    wrap.innerHTML = `
+      <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; padding:10px; border-radius:10px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.35);">
+        <img src="${shopEvalState.photoDataUrl}" alt="Candidate" style="width:84px; height:84px; object-fit:cover; border-radius:8px;">
+        <div style="flex:1; min-width:200px; font-size:0.8rem;">
+          <strong>⚠️ AI Evaluation Failed</strong>
+          <div style="color:var(--text-secondary); margin-top:3px;">${escapeHtml(errorMsg)}</div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const cand = shopEvalState.candidateItem;
+  const an = shopEvalState.analysis;
+  if (!cand || !an) return;
+
+  const verdictColors = {
+    buy: { bg: 'rgba(16,185,129,0.16)', border: 'rgba(16,185,129,0.45)', text: '#6ee7b7', label: '✅ Buy — Adds Real Value' },
+    optional: { bg: 'rgba(245,158,11,0.16)', border: 'rgba(245,158,11,0.45)', text: '#fcd34d', label: '🤔 Optional — Nice Upgrade' },
+    skip: { bg: 'rgba(239,68,68,0.16)', border: 'rgba(239,68,68,0.45)', text: '#fca5a5', label: '⛔ Skip — Redundant or Off-Style' }
+  };
+  const vStyle = verdictColors[an.verdict] || verdictColors.optional;
+  const rankBadgeClass = an.preferenceRank >= 8 ? 'badge-fit-high' : (an.preferenceRank >= 5 ? 'badge-fit-mid' : 'badge-fit-low');
+  const dotsHtml = [cand.color, cand.secondaryColor, cand.tertiaryColor].filter(Boolean)
+    .map(c => `<span style="width:13px; height:13px; border-radius:50%; background:${c}; border:1.5px solid #fff; display:inline-block;"></span>`).join('');
+
+  wrap.innerHTML = `
+    <div style="display:grid; grid-template-columns:110px minmax(0, 1fr); gap:14px; align-items:start; padding:12px; border-radius:12px; background:rgba(15,23,42,0.62); border:1px solid var(--border);">
+      <div>
+        <img src="${shopEvalState.photoDataUrl}" alt="${escapeHtml(cand.name)}" style="width:110px; height:128px; object-fit:cover; border-radius:8px; cursor:zoom-in; display:block;" onclick="openPhotoLightbox(shopEvalState.photoDataUrl, '${escapeHtml(cand.name).replace(/'/g, "\\'")}')">
+        <div style="display:flex; gap:4px; justify-content:center; margin-top:6px;">${dotsHtml}</div>
+      </div>
+      <div style="min-width:0;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:6px;">
+          <strong style="font-size:0.98rem;">${escapeHtml(cand.name)}</strong>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <span class="badge ${rankBadgeClass}" style="font-size:0.75rem;">⭐ Preference Rank: ${an.preferenceRank}/10</span>
+            <span class="badge" style="background:${vStyle.bg}; color:${vStyle.text}; border:1px solid ${vStyle.border}; font-size:0.75rem; font-weight:700;">${escapeHtml(an.verdictLabel || vStyle.label)}</span>
+          </div>
+        </div>
+        <div style="font-size:0.76rem; color:var(--text-secondary); margin-bottom:6px;">
+          ${escapeHtml(getCategoryLabel(cand.category))} · ${escapeHtml(cand.subType)} · ${escapeHtml(getFormalityDisplayLabel(cand.formality))} · ${escapeHtml(getSeasonBadgeLabel(cand.season) || cand.season)} · Pattern: ${escapeHtml(cand.pattern)}
+        </div>
+        <div style="font-size:0.79rem; margin-bottom:8px; line-height:1.4;">
+          <strong>🤖 AI Description:</strong> ${escapeHtml(cand.aiDescription || 'Inspected')}
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:8px; font-size:0.76rem; margin-bottom:10px;">
+          <div style="padding:8px; border-radius:8px; background:rgba(255,255,255,0.04); border:1px solid var(--border);">
+            <strong style="display:block; margin-bottom:3px; color:var(--primary-dark);">📊 Preference Fit</strong>
+            <span>${escapeHtml(an.preferenceReason)}</span>
+          </div>
+          <div style="padding:8px; border-radius:8px; background:rgba(255,255,255,0.04); border:1px solid var(--border);">
+            <strong style="display:block; margin-bottom:3px; color:var(--primary-dark);">🧺 Do You Need It? (Wardrobe Check)</strong>
+            <span>${escapeHtml(an.needReason)}</span>
+            ${an.similarItems.length ? `<div style="margin-top:4px; color:#fcd34d;">Similar owned: ${an.similarItems.map(s => escapeHtml(s)).join(', ')}</div>` : ''}
+          </div>
+          <div style="padding:8px; border-radius:8px; background:rgba(255,255,255,0.04); border:1px solid var(--border);">
+            <strong style="display:block; margin-bottom:3px; color:var(--primary-dark);">✨ Value Added &amp; Matches</strong>
+            <span>${escapeHtml(an.valueSummary)}</span>
+            ${an.bestMatches.length ? `<div style="margin-top:4px; color:#6ee7b7;">Pairs with: ${an.bestMatches.map(m => escapeHtml(m)).join(', ')}</div>` : ''}
+          </div>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button type="button" class="btn btn-primary btn-sm" onclick="addEvaluatedShopItemToWardrobe()">＋ I Bought It — Add to My Wardrobe</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function evaluateShopCandidateWithAI() {
+  if (!shopEvalState.photoDataUrl) return;
+  const geminiKey = (
+    localStorage.getItem('wtw_gemini_apikey') ||
+    document.getElementById('setting-gemini-apikey')?.value ||
+    ''
+  ).trim();
+  if (!geminiKey) {
+    renderShopEvalUI({ errorMsg: 'Add your Gemini API key in Profile & Settings first.' });
+    toast('Add your Gemini API key in Profile & Settings first');
+    return;
+  }
+
+  renderShopEvalUI({ loading: true });
+  try {
+    // 1. Full AI visual inspection of the candidate item
+    const parsed = await runGeminiItemInspection(shopEvalState.photoDataUrl, '', 'tops', '', null);
+    const category = ['tops', 'bottoms', 'shoes', 'outerwear', 'accessories'].includes(parsed.category) ? parsed.category : 'tops';
+    const subType = cleanGarmentType(parsed.garment_type || 'Item');
+    const length = parsed.length && parsed.length !== 'none' ? parsed.length : getDefaultLengthForPiece(category, subType);
+    const color = (parsed.color_hex && /^#[0-9a-f]{6}$/i.test(parsed.color_hex)) ? parsed.color_hex : '#4a7db5';
+    const colorName = parsed.color_name || getColorNameFromHex(color);
+    const secondaryColor = (parsed.secondary_color_hex && /^#[0-9a-f]{6}$/i.test(parsed.secondary_color_hex)) ? parsed.secondary_color_hex : null;
+    const tertiaryColor = (parsed.tertiary_color_hex && /^#[0-9a-f]{6}$/i.test(parsed.tertiary_color_hex)) ? parsed.tertiary_color_hex : null;
+
+    const cand = {
+      id: 'shop_eval_' + Date.now(),
+      name: buildStandardGarmentName({ category, subType, length, color, colorName }),
+      category,
+      subType,
+      length,
+      season: parsed.season || inferItemSeasonSuitability({ category, subType, length }),
+      color,
+      colorName,
+      secondaryColor,
+      secondaryColorName: secondaryColor ? getColorNameFromHex(secondaryColor) : null,
+      tertiaryColor,
+      tertiaryColorName: tertiaryColor ? getColorNameFromHex(tertiaryColor) : null,
+      pattern: parsed.pattern || 'solid',
+      formality: parsed.formality || 'smart-casual',
+      aiDescription: parsed.notes || '',
+      image: shopEvalState.photoDataUrl
+    };
+
+    // 2. Local preference rank & wardrobe comparison
+    const bp = buildPersonalStyleBlueprint();
+    const localFit = computeItemPersonaFitRank(cand, bp);
+    const sameCat = wardrobe.filter(w => w.category === cand.category);
+    const similarOwned = sameCat.filter(w =>
+      (w.subType || '').toLowerCase() === cand.subType.toLowerCase() &&
+      isColorNameMatch(w.color, [cand.color])
+    );
+    const partnerPool = wardrobe.filter(w => w.category !== cand.category && !isItemDisliked(w));
+    const bestMatches = partnerPool
+      .map(p => ({ p, s: (isColorNameMatch(p.color, [cand.color, cand.secondaryColor, cand.tertiaryColor].filter(Boolean)) || isNeutralColor(p.color)) ? 2 : 1 }))
+      .sort((a, b) => b.s - a.s)
+      .slice(0, 4)
+      .map(x => x.p.name);
+
+    // 3. Gemini preference + wardrobe value comparison
+    const compactWardrobe = wardrobe.slice(0, 80).map(w => ({
+      name: w.name,
+      category: w.category,
+      subType: w.subType,
+      color: w.colorName || getColorNameFromHex(w.color),
+      pattern: w.pattern || 'solid',
+      formality: w.formality,
+      season: w.season || 'all-season',
+      aiDescription: w.aiDescription || ''
+    }));
+    const evalPrompt = [
+      `You are a strict personal stylist advising whether the user should buy this item.`,
+      `Candidate Item: ${JSON.stringify({ name: cand.name, category: cand.category, subType: cand.subType, color: cand.colorName, secondaryColor: cand.secondaryColorName, tertiaryColor: cand.tertiaryColorName, pattern: cand.pattern, formality: cand.formality, season: cand.season, aiDescription: cand.aiDescription })}`,
+      `User Preferences: Palette="${bp.palette.name}", Archetype="${bp.archRule?.name || ''}", Desired Impressions=${JSON.stringify(bp.impressions || [])}, Statement="${bp.statement || ''}", Disliked=${JSON.stringify(userProfile.dislikedStyles || [])}.`,
+      `Existing Wardrobe (${wardrobe.length} pieces): ${JSON.stringify(compactWardrobe)}`,
+      `Evaluate:`,
+      `1. preference_rank (integer 1-10 based on user preferences, palette, and style)`,
+      `2. verdict ("buy", "optional", or "skip")`,
+      `3. verdict_label (short 3-5 word verdict, e.g. "Buy — Fills Smart Gap" or "Skip — Too Similar")`,
+      `4. preference_reason (1 concise sentence)`,
+      `5. need_reason (1 concise sentence comparing with existing wardrobe: duplicate vs gap)`,
+      `6. value_summary (1 concise sentence on whether it adds versatility/outfits)`,
+      `Return ONLY valid JSON with those exact keys.`
+    ].join('\n');
+
+    let aiEval = null;
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: evalPrompt }] }],
+          generationConfig: { temperature: 0.25, responseMimeType: 'application/json' }
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const jm = raw.match(/\{[\s\S]*\}/);
+        if (jm) aiEval = JSON.parse(jm[0]);
+      }
+    } catch (_) {}
+
+    const prefRank = Math.max(1, Math.min(10, Math.round(aiEval?.preference_rank || localFit.score)));
+    const fallbackVerdict = similarOwned.length > 0 ? 'skip' : (prefRank >= 7 ? 'buy' : 'optional');
+    shopEvalState.candidateItem = cand;
+    shopEvalState.analysis = {
+      preferenceRank: prefRank,
+      verdict: ['buy', 'optional', 'skip'].includes(aiEval?.verdict) ? aiEval.verdict : fallbackVerdict,
+      verdictLabel: aiEval?.verdict_label || '',
+      preferenceReason: aiEval?.preference_reason || localFit.reason,
+      needReason: aiEval?.need_reason || (similarOwned.length ? `You already own ${similarOwned.length} similar ${cand.subType} in this tone.` : `You don't currently have a ${cand.colorName} ${cand.subType} in your wardrobe.`),
+      valueSummary: aiEval?.value_summary || (bestMatches.length ? `Pairs easily with ${bestMatches.slice(0, 2).join(' and ')} to create fresh outfits.` : 'Adds a new option to your rotation.'),
+      similarItems: similarOwned.map(s => s.name),
+      bestMatches
+    };
+    renderShopEvalUI();
+  } catch (err) {
+    renderShopEvalUI({ errorMsg: err?.message || 'Could not evaluate item.' });
+  }
+}
+
+async function addEvaluatedShopItemToWardrobe() {
+  const cand = shopEvalState.candidateItem;
+  if (!cand) return;
+  const newItem = { ...cand, id: generateId() };
+  wardrobe.push(newItem);
+  if (isInlineBase64DataUrl(newItem.image)) {
+    cacheItemPhotoDataUrl(newItem.id, newItem.image);
+  }
+  saveLocalDataOnly();
+  renderFilters();
+  renderWardrobe();
+  renderOutfit();
+  if (typeof syncWardrobeItemsToCloud === 'function') {
+    syncWardrobeItemsToCloud([newItem]).catch(() => {});
+  }
+  toast(`✅ Added "${newItem.name}" to My Wardrobe!`);
+  clearShopEval();
 }
 
 function renderShopRecommendations() {
