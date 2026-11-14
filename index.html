@@ -7880,6 +7880,17 @@ function logWearToday(topId, bottomId, outerId, midLayerId, beltId, shoeId, acce
   }
 
   const countLabel = updatedItems.length === 1 ? '1 item worn' : `${updatedItems.length} items worn`;
+  if (typeof getActiveTripContext === 'function') {
+    const tripCtx = getActiveTripContext();
+    if (tripCtx && tripCtx.planEntry && !tripCtx.planEntry.worn) {
+      tripCtx.planEntry.worn = true;
+      saveTrip();
+      if (typeof renderTrip === 'function' && document.getElementById('tab-trip')?.classList.contains('active')) {
+        renderTrip();
+      }
+      if (typeof renderTripBanner === 'function') renderTripBanner();
+    }
+  }
   const btn = document.getElementById('btn-wear-today');
   if (btn) {
     btn.classList.add('logged');
@@ -8921,6 +8932,50 @@ function generateOutfit() {
     return null;
   }
 
+  // If Trip Mode is active for today (confirmed & within selected dates), planned trip outfit takes preference
+  if (!activeSpecialOccasion && typeof getActiveTripContext === 'function') {
+    const tripCtx = getActiveTripContext();
+    if (tripCtx && tripCtx.planEntry && tripCtx.planEntry.items) {
+      const ids = tripCtx.planEntry.items;
+      const findById = (id) => id ? wardrobe.find(w => w.id === id) || null : null;
+      const tTop = findById(ids.top);
+      const tBottom = findById(ids.bottom);
+      const tShoe = findById(ids.shoe);
+      if (tTop && tBottom && tShoe) {
+        const tMid = findById(ids.mid);
+        const tOuter = findById(ids.outer);
+        const tAcc = findById(ids.acc);
+        const tBelt = findById(ids.belt);
+        const tBeltRec = tBelt
+          ? { beltItem: tBelt, status: 'matched', summary: `Trip Belt: ${tBelt.name}` }
+          : proposeBeltForOutfit(tShoe, tBottom, tTop, tOuter || tMid, tripCtx.checklistItems.filter(i => i.category === 'accessories'));
+        const tLayers = 1 + (tMid ? 1 : 0) + (tOuter ? 1 : 0);
+        const d = tripCtx.day;
+        const tripName = tripCtx.trip.name || 'Your Trip';
+        const tripOutfit = {
+          top: tTop,
+          midLayer: tMid,
+          proposedMidLayer: null,
+          bottom: tBottom,
+          shoe: tShoe,
+          outerwear: tOuter,
+          beltRec: tBeltRec,
+          accessory: tAcc,
+          targetLayers: tLayers,
+          layerReason: `Trip Mode · ${d.tmin}°–${d.tmax}°C${d.rain ? ' · Rain' : ''} in ${d.dest || 'Destination'}`,
+          seasonMessage: `✈️ Trip Mode (${tripName}) · Day ${tripCtx.dayIndex + 1} of ${tripCtx.trip.days.length} in ${d.dest || 'Destination'}`,
+          seasonInfo: sInfo,
+          personaMessage: `Planned from your packed trip checklist (${tripCtx.checklistItems.length} items)`,
+          isNeverWorn: !tripCtx.planEntry.worn,
+          tripContext: tripCtx,
+          blueprint
+        };
+        tripOutfit.decisionProfile = generateHowToWearGuide(tripOutfit, blueprint);
+        return tripOutfit;
+      }
+    }
+  }
+
   // If an AI Daily Stylist outfit is cached for today's weather/settings, return it
   if (!activeSpecialOccasion && typeof activeAIDailyOutfit === 'object' && activeAIDailyOutfit && activeAIDailyOutfit.cacheKey === getAIDailyOutfitCacheKey() && activeAIDailyOutfit.outfit) {
     return activeAIDailyOutfit.outfit;
@@ -9895,6 +9950,7 @@ function getAIDailyOutfitCacheKey() {
 
 function maybeTriggerAIDailyOutfit(forceRefresh = false, avoidIds = []) {
   if (typeof activeSpecialOccasion !== 'undefined' && activeSpecialOccasion) return;
+  if (typeof getActiveTripContext === 'function' && getActiveTripContext()) return;
   if (!wardrobe || wardrobe.length < 3) return;
   const geminiKey = (localStorage.getItem('wtw_gemini_apikey') || '').trim();
   if (!geminiKey) return;
@@ -10018,6 +10074,17 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [] }) 
 function shuffleOutfit() {
   if (typeof activeSpecialOccasion !== 'undefined' && activeSpecialOccasion) {
     activeSpecialOccasion = null;
+  }
+  if (typeof getActiveTripContext === 'function') {
+    const tripCtx = getActiveTripContext();
+    if (tripCtx && typeof tripSwapDay === 'function') {
+      if (tripCtx.planEntry && tripCtx.planEntry.worn) {
+        tripCtx.planEntry.worn = false;
+      }
+      tripSwapDay(tripCtx.dayIndex);
+      renderOutfit();
+      return;
+    }
   }
   const prevAvoid = activeAIDailyOutfit?.outfit
     ? [activeAIDailyOutfit.outfit.top?.id, activeAIDailyOutfit.outfit.bottom?.id].filter(Boolean)
@@ -10151,8 +10218,11 @@ async function reassignOutfitForSpecialOccasion() {
     const cond = (weather && weather.description) ? weather.description : 'clear';
     const sInfo = getLocationSeasonInfo();
 
+    const activePool = (typeof getActiveTripContext === 'function' && getActiveTripContext())
+      ? getActiveTripContext().checklistItems
+      : wardrobe;
     if (geminiKey) {
-      const compactWardrobe = wardrobe.filter(it => !isItemDisliked(it)).map(it => ({
+      const compactWardrobe = activePool.filter(it => !isItemDisliked(it)).map(it => ({
         id: it.id,
         name: it.name,
         category: it.category,
@@ -10344,9 +10414,32 @@ function setFilter(f) {
 function renderWardrobe() {
   const grid = document.getElementById('wardrobe-grid');
   const empty = document.getElementById('wardrobe-empty');
-  let items = activeFilter === 'all' ? [...wardrobe] : wardrobe.filter(it => it.category === activeFilter);
+  const tripCtx = (typeof getActiveTripContext === 'function') ? getActiveTripContext() : null;
+  const activeWardrobePool = tripCtx ? tripCtx.checklistItems : wardrobe;
+  let tripNoticeEl = document.getElementById('wardrobe-trip-notice');
+  if (!tripNoticeEl && grid && grid.parentElement) {
+    tripNoticeEl = document.createElement('div');
+    tripNoticeEl.id = 'wardrobe-trip-notice';
+    grid.parentElement.insertBefore(tripNoticeEl, grid);
+  }
+  if (tripNoticeEl) {
+    if (tripCtx) {
+      tripNoticeEl.innerHTML = `
+        <div class="trip-banner" style="margin-bottom:12px;">
+          <span>🧳 <strong>Trip Wardrobe Active (${escapeHtml(tripCtx.trip.name || 'Your Trip')})</strong> — Showing ${tripCtx.checklistItems.length} packed checklist items only</span>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-accent btn-sm" onclick="switchTab('trip')">📋 Edit Checklist</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="escapeTripMode()">🏠 Escape Trip Mode</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="cancelActiveTrip()">✕ Cancel Trip</button>
+          </div>
+        </div>`;
+    } else {
+      tripNoticeEl.innerHTML = '';
+    }
+  }
+  let items = activeFilter === 'all' ? [...activeWardrobePool] : activeWardrobePool.filter(it => it.category === activeFilter);
 
-  if (wardrobe.length === 0) {
+  if (activeWardrobePool.length === 0) {
     grid.style.display = 'none';
     empty.style.display = 'block';
     return;
@@ -17333,11 +17426,14 @@ function tripSubmitPacking() {
   }
   trip.plan = plan;
   trip.stage = 'active';
+  trip.escaped = false;
   saveTrip();
   renderTrip();
   renderTripBanner();
+  renderOutfit();
+  renderWardrobe();
   window.scrollTo(0, 0);
-  toast('🗓️ Your day-by-day outfits are ready!');
+  toast('🗓️ Trip Mode active — your planned outfits & packed wardrobe are now live!');
 }
 
 function tripToggleWorn(i) {
@@ -17468,6 +17564,10 @@ function renderTripPlan() {
       <button type="button" class="btn btn-secondary btn-sm" onclick="tripRemix()">🔄 Re-mix remaining days</button>
       <button type="button" class="btn btn-secondary btn-sm" onclick="tripGoStage('packing')">📋 Packing list</button>
       <button type="button" class="btn btn-secondary btn-sm" onclick="tripBackToSetup()">✏️ Trip details</button>
+      ${trip.escaped
+        ? `<button type="button" class="btn btn-primary btn-sm" onclick="resumeTripMode()">✈️ Resume Trip Mode</button>`
+        : `<button type="button" class="btn btn-secondary btn-sm" onclick="escapeTripMode()">🏠 Escape Trip Mode</button>`}
+      <button type="button" class="btn btn-secondary btn-sm" style="color:#b91c1c;" onclick="cancelActiveTrip()">✕ Cancel Trip</button>
       <button type="button" class="btn btn-secondary btn-sm" onclick="tripNew()">🆕 New trip</button>
     </div>`;
 
@@ -17518,6 +17618,69 @@ function renderTrip() {
     ${body}`;
 }
 
+function getActiveTripContext(includeEscaped = false) {
+  if (!trip || trip.stage !== 'active' || !Array.isArray(trip.days) || !trip.days.length) return null;
+  if (!includeEscaped && trip.escaped) return null;
+  const today = isoDate(new Date());
+  const dayIndex = trip.days.findIndex(d => d.date === today);
+  if (dayIndex === -1) return null;
+  const checkedItems = (trip.pack || [])
+    .filter(p => p.kind === 'item' && p.checked)
+    .map(p => wardrobe.find(w => w.id === p.itemId))
+    .filter(Boolean);
+  const fallbackChecklist = (trip.pack || [])
+    .filter(p => p.kind === 'item')
+    .map(p => wardrobe.find(w => w.id === p.itemId))
+    .filter(Boolean);
+  const checklistItems = checkedItems.length ? checkedItems : fallbackChecklist;
+  return {
+    trip,
+    dayIndex,
+    day: trip.days[dayIndex],
+    planEntry: (trip.plan && trip.plan[dayIndex]) || null,
+    checklistItems,
+    checklistIdSet: new Set(checklistItems.map(w => w.id))
+  };
+}
+
+function escapeTripMode() {
+  if (!trip) return;
+  trip.escaped = true;
+  saveTrip();
+  renderTripBanner();
+  renderOutfit();
+  renderWardrobe();
+  if (typeof rerenderTrip === 'function' && document.getElementById('tab-trip')?.classList.contains('active')) {
+    rerenderTrip();
+  }
+  toast('🏠 Escaped Trip Mode — showing your full home wardrobe & daily look');
+}
+
+function resumeTripMode() {
+  if (!trip) return;
+  trip.escaped = false;
+  saveTrip();
+  renderTripBanner();
+  renderOutfit();
+  renderWardrobe();
+  if (typeof rerenderTrip === 'function' && document.getElementById('tab-trip')?.classList.contains('active')) {
+    rerenderTrip();
+  }
+  toast('✈️ Trip Mode resumed — using your planned outfits & packed checklist!');
+}
+
+function cancelActiveTrip() {
+  if (!confirm('Cancel this trip and return to your normal home wardrobe?')) return;
+  trip = null;
+  ensureTrip();
+  saveTrip();
+  renderTripBanner();
+  renderOutfit();
+  renderWardrobe();
+  if (typeof renderTrip === 'function') renderTrip();
+  toast('🗑️ Trip cancelled — back to Home Mode');
+}
+
 function renderTripBanner() {
   const el = document.getElementById('trip-banner-section');
   if (!el) return;
@@ -17540,7 +17703,28 @@ function renderTripBanner() {
   }
   const p = trip.plan[i];
   const names = p && p.items ? ['top', 'mid', 'outer', 'bottom', 'shoe', 'belt'].map(k => { const it = wardrobe.find(w => w.id === p.items[k]); return it ? escapeHtml(it.name) : ''; }).filter(Boolean).join(' · ') : 'No outfit planned';
-  el.innerHTML = `<div class="trip-banner"><span>✈️ <strong>${name}</strong> · Day ${i + 1} of ${trip.days.length} in ${escapeHtml(trip.days[i].dest)}<br>${names}</span><button class="btn btn-accent btn-sm" onclick="switchTab('trip')">Open trip day</button></div>`;
+  if (trip.escaped) {
+    el.innerHTML = `
+      <div class="trip-banner" style="background:linear-gradient(135deg,#334155,#1e293b);">
+        <span>⏸️ <strong>${name}</strong> · Day ${i + 1} of ${trip.days.length} (Home Mode override active)</span>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button type="button" class="btn btn-accent btn-sm" onclick="resumeTripMode()">✈️ Resume Trip Mode</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="cancelActiveTrip()">✕ Cancel Trip</button>
+        </div>
+      </div>`;
+    return;
+  }
+  const ctx = getActiveTripContext();
+  const packCount = ctx ? ctx.checklistItems.length : 0;
+  el.innerHTML = `
+    <div class="trip-banner">
+      <span>✈️ <strong>Trip Mode Active: ${name}</strong> · Day ${i + 1} of ${trip.days.length} in ${escapeHtml(trip.days[i].dest)} · ${packCount} packed items<br>${names}</span>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        <button type="button" class="btn btn-accent btn-sm" onclick="switchTab('trip')">📋 Trip Plan</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="escapeTripMode()">🏠 Escape Trip</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="cancelActiveTrip()">✕ Cancel</button>
+      </div>
+    </div>`;
 }
 
 /* ===== Google Material Design 3 Floating Persona Hero Controller ===== */
