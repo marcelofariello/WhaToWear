@@ -15705,35 +15705,244 @@ async function hydrateShopStudioPhotos(items, seq) {
   await Promise.all(workers);
 }
 
-function getShopPhotoStageHtml(item, mode, idx = 0) {
+const shopCardAICache = {};
+const shopCardAIInflight = new Set();
+
+async function callGeminiImageGenerate(geminiKey, promptText) {
+  if (!geminiKey || !promptText) return null;
+  try {
+    const mRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(geminiKey)}`);
+    let imgModels = ['gemini-2.5-flash-image', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.0-flash-preview-image-generation'];
+    if (mRes.ok) {
+      const mData = await mRes.json();
+      const found = (mData.models || [])
+        .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+        .map(m => String(m.name || '').replace(/^models\//, ''))
+        .filter(n => /image/i.test(n) && !/imagen/i.test(n));
+      if (found.length) imgModels = [...new Set([...found, ...imgModels])].slice(0, 4);
+    }
+    for (const modelName of imgModels) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(geminiKey)}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: promptText }] }],
+          generationConfig: { responseModalities: ['IMAGE', 'TEXT'] }
+        })
+      });
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) break;
+        continue;
+      }
+      const data = await res.json();
+      const parts = data?.candidates?.[0]?.content?.parts || [];
+      for (const p of parts) {
+        const inline = p.inlineData || p.inline_data;
+        if (inline && inline.data) {
+          return `data:${inline.mimeType || inline.mime_type || 'image/png'};base64,${inline.data}`;
+        }
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+async function enrichShopCardModeWithAI(idx, mode) {
+  const item = lastRenderedShopItems[idx] || generateShopRecommendations()[idx];
+  if (!item) return;
+  const geminiKey = (
+    localStorage.getItem('wtw_gemini_apikey') ||
+    document.getElementById('setting-gemini-apikey')?.value ||
+    ''
+  ).trim();
+  if (!geminiKey) {
+    toast('Add your Gemini API key in Profile & Settings to use AI enhancement');
+    return;
+  }
+
+  const baseKey = getShopStudioItemKey(item);
+  const cacheKey = `${baseKey}|${mode}`;
+  if (shopCardAIInflight.has(cacheKey)) return;
+  shopCardAIInflight.add(cacheKey);
+
+  const stage = document.getElementById(`shop-stage-${idx}`);
+  if (stage && (shopVisualModes[idx] || 'garment') === mode) {
+    stage.innerHTML = getShopPhotoStageHtml(item, mode, idx, true);
+  }
+
+  try {
+    const masterCtx = typeof buildMasterPersonalContextForAI === 'function' ? buildMasterPersonalContextForAI() : '';
+    const ownedPool = wardrobe.filter(w => w.category !== item.category && !isItemDisliked(w)).slice(0, 24).map(w => ({
+      name: w.name, category: w.category, subType: w.subType, color: w.colorName || getColorNameFromHex(w.color), formality: w.formality
+    }));
+
+    if (mode === 'garment') {
+      const imgPrompt = `Clean 3:4 studio e-commerce product photograph on a soft light neutral studio background, centered, no mannequin, no text: ${item.colorName} (${item.color}) ${item.subType}, ${item.formality} style, crisp fabric texture, realistic lighting.`;
+      const specPrompt = [
+        `You are a menswear/womenswear product specialist.`,
+        masterCtx,
+        `Item to buy: ${item.name} (${item.subType}, ${item.colorName} ${item.color}, ${item.formality}, season ${item.season || 'all-season'}).`,
+        `Return ONLY valid JSON with keys:`,
+        `- fabric_weave: concise 4-8 word ideal fabric & weight (e.g. "Midweight 260gsm brushed merino knit")`,
+        `- construction_details: concise 6-12 word key cut/collar/hem details to look for`,
+        `- shopping_query: exact concise search phrase to find this item online`
+      ].join('\n');
+
+      const [genImg, specRes] = await Promise.all([
+        !item.generatedPhoto ? callGeminiImageGenerate(geminiKey, imgPrompt) : Promise.resolve(item.generatedPhoto),
+        callGeminiGenerateContent(geminiKey, { parts: [{ text: specPrompt }], temperature: 0.25, responseMimeType: 'application/json' }).catch(() => null)
+      ]);
+
+      if (genImg) {
+        item.generatedPhoto = genImg;
+        shopStudioMemCache[baseKey] = { imageUrl: genImg, cachedAt: Date.now() };
+      }
+      const raw = specRes?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const jm = raw.match(/\{[\s\S]*\}/);
+      if (jm) {
+        shopCardAICache[cacheKey] = JSON.parse(jm[0]);
+      } else {
+        shopCardAICache[cacheKey] = { fabric_weave: `${item.formality} ${item.subType}`, construction_details: 'Clean tailored finish matching your Own Style' };
+      }
+    } else if (mode === 'model') {
+      const genderWord = userProfile.styleGender === 'female' ? 'woman' : 'man';
+      const bodyWord = userProfile.bodyShape || 'athletic';
+      const imgPrompt = `Full-body 3:4 editorial fashion lookbook photo of a ${genderWord} with a ${bodyWord} build wearing a ${item.colorName} ${item.subType} (${item.formality}), styled cleanly with tailored neutrals on a soft studio backdrop, natural lighting, no text.`;
+      const stylePrompt = [
+        `You are the personal stylist for WhaToWear.`,
+        masterCtx,
+        `Candidate Piece: ${item.name} (${item.subType}, ${item.colorName} ${item.color}, ${item.formality}).`,
+        `User's Closet Pieces Available to Pair With It: ${JSON.stringify(ownedPool)}`,
+        `Explain how this piece will look on the user's exact body silhouette & face shape and how to style it with items they ALREADY own.`,
+        `Return ONLY valid JSON with keys:`,
+        `- silhouette_fit: 1 concise sentence on how the cut/collar flatters their ${userProfile.faceShape || 'oval'} face & ${userProfile.bodyShape || 'rectangle'} silhouette`,
+        `- paired_closet_items: array of 2-3 exact item names from the closet list above that complete the outfit`,
+        `- styling_how_to: 1 concise sentence on how to wear it (tuck, sleeves, layering, shoes)`
+      ].join('\n');
+
+      const [genModelImg, styleRes] = await Promise.all([
+        !item.modelPhoto ? callGeminiImageGenerate(geminiKey, imgPrompt) : Promise.resolve(item.modelPhoto),
+        callGeminiGenerateContent(geminiKey, { parts: [{ text: stylePrompt }], temperature: 0.3, responseMimeType: 'application/json' }).catch(() => null)
+      ]);
+
+      if (genModelImg) item.modelPhoto = genModelImg;
+      const raw = styleRes?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const jm = raw.match(/\{[\s\S]*\}/);
+      if (jm) {
+        shopCardAICache[cacheKey] = JSON.parse(jm[0]);
+      }
+    } else if (mode === 'color-cad') {
+      const colorPrompt = [
+        `You are a certified 12-season personal color analyst.`,
+        masterCtx,
+        `Analyze this candidate shade: ${item.colorName} (${item.color}) for a ${item.subType} (${item.category}).`,
+        `Return ONLY valid JSON with keys:`,
+        `- undertone_match: 1 concise sentence explaining how ${item.colorName} (${item.color}) harmonizes with the user's personal undertone & contrast`,
+        `- face_proximity_tip: 1 concise sentence on wearing it near the face or buffering it with a collar/base layer`,
+        `- pairing_swatches: array of 3 objects { "name": string, "hex": "#RRGGBB" } from the user's Own Style palette that pair best with ${item.colorName}`,
+        `- finish_and_hardware: short phrase on ideal fabric matte/sheen finish and metal/button tone`
+      ].join('\n');
+
+      const colorRes = await callGeminiGenerateContent(geminiKey, {
+        parts: [{ text: colorPrompt }],
+        temperature: 0.25,
+        responseMimeType: 'application/json'
+      }).catch(() => null);
+      const raw = colorRes?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const jm = raw.match(/\{[\s\S]*\}/);
+      if (jm) {
+        shopCardAICache[cacheKey] = JSON.parse(jm[0]);
+      }
+    }
+  } catch (err) {
+    console.warn('Shop card AI enrichment error:', err);
+  } finally {
+    shopCardAIInflight.delete(cacheKey);
+    const liveStage = document.getElementById(`shop-stage-${idx}`);
+    if (liveStage && (shopVisualModes[idx] || 'garment') === mode) {
+      liveStage.innerHTML = getShopPhotoStageHtml(item, mode, idx, false);
+    }
+  }
+}
+
+function getShopPhotoStageHtml(item, mode, idx = 0, isAILoading = false) {
   const effectiveMode = mode || 'garment'; // Always start with the Garment Photo
   const isModel = effectiveMode === 'model';
   const studioFallback = buildGarmentStudioSvgDataUrl(item);
   const key = getShopStudioItemKey(item);
   const cachedRecord = shopStudioMemCache[key];
   const resolvedStudioUrl = item.generatedPhoto || cachedRecord?.imageUrl || '';
+  const aiData = shopCardAICache[`${key}|${effectiveMode}`] || null;
+  const inflight = isAILoading || shopCardAIInflight.has(`${key}|${effectiveMode}`);
 
   const photoUrl = effectiveMode === 'color-cad'
     ? studioFallback
     : (isModel ? (item.modelPhoto || resolvedStudioUrl || studioFallback) : (resolvedStudioUrl || studioFallback));
 
   const modeLabel = effectiveMode === 'color-cad'
-    ? `🎨 Exact Color & Cut Preview · ${item.subType}`
+    ? `🎨 AI Exact Shade · ${item.colorName}`
     : isModel
-      ? (userProfile.styleGender === 'female' ? '🧍 How It Looks Worn · Feminine Fit' : '🧍 How It Looks Worn · Masculine Fit')
-      : `🧥 Garment Studio Photo · ${item.subType}`;
+      ? (userProfile.styleGender === 'female' ? '🧍 AI Fit & Styled Look · Feminine' : '🧍 AI Fit & Styled Look · Masculine')
+      : `🧥 AI Garment Studio · ${item.subType}`;
 
-  const showGeneratingPill = !isModel
+  const showGeneratingPill = inflight || (!isModel
     && effectiveMode === 'garment'
     && !resolvedStudioUrl
     && shouldAttemptBackendApi()
-    && Date.now() >= shopStudioApiCooldownUntil;
+    && Date.now() >= shopStudioApiCooldownUntil);
+
+  let aiOverlayHtml = '';
+  if (effectiveMode === 'garment' && aiData) {
+    aiOverlayHtml = `
+      <div style="position:absolute; left:8px; right:8px; bottom:34px; z-index:4; background:rgba(11,15,21,0.86); backdrop-filter:blur(6px); border:1px solid rgba(0,229,192,0.35); border-radius:9px; padding:7px 9px; font-size:0.7rem; line-height:1.35; color:#f1f5f9;">
+        <div style="color:#5eead4; font-weight:700;">🤖 AI Garment Spec</div>
+        <div><strong>Fabric:</strong> ${escapeHtml(aiData.fabric_weave || '')}</div>
+        <div><strong>Details:</strong> ${escapeHtml(aiData.construction_details || '')}</div>
+      </div>`;
+  } else if (effectiveMode === 'model' && aiData) {
+    const paired = Array.isArray(aiData.paired_closet_items) && aiData.paired_closet_items.length
+      ? `<div><strong>Pair with yours:</strong> ${escapeHtml(aiData.paired_closet_items.join(' + '))}</div>`
+      : '';
+    aiOverlayHtml = `
+      <div style="position:absolute; left:8px; right:8px; bottom:34px; z-index:4; background:rgba(11,15,21,0.88); backdrop-filter:blur(6px); border:1px solid rgba(0,229,192,0.4); border-radius:9px; padding:8px 10px; font-size:0.7rem; line-height:1.38; color:#f1f5f9;">
+        <div style="color:#5eead4; font-weight:700;">🤖 AI Silhouette &amp; Closet Fit</div>
+        <div>${escapeHtml(aiData.silhouette_fit || '')}</div>
+        ${paired}
+        ${aiData.styling_how_to ? `<div style="color:#cbd5e1; margin-top:2px;"><strong>How to wear:</strong> ${escapeHtml(aiData.styling_how_to)}</div>` : ''}
+      </div>`;
+  } else if (effectiveMode === 'color-cad') {
+    const swatches = (aiData && Array.isArray(aiData.pairing_swatches) ? aiData.pairing_swatches : []).map(sw =>
+      `<span style="display:inline-flex; align-items:center; gap:4px; background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:999px; font-size:0.66rem;"><span style="width:9px; height:9px; border-radius:50%; background:${sw.hex || '#64748b'}; border:1px solid rgba(255,255,255,0.4);"></span>${escapeHtml(sw.name || '')}</span>`
+    ).join('');
+    aiOverlayHtml = `
+      <div style="position:absolute; left:8px; right:8px; bottom:34px; z-index:4; background:rgba(11,15,21,0.9); backdrop-filter:blur(6px); border:1px solid rgba(0,229,192,0.42); border-radius:9px; padding:8px 10px; font-size:0.7rem; line-height:1.38; color:#f1f5f9;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+          <span style="width:22px; height:22px; border-radius:6px; background:${item.color}; border:1.5px solid rgba(255,255,255,0.5); flex-shrink:0;"></span>
+          <div>
+            <div style="color:#5eead4; font-weight:700;">🎨 ${escapeHtml(item.colorName)} (${escapeHtml(item.color)})</div>
+            ${aiData?.finish_and_hardware ? `<div style="font-size:0.66rem; color:#cbd5e1;">${escapeHtml(aiData.finish_and_hardware)}</div>` : ''}
+          </div>
+        </div>
+        ${aiData ? `
+          <div>${escapeHtml(aiData.undertone_match || '')}</div>
+          ${aiData.face_proximity_tip ? `<div style="margin-top:2px; color:#ffd166;">${escapeHtml(aiData.face_proximity_tip)}</div>` : ''}
+          ${swatches ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:5px;">${swatches}</div>` : ''}
+        ` : `<div style="color:#94a3b8;">Click 🤖 AI Enhance to analyze this shade against your complexion &amp; Own Style palette.</div>`}
+      </div>`;
+  }
+
+  const aiTriggerBtn = !aiData && !inflight
+    ? `<button type="button" onclick="event.stopPropagation(); enrichShopCardModeWithAI(${idx}, '${effectiveMode}')" style="position:absolute; top:8px; right:8px; z-index:5; background:rgba(15,23,42,0.85); color:#5eead4; border:1px solid rgba(0,229,192,0.45); border-radius:999px; padding:4px 9px; font-size:0.68rem; font-weight:700; cursor:pointer;">🤖 AI Enhance</button>`
+    : '';
 
   return `
     <img class="shop-photo-img ${isModel ? 'is-model-view' : ''}" src="${photoUrl}" alt="${escapeHtml(item.name)}" loading="lazy"
          onerror="handleShopStudioImageError(this, ${idx});">
     <div class="shop-photo-overlay"></div>
-    ${showGeneratingPill ? '<div class="shop-studio-status">✨ Rendering 3:4 Studio Photo...</div>' : ''}
+    ${aiTriggerBtn}
+    ${showGeneratingPill ? `<div class="shop-studio-status">${inflight ? '🤖 Analyzing &amp; Rendering with AI...' : '✨ Rendering 3:4 Studio Photo...'}</div>` : ''}
+    ${aiOverlayHtml}
     <div class="shop-photo-color-pill">
       <span style="width:13px;height:13px;border-radius:50%;background:${item.color};border:1.5px solid rgba(0,0,0,0.2);display:inline-block;"></span>
       <span>Shade: ${escapeHtml(item.colorName)}</span>
@@ -15757,6 +15966,12 @@ function setShopVisualMode(idx, mode) {
 
   stage.classList.toggle('is-model-mode', mode === 'model');
   stage.innerHTML = getShopPhotoStageHtml(item, mode, idx);
+
+  const geminiKey = (localStorage.getItem('wtw_gemini_apikey') || '').trim();
+  const baseKey = getShopStudioItemKey(item);
+  if (geminiKey && !shopCardAICache[`${baseKey}|${mode}`]) {
+    enrichShopCardModeWithAI(idx, mode);
+  }
 }
 
 function getWardrobePreferenceSummary() {
