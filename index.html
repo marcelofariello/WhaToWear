@@ -3988,6 +3988,7 @@ input[type="text"]:focus, select:focus, textarea:focus {
           <button type="button" class="photo-action-btn primary-action" onclick="openCameraCapture('selfie')">📷 Use Camera</button>
           <button type="button" class="photo-action-btn" onclick="document.getElementById('user-selfie-input').click()">🖼️ Upload Photos (Unlimited)</button>
           <button type="button" class="photo-action-btn" onclick="openSavedImagesModal('selfie')">🗂️ Saved Images</button>
+          <button type="button" class="photo-action-btn primary-action" id="btn-ai-color-silhouette" onclick="analyzePersonalColorAndSilhouetteWithAI()" style="background:linear-gradient(135deg,#0f766e,#00c9a7); color:#fff; border-color:transparent;">🤖 AI Color &amp; Silhouette</button>
           <button type="button" class="photo-action-btn" id="clear-selfies-btn" style="display:none; color:#b91c1c;" onclick="clearAllUserPhotos()">🗑️ Clear Photos</button>
         </div>
 
@@ -9938,7 +9939,9 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [] }) 
       `Weather: ${currentTemp}°C, ${cond}, Season: ${sInfo.name}. Target Formality: ${targetFormality}.`,
       `Layering Rule: ${layerRuleText} Never put an athleisure/sport windbreaker over a chunky knit sweater/cardigan or formal shirt. Keep fabrics, formality, and colors coherent.`,
       avoidIds.length ? `Avoid repeating these item IDs as main pieces so the user gets a fresh alternative: ${JSON.stringify(avoidIds)}.` : '',
-      `User Personal Image & Preferences: Palette="${bp.palette.name}", Contrast="${bp.contrastLabel}", Face="${bp.faceRule?.label || ''}", Body="${bp.bodyRule?.label || ''}", Archetype="${bp.archRule?.name || ''}", Impressions=${JSON.stringify(bp.impressions || [])}, Statement="${bp.statement || ''}".`,
+      typeof buildMasterPersonalContextForAI === 'function'
+        ? buildMasterPersonalContextForAI()
+        : `User Personal Image & Preferences: Palette="${bp.palette.name}", Contrast="${bp.contrastLabel}", Face="${bp.faceRule?.label || ''}", Body="${bp.bodyRule?.label || ''}", Archetype="${bp.archRule?.name || ''}", Impressions=${JSON.stringify(bp.impressions || [])}, Statement="${bp.statement || ''}".`,
       `Use each item's aiDescription as your primary resource alongside colors, pattern, formality, and season.`,
       `Wardrobe: ${JSON.stringify(compactWardrobe)}`,
       `Return ONLY valid JSON with exact keys:`,
@@ -10167,7 +10170,8 @@ async function reassignOutfitForSpecialOccasion() {
       const prompt = [
         `You are a personal wardrobe stylist. The user has a special occasion: "${occasionText}".`,
         `Current weather: ${currentTemp}°C, ${cond}, Season: ${sInfo.name}.`,
-        `Use each item's aiDescription (alongside colors, pattern, cut, formality, and season) as your primary resource to decide what matches best.`,
+        `Use each item's aiDescription (alongside colors, pattern, cut, formality, and season) AND the user's Master Personal Profile & AI Dossiers below to decide what matches best.`,
+        typeof buildMasterPersonalContextForAI === 'function' ? buildMasterPersonalContextForAI() : '',
         `Pick the best outfit from the user's wardrobe JSON below. You MUST only use exact "id" values from the list.`,
         `Return ONLY valid JSON with keys: topId (required), midLayerId (string or null), outerwearId (string or null), bottomId (required), shoeId (required), beltId (string or null), accessoryId (string or null), reason (1 concise sentence explaining why this works for the occasion and weather).`,
         `Wardrobe: ${JSON.stringify(compactWardrobe)}`
@@ -14920,15 +14924,24 @@ function renderPersonalBlueprintUI() {
   if (!box) return;
   const bp = buildPersonalStyleBlueprint();
   const aInfo = userProfile.personalAnalysis;
-  const swatchPills = (bp.signatureColors || []).map(c =>
-    `<span class="blueprint-tag" style="display:inline-flex; align-items:center; gap:5px;"><span style="width:9px; height:9px; border-radius:50%; background:${c.hex}; border:1px solid rgba(255,255,255,0.4);"></span>${escapeHtml(c.name)}</span>`
+  const aiBestColors = (aInfo && Array.isArray(aInfo.bestColors) && aInfo.bestColors.length) ? aInfo.bestColors : (bp.signatureColors || []);
+  const swatchPills = aiBestColors.map(c =>
+    `<span class="blueprint-tag" style="display:inline-flex; align-items:center; gap:5px;"><span style="width:9px; height:9px; border-radius:50%; background:${c.hex || '#64748b'}; border:1px solid rgba(255,255,255,0.4);"></span>${escapeHtml(c.name || c)}</span>`
   ).join('');
-  const avoidNames = (bp.avoidHexes || []).slice(0, 3).map(hx => {
-    const r = parseInt(hx.slice(1, 3), 16) || 0;
-    const g = parseInt(hx.slice(3, 5), 16) || 0;
-    const b = parseInt(hx.slice(5, 7), 16) || 0;
-    return getClosestColorName(r, g, b);
-  });
+  const avoidNames = (aInfo && Array.isArray(aInfo.avoidColors) && aInfo.avoidColors.length)
+    ? aInfo.avoidColors.map(c => c.name || c)
+    : (bp.avoidHexes || []).slice(0, 3).map(hx => {
+        const r = parseInt(hx.slice(1, 3), 16) || 0;
+        const g = parseInt(hx.slice(3, 5), 16) || 0;
+        const b = parseInt(hx.slice(5, 7), 16) || 0;
+        return getClosestColorName(r, g, b);
+      });
+  const ia = userProfile.inspoAnalysis || {};
+  const dossierHtml = (aInfo?.aiDetailedDescription || ia?.aiDetailedDescription) ? `
+    <div style="margin-top:12px; padding:10px 12px; border-radius:10px; background:rgba(15,23,42,0.55); border:1px solid rgba(0,229,192,0.28); font-size:0.76rem; line-height:1.5; color:#e2e8f0;">
+      ${aInfo?.aiDetailedDescription ? `<div style="margin-bottom:${ia?.aiDetailedDescription ? '8px' : '0'};"><strong style="color:#5eead4;">🧬 AI Color &amp; Silhouette Dossier${aInfo.subSeason ? ` (${escapeHtml(aInfo.subSeason)})` : ''}:</strong> ${escapeHtml(aInfo.aiDetailedDescription)}${aInfo.metalsAndAccents ? `<div style="margin-top:4px; color:#94a3b8;"><strong>Metals &amp; Accents:</strong> ${escapeHtml(aInfo.metalsAndAccents)}</div>` : ''}</div>` : ''}
+      ${ia?.aiDetailedDescription ? `<div><strong style="color:#5eead4;">🎭 AI Persona &amp; Desired Style Dossier:</strong> ${escapeHtml(ia.aiDetailedDescription)}</div>` : ''}
+    </div>` : '';
 
   box.style.display = 'block';
   box.innerHTML = `
@@ -14974,7 +14987,8 @@ function renderPersonalBlueprintUI() {
           ${bp.impressions.length ? `<div class="blueprint-tag-row">${bp.impressions.map(im => `<span class="blueprint-tag">${escapeHtml(im)}</span>`).join('')}</div>` : ''}
         </div>
       </div>
-    </div>`;
+    </div>
+    ${dossierHtml}`;
 }
 
 function renderUserProfileUI() {
@@ -15924,7 +15938,9 @@ async function evaluateShopCandidateWithAI() {
     const evalPrompt = [
       `You are a strict personal stylist advising whether the user should buy this item.`,
       `Candidate Item: ${JSON.stringify({ name: cand.name, category: cand.category, subType: cand.subType, color: cand.colorName, secondaryColor: cand.secondaryColorName, tertiaryColor: cand.tertiaryColorName, pattern: cand.pattern, formality: cand.formality, season: cand.season, aiDescription: cand.aiDescription })}`,
-      `User Preferences: Palette="${bp.palette.name}", Archetype="${bp.archRule?.name || ''}", Desired Impressions=${JSON.stringify(bp.impressions || [])}, Statement="${bp.statement || ''}", Disliked=${JSON.stringify(userProfile.dislikedStyles || [])}.`,
+      typeof buildMasterPersonalContextForAI === 'function'
+        ? buildMasterPersonalContextForAI()
+        : `User Preferences: Palette="${bp.palette.name}", Archetype="${bp.archRule?.name || ''}", Desired Impressions=${JSON.stringify(bp.impressions || [])}, Statement="${bp.statement || ''}", Disliked=${JSON.stringify(userProfile.dislikedStyles || [])}.`,
       `Existing Wardrobe (${wardrobe.length} pieces): ${JSON.stringify(compactWardrobe)}`,
       `Evaluate:`,
       `1. preference_rank (integer 1-10 based on user preferences, palette, and style)`,
@@ -16033,13 +16049,17 @@ async function refreshShopSuggestionsWithAI() {
 
     const prompt = [
       `You are a master wardrobe strategist. Perform a FULL analysis of the user's wardrobe and style objectives, then rank the TOP 10 needed items to buy.`,
-      `User Objectives & Personal Image:`,
-      `- Style Gender: ${userProfile.styleGender || 'male'}`,
-      `- Palette: ${bp.palette.name} (${bp.contrastLabel}), Signature Colors: ${bp.signatureColors.map(c => c.name).join(', ')}`,
-      `- Face/Body Rules: ${bp.faceRule?.label || ''}, ${bp.bodyRule?.label || ''}`,
-      `- Archetype: ${bp.archRule?.name || ''}, Desired Impressions: ${(bp.impressions || []).join(', ')}`,
-      `- Personal Statement/Objective: "${bp.statement || 'Cohesive, versatile daily wardrobe'}"`,
-      `- Disliked Styles (NEVER suggest): ${JSON.stringify(userProfile.dislikedStyles || [])}`,
+      typeof buildMasterPersonalContextForAI === 'function'
+        ? buildMasterPersonalContextForAI()
+        : [
+            `User Objectives & Personal Image:`,
+            `- Style Gender: ${userProfile.styleGender || 'male'}`,
+            `- Palette: ${bp.palette.name} (${bp.contrastLabel}), Signature Colors: ${bp.signatureColors.map(c => c.name).join(', ')}`,
+            `- Face/Body Rules: ${bp.faceRule?.label || ''}, ${bp.bodyRule?.label || ''}`,
+            `- Archetype: ${bp.archRule?.name || ''}, Desired Impressions: ${(bp.impressions || []).join(', ')}`,
+            `- Personal Statement/Objective: "${bp.statement || 'Cohesive, versatile daily wardrobe'}"`,
+            `- Disliked Styles (NEVER suggest): ${JSON.stringify(userProfile.dislikedStyles || [])}`
+          ].join('\n'),
       `- Current Location Season: ${sInfo.name}`,
       `Current Wardrobe (${wardrobe.length} pieces): ${JSON.stringify(compactWardrobe)}`,
       `Return ONLY valid JSON with:`,
@@ -16533,7 +16553,8 @@ function renderInspoUI() {
   const actions = document.getElementById('inspo-actions');
   if (actions) {
     actions.innerHTML = photos.length ? `
-      <button type="button" class="btn btn-secondary btn-sm" onclick="runInspirationAnalysis()">🔄 Re-analyze</button>
+      <button type="button" class="btn btn-primary btn-sm" id="btn-ai-persona-style" onclick="analyzePersonaAndDesiredStyleWithAI()">🤖 AI Analyze Persona &amp; Style</button>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="runInspirationAnalysis()">🔄 Quick Palette Scan</button>
       <button type="button" class="btn btn-secondary btn-sm" onclick="clearInspoPhotos()">🗑️ Clear photos</button>` : '';
   }
 
@@ -16542,17 +16563,29 @@ function renderInspoUI() {
   const a = userProfile.inspoAnalysis;
   if (!a || !photos.length) { box.innerHTML = ''; return; }
   const archObj = PERSONA_ARCHETYPES.find(x => x.id === a.archetype);
-  const bar = (label, v) => `<div class="inspo-metric"><span>${label}</span><div class="inspo-bar"><div style="width:${Math.round(Math.max(0, Math.min(1, v)) * 100)}%"></div></div><span style="width:34px;text-align:right;">${Math.round(v * 100)}%</span></div>`;
+  const bar = (label, v) => (typeof v === 'number')
+    ? `<div class="inspo-metric"><span>${label}</span><div class="inspo-bar"><div style="width:${Math.round(Math.max(0, Math.min(1, v)) * 100)}%"></div></div><span style="width:34px;text-align:right;">${Math.round(v * 100)}%</span></div>`
+    : '';
+  const aiDetailHtml = a.aiDetailedDescription ? `
+    <div style="margin-top:10px; padding:10px 12px; border-radius:10px; background:rgba(0,229,192,0.08); border:1px solid rgba(0,229,192,0.28); font-size:0.78rem; line-height:1.5;">
+      <div style="font-weight:700; color:#0f766e; margin-bottom:4px;">🤖 AI Persona &amp; Desired Style Dossier (Used Across All Recommendations)</div>
+      <div style="color:var(--text);">${escapeHtml(a.aiDetailedDescription)}</div>
+      ${(Array.isArray(a.aestheticPillars) && a.aestheticPillars.length) ? `<div style="margin-top:6px;"><strong>Pillars:</strong> ${a.aestheticPillars.map(p => `<span class="badge badge-category" style="margin-right:4px;">${escapeHtml(p)}</span>`).join('')}</div>` : ''}
+      ${(Array.isArray(a.signatureGarments) && a.signatureGarments.length) ? `<div style="margin-top:5px;"><strong>Signature Pieces:</strong> ${escapeHtml(a.signatureGarments.join(', '))}</div>` : ''}
+      ${a.layeringRules ? `<div style="margin-top:4px;"><strong>Styling &amp; Proportions:</strong> ${escapeHtml(a.layeringRules)}</div>` : ''}
+      ${a.fabricsAndTextures ? `<div style="margin-top:4px;"><strong>Fabrics &amp; Textures:</strong> ${escapeHtml(a.fabricsAndTextures)}</div>` : ''}
+    </div>` : '';
   box.innerHTML = `
     <div class="inspo-result">
-      <strong style="font-size:0.88rem; color:var(--primary-dark);">✨ What your photos say (${a.photos} analysed)</strong>
+      <strong style="font-size:0.88rem; color:var(--primary-dark);">✨ What your photos say (${a.photos || photos.length} analysed${a.aiAnalyzed ? ' · 🤖 Gemini Vision' : ''})</strong>
       <div class="inspo-palette">${(userProfile.inspoPalette || []).map(h => `<span style="background:${h}" title="${h}"></span>`).join('')}</div>
       ${bar('Neutral tones', a.neutral)}
       ${bar('Colour boldness', a.bold)}
       ${bar('Contrast', a.contrast)}
       ${bar('Warm earth tones', a.warm)}
-      <p style="font-size:0.8rem; margin-top:8px;">Archetype: <strong>${archObj ? archObj.icon + ' ' + archObj.name : a.archetype}</strong> · Impressions: <strong>${a.impressions.join(', ')}</strong><br>
+      <p style="font-size:0.8rem; margin-top:8px;">Archetype: <strong>${archObj ? archObj.icon + ' ' + archObj.name : a.archetype}</strong> · Impressions: <strong>${(a.impressions || []).join(', ')}</strong><br>
       <span style="color:var(--text-secondary);">Your archetype, impressions and vision statement below were completed for you. Edit any of them and your choice is kept.</span></p>
+      ${aiDetailHtml}
     </div>`;
 }
 
@@ -17682,17 +17715,409 @@ function togglePersonaCollapse(forceState) {
   }
 }
 
+async function photoSrcToGeminiPart(src, maxDim = 768) {
+  if (!src) return null;
+  let dataUrl = src;
+  if (/^https?:\/\//i.test(src)) {
+    try {
+      const resp = await fetch(src, { mode: 'cors' });
+      if (resp.ok) {
+        const blob = await resp.blob();
+        dataUrl = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onloadend = () => resolve(r.result);
+          r.onerror = reject;
+          r.readAsDataURL(blob);
+        });
+      }
+    } catch (e) {
+      // Fall through to Image load attempt
+    }
+  }
+  return await new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        let w = img.naturalWidth || img.width || 512;
+        let h = img.naturalHeight || img.height || 512;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) { h = Math.max(64, Math.round((h * maxDim) / w)); w = maxDim; }
+          else { w = Math.max(64, Math.round((w * maxDim) / h)); h = maxDim; }
+        }
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const jpegUrl = c.toDataURL('image/jpeg', 0.85);
+        const m = /^data:([^;]+);base64,(.+)$/.exec(jpegUrl);
+        resolve(m ? { inlineData: { mimeType: m[1], data: m[2] } } : null);
+      } catch {
+        const m = /^data:([^;]+);base64,(.+)$/.exec(dataUrl || '');
+        resolve(m ? { inlineData: { mimeType: m[1], data: m[2] } } : null);
+      }
+    };
+    img.onerror = () => {
+      const m = /^data:([^;]+);base64,(.+)$/.exec(dataUrl || '');
+      resolve(m ? { inlineData: { mimeType: m[1], data: m[2] } } : null);
+    };
+    img.src = dataUrl;
+  });
+}
+
+function buildMasterPersonalContextForAI() {
+  const bp = typeof buildPersonalStyleBlueprint === 'function' ? buildPersonalStyleBlueprint() : {};
+  const pa = userProfile.personalAnalysis || {};
+  const ia = userProfile.inspoAnalysis || {};
+
+  const lines = [
+    `USER MASTER PERSONAL PROFILE & AI DOSSIER:`,
+    `- Style Preference: ${userProfile.styleGender === 'female' ? 'Feminine' : 'Masculine'} wardrobe`,
+    `- Color Season: ${bp.palette?.name || userProfile.palette || 'autumn'}${pa.subSeason ? ` (${pa.subSeason})` : ''} · Undertone: ${pa.undertoneLabel || bp.undertoneLabel || 'Balanced'} · Contrast: ${pa.contrastLabel || bp.contrastLabel || 'Medium'}`,
+    `- Face Shape: ${bp.faceRule?.label || userProfile.faceShape || 'oval'} · Body Silhouette: ${bp.bodyRule?.label || userProfile.bodyShape || 'rectangle'}`,
+    `- Desired Persona Archetype: ${bp.archRule?.name || userProfile.personaArchetype || 'quiet-luxury'} · Impressions: ${(userProfile.personaImpressions || []).join(', ')}`,
+    `- Personal Vision Statement: "${userProfile.personaStatement || bp.statement || ''}"`,
+    `- Disliked Styles/Items (NEVER recommend): ${JSON.stringify({ styles: userProfile.dislikedStyles || [], subTypes: userProfile.dislikedSubTypes || [], names: userProfile.dislikedItemNames || [] })}`
+  ];
+
+  if (pa.aiDetailedDescription) {
+    lines.push(`- AI PERSONAL COLOR & SILHOUETTE DOSSIER (from user photos): ${pa.aiDetailedDescription}`);
+  }
+  if (Array.isArray(pa.bestColors) && pa.bestColors.length) {
+    lines.push(`- AI Best Colors Near Face: ${pa.bestColors.map(c => c.name || c).join(', ')}`);
+  }
+  if (Array.isArray(pa.avoidColors) && pa.avoidColors.length) {
+    lines.push(`- AI Colors to Avoid: ${pa.avoidColors.map(c => c.name || c).join(', ')}`);
+  }
+  if (pa.bestNecklines && pa.bestNecklines.length) {
+    lines.push(`- AI Best Necklines & Collars: ${pa.bestNecklines.join(', ')}`);
+  }
+  if (pa.bestCuts && pa.bestCuts.length) {
+    lines.push(`- AI Best Silhouette Cuts & Fits: ${pa.bestCuts.join(', ')}`);
+  }
+  if (pa.cutsToAvoid && pa.cutsToAvoid.length) {
+    lines.push(`- AI Cuts/Fits to Avoid: ${pa.cutsToAvoid.join(', ')}`);
+  }
+  if (pa.metalsAndAccents) {
+    lines.push(`- AI Best Metals & Accessories: ${pa.metalsAndAccents}`);
+  }
+
+  if (ia.aiDetailedDescription) {
+    lines.push(`- AI PERSONA & DESIRED STYLE DOSSIER (from inspiration photos): ${ia.aiDetailedDescription}`);
+  }
+  if (Array.isArray(ia.aestheticPillars) && ia.aestheticPillars.length) {
+    lines.push(`- AI Desired Aesthetic Pillars: ${ia.aestheticPillars.join(' | ')}`);
+  }
+  if (Array.isArray(ia.signatureGarments) && ia.signatureGarments.length) {
+    lines.push(`- AI Signature Desired Garments: ${ia.signatureGarments.join(', ')}`);
+  }
+  if (ia.layeringRules) {
+    lines.push(`- AI Desired Layering & Styling Rules: ${ia.layeringRules}`);
+  }
+  if (ia.fabricsAndTextures) {
+    lines.push(`- AI Preferred Fabrics & Textures: ${ia.fabricsAndTextures}`);
+  }
+
+  return lines.join('\n');
+}
+
+async function analyzePersonalColorAndSilhouetteWithAI(opts = {}) {
+  const photos = Array.isArray(userProfile.selfies) ? userProfile.selfies.filter(Boolean) : [];
+  if (!photos.length) {
+    if (!opts.silent) toast('Upload at least 1 personal portrait or full-body photo first');
+    return null;
+  }
+  const geminiKey = (
+    localStorage.getItem('wtw_gemini_apikey') ||
+    document.getElementById('setting-gemini-apikey')?.value ||
+    ''
+  ).trim();
+  if (!geminiKey) {
+    if (!opts.silent) {
+      toast('Add your Gemini API key in Profile & Settings for AI Color & Silhouette scan (running local scan)');
+    }
+    if (typeof analyzeUploadedPhotos === 'function') {
+      return await analyzeUploadedPhotos(photos, opts);
+    }
+    return null;
+  }
+
+  const btn = document.getElementById('btn-ai-color-silhouette');
+  const origBtnHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Analyzing Color &amp; Silhouette...';
+  }
+  if (!opts.silent) toast('🤖 Analyzing your personal color palette, face shape & body silhouette with Gemini Vision...');
+
+  try {
+    const parts = (await Promise.all(photos.slice(0, 6).map(src => photoSrcToGeminiPart(src, 768)))).filter(Boolean);
+    if (!parts.length) {
+      throw new Error('Could not read uploaded photos (check CORS or re-upload)');
+    }
+
+    const prefLabel = userProfile.styleGender === 'female' ? 'feminine' : 'masculine';
+    const prompt = [
+      `You are an elite certified personal color analyst, facial geometry specialist, and body silhouette stylist.`,
+      `Analyze these ${parts.length} photo(s) of the user (${prefLabel} wardrobe preference) in complete detail.`,
+      `Your output will be stored as the master biometric, color, and silhouette reference for all future outfit generation, shopping recommendations, and garment evaluations.`,
+      `Return ONLY valid JSON with these exact keys:`,
+      `- season: one of "spring" | "summer" | "autumn" | "winter"`,
+      `- sub_season: specific 12-season name (e.g. "Warm Autumn", "Deep Winter", "True Spring", "Soft Summer")`,
+      `- undertone: e.g. "Warm Golden-Olive Undertone", "Cool Rosy-Blue Undertone", "Neutral-Warm Undertone"`,
+      `- contrast_level: "High Contrast" | "Medium Contrast" | "Low / Soft Contrast"`,
+      `- skin_hair_eye_notes: concise description of skin tone/overtone, hair depth/warmth, and eye clarity/contrast`,
+      `- best_colors: array of 6-8 objects { "name": "Color Name", "hex": "#RRGGBB" } that flatter the user's face most`,
+      `- avoid_colors: array of 4-5 objects { "name": "Color Name", "hex": "#RRGGBB" } that wash out or clash`,
+      `- metals_and_accents: string listing flattering metals, eyewear frames, leather tones`,
+      `- face_shape: one of "oval" | "round" | "square" | "heart" | "diamond"`,
+      `- body_shape: one of "inverted-triangle" | "rectangle" | "hourglass" | "pear" | "oval"`,
+      `- silhouette_proportions: detailed note on shoulder width, torso-to-leg ratio, waist definition, and frame`,
+      `- best_necklines_collars: array of 4-6 flattering collar/neckline styles`,
+      `- best_cuts_and_fits: array of 5-7 flattering garment cuts, jacket lengths, trouser rises/tapers, and proportions`,
+      `- cuts_to_avoid: array of 3-5 cuts or proportions to avoid`,
+      `- detailed_ai_description: A comprehensive, richly detailed 2-paragraph stylist dossier (130-200 words) covering exact seasonal color palette, undertone, contrast, facial structure, body silhouette proportions, ideal garment cuts, necklines, fabrics, and hardware so any AI stylist reading this alone knows exactly how to dress this person.`
+    ].join('\n');
+
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [...parts, { text: prompt }] }],
+        generationConfig: { temperature: 0.25, responseMimeType: 'application/json' }
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const payload = await res.json();
+    const raw = payload?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jm = raw.match(/\{[\s\S]*\}/);
+    if (!jm) throw new Error('Unexpected AI response format');
+    const parsed = JSON.parse(jm[0]);
+
+    const validSeasons = ['spring', 'summer', 'autumn', 'winter'];
+    const validFaces = ['oval', 'round', 'square', 'heart', 'diamond'];
+    const validBodies = ['inverted-triangle', 'rectangle', 'hourglass', 'pear', 'oval'];
+
+    const season = validSeasons.includes((parsed.season || '').toLowerCase()) ? parsed.season.toLowerCase() : (userProfile.palette || 'autumn');
+    const faceShape = validFaces.includes((parsed.face_shape || '').toLowerCase()) ? parsed.face_shape.toLowerCase() : (userProfile.faceShape || 'oval');
+    const bodyShape = validBodies.includes((parsed.body_shape || '').toLowerCase()) ? parsed.body_shape.toLowerCase() : (userProfile.bodyShape || 'rectangle');
+
+    userProfile.palette = season;
+    userProfile.faceShape = faceShape;
+    userProfile.bodyShape = bodyShape;
+
+    const prev = userProfile.personalAnalysis || {};
+    const summary = {
+      ...prev,
+      analyzedCount: photos.length,
+      clarityCount: prev.clarityCount || photos.length,
+      avgClarity: prev.avgClarity || 92,
+      detectedPalette: season,
+      subSeason: parsed.sub_season || SEASONAL_PALETTES[season]?.name || season,
+      undertoneLabel: parsed.undertone || prev.undertoneLabel || 'Balanced Undertone',
+      contrastLabel: parsed.contrast_level || prev.contrastLabel || 'Medium Contrast',
+      skinHairEyeNotes: parsed.skin_hair_eye_notes || '',
+      bestColors: Array.isArray(parsed.best_colors) ? parsed.best_colors.slice(0, 8) : [],
+      avoidColors: Array.isArray(parsed.avoid_colors) ? parsed.avoid_colors.slice(0, 5) : [],
+      metalsAndAccents: parsed.metals_and_accents || '',
+      detectedFaceShape: faceShape,
+      detectedBodyShape: bodyShape,
+      silhouetteProportions: parsed.silhouette_proportions || '',
+      bestNecklines: Array.isArray(parsed.best_necklines_collars) ? parsed.best_necklines_collars : [],
+      bestCuts: Array.isArray(parsed.best_cuts_and_fits) ? parsed.best_cuts_and_fits : [],
+      cutsToAvoid: Array.isArray(parsed.cuts_to_avoid) ? parsed.cuts_to_avoid : [],
+      aiDetailedDescription: parsed.detailed_ai_description || '',
+      aiAnalyzed: true,
+      sourceSummary: `🤖 Gemini Vision (${parts.length} photo${parts.length > 1 ? 's' : ''}) · ${parsed.sub_season || SEASONAL_PALETTES[season]?.name}`,
+      updatedAt: Date.now()
+    };
+    userProfile.personalAnalysis = summary;
+
+    try {
+      localStorage.setItem('wtw_user_palette', userProfile.palette);
+      localStorage.setItem('wtw_face_shape', userProfile.faceShape);
+      localStorage.setItem('wtw_body_shape', userProfile.bodyShape);
+      localStorage.setItem('wtw_personal_analysis', JSON.stringify(summary));
+    } catch {}
+    if (typeof scheduleCloudPush === 'function') scheduleCloudPush();
+
+    const notice = document.getElementById('shape-detection-notice');
+    if (notice) {
+      notice.style.display = 'block';
+      notice.innerHTML = `🤖 Gemini Vision Result: <strong>${escapeHtml(summary.subSeason)}</strong> · <strong>${faceShape.toUpperCase()} Face</strong> &amp; <strong>${bodyShape.toUpperCase()} Silhouette</strong>.`;
+    }
+
+    renderUserProfileUI();
+    renderPersonalBlueprintUI();
+    renderOutfit();
+    renderShopRecommendations();
+    if (!opts.silent) {
+      toast(`🤖 AI Color & Silhouette complete: ${summary.subSeason} · ${faceShape} face · ${bodyShape} silhouette!`);
+    }
+    return summary;
+  } catch (err) {
+    console.warn('AI Color & Silhouette scan failed:', err);
+    if (!opts.silent) toast(`⚠️ AI scan issue (${err.message || 'error'}) — running local biometric scan`);
+    if (typeof analyzeUploadedPhotos === 'function') {
+      return await analyzeUploadedPhotos(photos, opts);
+    }
+    return null;
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origBtnHtml || '🤖 AI Color &amp; Silhouette';
+    }
+  }
+}
+
+async function analyzePersonaAndDesiredStyleWithAI(opts = {}) {
+  const photos = Array.isArray(userProfile.inspoPhotos) ? userProfile.inspoPhotos.filter(Boolean) : [];
+  if (!photos.length) {
+    if (!opts.silent) toast('Upload at least 1 style inspiration photo first');
+    return null;
+  }
+  const geminiKey = (
+    localStorage.getItem('wtw_gemini_apikey') ||
+    document.getElementById('setting-gemini-apikey')?.value ||
+    ''
+  ).trim();
+  if (!geminiKey) {
+    if (!opts.silent) {
+      toast('Add your Gemini API key in Profile & Settings for AI Persona analysis (running local scan)');
+    }
+    if (typeof runInspirationAnalysis === 'function') {
+      return await runInspirationAnalysis({ skipAI: true });
+    }
+    return null;
+  }
+
+  const btn = document.getElementById('btn-ai-persona-style');
+  const origBtnHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Analyzing Persona &amp; Style...';
+  }
+  if (!opts.silent) toast('🤖 Analyzing your inspiration photos to build a detailed Persona & Desired Style dossier...');
+
+  try {
+    const parts = (await Promise.all(photos.slice(0, 8).map(src => photoSrcToGeminiPart(src, 768)))).filter(Boolean);
+    if (!parts.length) {
+      throw new Error('Could not read inspiration photos');
+    }
+
+    const prefLabel = userProfile.styleGender === 'female' ? 'feminine' : 'masculine';
+    const prompt = [
+      `You are a luxury creative director and personal brand stylist.`,
+      `Analyze these ${parts.length} style inspiration / desired look photos for a client (${prefLabel} wardrobe preference).`,
+      `Extract their exact desired persona, aesthetic DNA, silhouette preferences, color harmony, fabrics, and styling signatures.`,
+      `Your output will be saved as the master Persona & Desired Style dossier used across all future outfit generation, shopping advice, and wardrobe scoring.`,
+      `Return ONLY valid JSON with these exact keys:`,
+      `- archetype: one of "quiet-luxury" | "executive" | "minimalist" | "creative" | "approachable" | "street-edge" | "romantic"`,
+      `- impressions: array of 3-5 single-word mood/impression adjectives (e.g. ["Sophisticated", "Effortless", "Tailored", "Grounded"])`,
+      `- palette: array of 6 dominant #RRGGBB hex colors seen across the inspiration looks`,
+      `- aesthetic_pillars: array of 3-5 concise aesthetic pillars (e.g. ["Tonal layering", "Relaxed structured tailoring", "Matte natural textures"])`,
+      `- signature_garments: array of 5-8 specific key garments/silhouettes seen (e.g. ["Unstructured linen blazer", "Pleated tailored trousers", "Minimalist leather sneakers"])`,
+      `- layering_and_styling_rules: concise description of how outfits are styled (proportions, tucking, collar openness, belt/shoe cohesion, layer weights)`,
+      `- fabrics_and_textures: concise list of preferred materials and finishes`,
+      `- vision_statement: a crisp, inspiring 1-2 sentence personal style statement written in first person ("I want to look...")`,
+      `- detailed_ai_description: A comprehensive, richly detailed 2-paragraph persona & desired style dossier (130-200 words) describing the exact aesthetic mood, silhouette language, color harmony, fabric textures, formality sweet spot, and styling rules so any AI stylist reading this knows exactly how to dress this person.`
+    ].join('\n');
+
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [...parts, { text: prompt }] }],
+        generationConfig: { temperature: 0.3, responseMimeType: 'application/json' }
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const payload = await res.json();
+    const raw = payload?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jm = raw.match(/\{[\s\S]*\}/);
+    if (!jm) throw new Error('Unexpected AI response format');
+    const parsed = JSON.parse(jm[0]);
+
+    const validArch = ['quiet-luxury', 'executive', 'minimalist', 'creative', 'approachable', 'street-edge', 'romantic'];
+    const arch = validArch.includes((parsed.archetype || '').toLowerCase()) ? parsed.archetype.toLowerCase() : (userProfile.personaArchetype || 'quiet-luxury');
+    const impressions = Array.isArray(parsed.impressions) && parsed.impressions.length
+      ? parsed.impressions.slice(0, 5)
+      : (userProfile.personaImpressions || ['Sophisticated', 'Effortless']);
+    const palette = Array.isArray(parsed.palette) && parsed.palette.length
+      ? parsed.palette.filter(h => /^#[0-9a-f]{6}$/i.test(h)).slice(0, 6)
+      : (userProfile.inspoPalette || []);
+
+    userProfile.personaArchetype = arch;
+    userProfile.personaImpressions = impressions;
+    if (parsed.vision_statement) userProfile.personaStatement = parsed.vision_statement;
+    if (palette.length) userProfile.inspoPalette = palette;
+
+    const prev = userProfile.inspoAnalysis || {};
+    userProfile.inspoAnalysis = {
+      ...prev,
+      photos: photos.length,
+      archetype: arch,
+      impressions,
+      aestheticPillars: Array.isArray(parsed.aesthetic_pillars) ? parsed.aesthetic_pillars : [],
+      signatureGarments: Array.isArray(parsed.signature_garments) ? parsed.signature_garments : [],
+      layeringRules: parsed.layering_and_styling_rules || '',
+      fabricsAndTextures: parsed.fabrics_and_textures || '',
+      aiDetailedDescription: parsed.detailed_ai_description || '',
+      aiAnalyzed: true,
+      analyzedAt: Date.now()
+    };
+
+    if (typeof persistInspo === 'function') persistInspo();
+    try {
+      localStorage.setItem('wtw_persona_archetype', userProfile.personaArchetype);
+      localStorage.setItem('wtw_persona_impressions', JSON.stringify(userProfile.personaImpressions));
+      localStorage.setItem('wtw_persona_statement', userProfile.personaStatement || '');
+    } catch {}
+    if (typeof scheduleCloudPush === 'function') scheduleCloudPush();
+
+    if (typeof renderPersonaArchetypeUI === 'function') renderPersonaArchetypeUI();
+    if (typeof renderInspoUI === 'function') renderInspoUI();
+    if (typeof renderPersonalBlueprintUI === 'function') renderPersonalBlueprintUI();
+    if (typeof renderFloatingPersonaCard === 'function') renderFloatingPersonaCard();
+    if (typeof renderOutfit === 'function') renderOutfit();
+    if (typeof renderShopRecommendations === 'function') renderShopRecommendations();
+
+    if (!opts.silent) {
+      toast('🤖 AI Persona & Desired Style dossier saved and activated across all stylists!');
+    }
+    return userProfile.inspoAnalysis;
+  } catch (err) {
+    console.warn('AI Persona & Desired Style analysis failed:', err);
+    if (!opts.silent) toast(`⚠️ AI Persona scan issue (${err.message || 'error'})`);
+    return null;
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origBtnHtml || '🤖 AI Analyze Persona &amp; Style';
+    }
+  }
+}
+
 async function reanalyzePersonaProfile() {
   const userPhotos = Array.isArray(userProfile.selfies) ? userProfile.selfies : [];
-  toast('🔄 Re-analyzing Persona across your uploaded photos & style blueprint...');
-  if (userPhotos.length > 0 && typeof analyzeUploadedPhotos === 'function') {
-    await analyzeUploadedPhotos(userPhotos);
-  } else {
-    renderFloatingPersonaCard();
-    if (typeof renderUserProfileUI === 'function') renderUserProfileUI();
-    if (typeof renderOutfit === 'function') renderOutfit();
-    toast('✨ Style Blueprint updated from your Face, Body & Desired Style!');
+  const inspoPhotos = Array.isArray(userProfile.inspoPhotos) ? userProfile.inspoPhotos : [];
+  const geminiKey = (localStorage.getItem('wtw_gemini_apikey') || '').trim();
+  toast('🔄 Re-analyzing Persona, Color, Silhouette & Desired Style...');
+  if (geminiKey && userPhotos.length > 0) {
+    await analyzePersonalColorAndSilhouetteWithAI({ silent: true });
+  } else if (userPhotos.length > 0 && typeof analyzeUploadedPhotos === 'function') {
+    await analyzeUploadedPhotos(userPhotos, { silent: true });
   }
+  if (geminiKey && inspoPhotos.length > 0) {
+    await analyzePersonaAndDesiredStyleWithAI({ silent: true });
+  }
+  renderFloatingPersonaCard();
+  if (typeof renderUserProfileUI === 'function') renderUserProfileUI();
+  if (typeof renderInspoUI === 'function') renderInspoUI();
+  if (typeof renderPersonalBlueprintUI === 'function') renderPersonalBlueprintUI();
+  if (typeof renderOutfit === 'function') renderOutfit();
+  toast('✨ Persona, Color & Silhouette dossiers updated!');
 }
 
 
