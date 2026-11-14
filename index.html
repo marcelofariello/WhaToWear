@@ -4225,8 +4225,42 @@ input[type="text"]:focus, select:focus, textarea:focus {
 
     <div class="form-row">
       <div class="form-group">
-        <label for="item-color">Color</label>
+        <label for="item-color">Primary Color</label>
         <input type="color" id="item-color" value="#4a7db5">
+      </div>
+      <div class="form-group">
+        <label for="item-color-2" class="label-with-action">
+          <span>2nd Color (Optional)</span>
+          <label style="font-size:0.72rem; font-weight:600; display:inline-flex; align-items:center; gap:4px; cursor:pointer; margin:0;">
+            <input type="checkbox" id="item-color-2-enabled" onchange="toggleSecondaryColorInput(2)"> Enable
+          </label>
+        </label>
+        <input type="color" id="item-color-2" value="#ffffff" disabled style="opacity:0.4;">
+      </div>
+      <div class="form-group">
+        <label for="item-color-3" class="label-with-action">
+          <span>3rd Color (Optional)</span>
+          <label style="font-size:0.72rem; font-weight:600; display:inline-flex; align-items:center; gap:4px; cursor:pointer; margin:0;">
+            <input type="checkbox" id="item-color-3-enabled" onchange="toggleSecondaryColorInput(3)"> Enable
+          </label>
+        </label>
+        <input type="color" id="item-color-3" value="#1e293b" disabled style="opacity:0.4;">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="item-pattern">Pattern / Lines / Brand Marks</label>
+        <select id="item-pattern">
+          <option value="solid">⬜ Plain / Solid Color</option>
+          <option value="stripes">📏 Stripes / Lines</option>
+          <option value="check">🏁 Plaid / Check / Tartan</option>
+          <option value="dots">⚪ Dots / Polka / Micro-Print</option>
+          <option value="graphic">🎨 Graphic / Artwork / Print</option>
+          <option value="logo">🏷️ Brand Mark / Logo</option>
+          <option value="colorblock">🟨 Colorblock / Multi-Panel</option>
+          <option value="textured">🧶 Textured / Ribbed / Knit</option>
+        </select>
       </div>
       <div class="form-group">
         <label for="item-formality" class="label-with-action">
@@ -4239,6 +4273,14 @@ input[type="text"]:focus, select:focus, textarea:focus {
           <button type="button" class="btn btn-primary btn-sm" style="padding:7px 12px; font-size:0.76rem;" onclick="addCustomFormalityFromModal()">Add</button>
         </div>
       </div>
+    </div>
+
+    <div id="ai-item-check-box" style="margin-bottom:12px; padding:10px 12px; border-radius:10px; background:rgba(0,229,192,0.08); border:1px solid rgba(0,229,192,0.28); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+      <div style="font-size:0.76rem; color:var(--text-secondary); flex:1; min-width:180px;">
+        <strong style="color:var(--text); display:block;">🤖 AI Item Verification</strong>
+        <span id="ai-item-check-status">Have AI inspect this photo &amp; description to verify type, colors, pattern, length &amp; formality.</span>
+      </div>
+      <button type="button" class="btn btn-accent btn-sm" id="btn-ai-verify-item" onclick="verifyItemWithAI()">✨ AI Check Item</button>
     </div>
 
     <div class="form-actions">
@@ -4369,15 +4411,47 @@ input[type="text"]:focus, select:focus, textarea:focus {
   </div>
 </div>
 
-<!-- Fullscreen Photo Viewer Lightbox -->
+<!-- Fullscreen Photo Viewer Lightbox (with Rotate & Trim) -->
 <div class="modal-overlay" id="photo-lightbox-modal" onclick="if(event.target===event.currentTarget)closePhotoLightbox()">
-  <div class="modal" style="max-width:540px; text-align:center;">
-    <h2 id="lightbox-title" style="margin-bottom:12px;">Saved Photo</h2>
-    <div style="background:#000; border-radius:var(--radius-md); overflow:hidden; max-height:68vh; display:flex; align-items:center; justify-content:center;">
-      <img id="lightbox-img" src="" alt="Saved Photo" style="max-width:100%; max-height:68vh; object-fit:contain; display:block;">
+  <div class="modal" style="max-width:580px; width:95%; text-align:center;">
+    <h2 id="lightbox-title" style="margin-bottom:10px;">Saved Photo</h2>
+    <div id="lightbox-view-wrap" style="background:#000; border-radius:var(--radius-md); overflow:hidden; max-height:62vh; display:flex; align-items:center; justify-content:center;">
+      <img id="lightbox-img" src="" alt="Saved Photo" style="max-width:100%; max-height:62vh; object-fit:contain; display:block;">
     </div>
-    <div class="form-actions" style="justify-content:center;">
-      <button type="button" class="btn btn-primary" onclick="closePhotoLightbox()">Close</button>
+    <div id="lightbox-trim-wrap" style="display:none;">
+      <p style="font-size:0.76rem; color:var(--text-secondary); margin-bottom:8px;">Drag on the image or use sliders to trim edges.</p>
+      <div class="crop-canvas-wrap" style="margin-bottom:10px;">
+        <canvas id="lightbox-crop-canvas" style="max-width:100%; max-height:320px; cursor:crosshair; touch-action:none; border-radius:6px;"></canvas>
+      </div>
+      <div class="crop-sliders-grid">
+        <div>
+          <label><span>Left Trim</span><span id="lb-crop-lbl-left">0%</span></label>
+          <input type="range" id="lb-crop-left" min="0" max="45" value="0" oninput="updateLightboxCropSlider()">
+        </div>
+        <div>
+          <label><span>Right Trim</span><span id="lb-crop-lbl-right">0%</span></label>
+          <input type="range" id="lb-crop-right" min="0" max="45" value="0" oninput="updateLightboxCropSlider()">
+        </div>
+        <div>
+          <label><span>Top Trim</span><span id="lb-crop-lbl-top">0%</span></label>
+          <input type="range" id="lb-crop-top" min="0" max="45" value="0" oninput="updateLightboxCropSlider()">
+        </div>
+        <div>
+          <label><span>Bottom Trim</span><span id="lb-crop-lbl-bottom">0%</span></label>
+          <input type="range" id="lb-crop-bottom" min="0" max="45" value="0" oninput="updateLightboxCropSlider()">
+        </div>
+      </div>
+    </div>
+    <div class="form-actions" id="lightbox-actions-view" style="justify-content:center; flex-wrap:wrap; gap:8px; margin-top:12px;">
+      <button type="button" class="btn btn-secondary btn-sm" id="lb-btn-rot-left" onclick="lightboxRotate(-90)">↺ Rotate -90°</button>
+      <button type="button" class="btn btn-secondary btn-sm" id="lb-btn-rot-right" onclick="lightboxRotate(90)">↻ Rotate +90°</button>
+      <button type="button" class="btn btn-accent btn-sm" id="lb-btn-trim" onclick="lightboxStartTrim()">✂️ Trim / Crop</button>
+      <button type="button" class="btn btn-primary btn-sm" onclick="closePhotoLightbox()">Close</button>
+    </div>
+    <div class="form-actions" id="lightbox-actions-trim" style="display:none; justify-content:center; flex-wrap:wrap; gap:8px; margin-top:10px;">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="lightboxResetTrim()">↺ Reset</button>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="lightboxCancelTrim()">Cancel Trim</button>
+      <button type="button" class="btn btn-primary btn-sm" onclick="lightboxApplyTrim()">✓ Apply Trim &amp; Save</button>
     </div>
   </div>
 </div>
@@ -7976,10 +8050,47 @@ function scoreOutfitPersonalAndStyle(top, midLayer, outer, bottom, shoe, beltIte
     if (isColorNameMatch(it.color, blueprint.avoidHexes)) {
       personalScore -= (idx <= 1 ? 26 : 14);
     }
+    // Evaluate 2nd & 3rd colors on multi-color pieces
+    [it.secondaryColor, it.tertiaryColor].filter(Boolean).forEach(extraHex => {
+      if (isColorNameMatch(extraHex, sigHexes)) personalScore += Math.round(faceWeight * 0.4);
+      else if (isNeutralColor(extraHex)) personalScore += 4;
+      if (isColorNameMatch(extraHex, blueprint.avoidHexes)) personalScore -= 10;
+    });
   });
   if (bottom && isColorNameMatch(bottom.color, sigHexes)) {
     personalScore += 14;
     outfitPaletteCount++;
+  }
+  if (bottom) {
+    [bottom.secondaryColor, bottom.tertiaryColor].filter(Boolean).forEach(extraHex => {
+      if (isColorNameMatch(extraHex, sigHexes)) personalScore += 6;
+      if (isColorNameMatch(extraHex, blueprint.avoidHexes)) personalScore -= 8;
+    });
+  }
+
+  // Multi-color accent coordination across pieces (e.g., striped shirt accent matches trousers/shoes)
+  const allColorsInOutfit = allItems.flatMap(it => [it.color, it.secondaryColor, it.tertiaryColor].filter(Boolean));
+  allItems.forEach(it => {
+    const extras = [it.secondaryColor, it.tertiaryColor].filter(Boolean);
+    extras.forEach(ex => {
+      const matchedOther = allItems.some(other => other !== it && other.color && isColorNameMatch(ex, [other.color]));
+      if (matchedOther) personalScore += 14;
+    });
+  });
+
+  // Pattern, lines, graphic & brand mark coordination
+  const loudPatterns = new Set(['stripes', 'check', 'dots', 'graphic', 'colorblock']);
+  const patternedItems = allItems.filter(it => it.pattern && loudPatterns.has(it.pattern));
+  if (patternedItems.length > 1) {
+    personalScore -= 18; // avoid clashing multiple loud patterns/lines
+  } else if (patternedItems.length === 1 && allItems.some(it => !it.pattern || it.pattern === 'solid' || it.pattern === 'textured')) {
+    personalScore += 10; // balanced statement pattern anchored by solids
+  }
+  const dayFormality = (typeof getDayFormality === 'function') ? getDayFormality() : 'casual';
+  if (['formal', 'business-casual', 'cocktail', 'black-tie'].includes(dayFormality)) {
+    if (allItems.some(it => it.pattern === 'graphic' || it.pattern === 'logo')) {
+      personalScore -= 24;
+    }
   }
 
   // Skin-tone contrast calibration
@@ -9146,7 +9257,7 @@ function renderOutfitItem(item, label, stepBadge) {
   const safeId = (item.id || '').replace(/'/g, "\\'");
 
   const visualHtml = photoSrc
-    ? `<div class="item-visual-wrap" onclick="openPhotoLightbox(getItemDisplayPhotoSrc(wardrobe.find(w=>w.id==='${safeId}') || {name:'${safeName}',subType:'${safeSub}',category:'${item.category}',color:'${item.color}'}), '${safeName}')" title="Tap to view large item photo">
+    ? `<div class="item-visual-wrap" onclick="openPhotoLightbox(getItemDisplayPhotoSrc(wardrobe.find(w=>w.id==='${safeId}') || {name:'${safeName}',subType:'${safeSub}',category:'${item.category}',color:'${item.color}'}), '${safeName}', '${safeId}')" title="Tap to zoom, rotate or trim photo">
          <img class="item-photo" src="${photoSrc}" alt="${escapeHtml(item.name)}">
          <span class="photo-source-tag">${hasRealPhoto ? '📷 Photo' : '🧥 Preview'}</span>
          <span class="mini-dot" style="background:${item.color}" title="Item Color: ${item.color}"></span>
@@ -9547,9 +9658,9 @@ function renderOutfit() {
           🛍️ See Pieces to Buy
         </button>
       </div>
+      ${specialOccasionBoxHtml}
       ${decisionCardHtml}
       ${bottomSettingsHtml}
-      ${specialOccasionBoxHtml}
     </div>`;
 
   renderWardrobeIllusionSection();
@@ -9803,6 +9914,23 @@ function computeItemPersonaFitRank(item, blueprintOverride) {
     reasons.push('off-palette tone');
   }
 
+  // Factor 2nd & 3rd colors
+  [item.secondaryColor, item.tertiaryColor].filter(Boolean).forEach(extraHex => {
+    if (sigHexes.length && isColorNameMatch(extraHex, sigHexes)) raw += 0.6;
+    else if (avoidHexes.length && isColorNameMatch(extraHex, avoidHexes)) raw -= 0.7;
+  });
+
+  // Factor pattern / brand marks against style archetype
+  if (item.pattern && item.pattern !== 'solid') {
+    const archId = (userProfile && userProfile.personaArchetype) || 'quiet-luxury';
+    if ((archId === 'quiet-luxury' || archId === 'minimalist' || archId === 'executive') && (item.pattern === 'graphic' || item.pattern === 'logo')) {
+      raw -= 1.2;
+      reasons.push('loud graphic/logo vs clean archetype');
+    } else if (item.pattern === 'textured' || item.pattern === 'stripes') {
+      raw += 0.4;
+    }
+  }
+
   const txt = ((item.subType || '') + ' ' + (item.name || '')).toLowerCase();
   if ((item.category === 'tops' || item.category === 'outerwear') && bp.faceRule) {
     if (bp.faceRule.recommendedRegex && bp.faceRule.recommendedRegex.test(txt)) {
@@ -9889,8 +10017,16 @@ function renderWardrobe() {
     const seasonBadge = itemSeason && itemSeason !== 'all-season' ? getSeasonBadgeLabel(itemSeason) : '';
     const fitBadgeClass = fit.score >= 8 ? 'badge-fit-high' : (fit.score >= 5 ? 'badge-fit-mid' : 'badge-fit-low');
     const fitIcon = fit.score >= 8 ? '⭐' : (fit.score >= 5 ? '✨' : '⚠️');
+    const patternLabels = {
+      stripes: '📏 Stripes', check: '🏁 Plaid/Check', dots: '⚪ Dots',
+      graphic: '🎨 Graphic', logo: '🏷️ Brand/Logo', colorblock: '🟨 Colorblock', textured: '🧶 Textured'
+    };
+    const patternBadge = item.pattern && item.pattern !== 'solid' ? (patternLabels[item.pattern] || item.pattern) : '';
+    const extraSwatches = [item.secondaryColor, item.tertiaryColor].filter(Boolean).map(c =>
+      `<span class="card-actions-swatch" style="background:${c}" title="Secondary/Accent Color"></span>`
+    ).join('');
     const visualContent = item.image
-      ? `<div class="card-photo-wrap" onclick="openPhotoLightbox(wardrobe.find(w=>w.id==='${item.id}')?.image, '${escapeHtml(item.name).replace(/'/g, "\\'")}')" style="cursor:zoom-in;" title="Tap to view photo">
+      ? `<div class="card-photo-wrap" onclick="openPhotoLightbox(wardrobe.find(w=>w.id==='${item.id}')?.image, '${escapeHtml(item.name).replace(/'/g, "\\'")}', '${item.id}')" style="cursor:zoom-in;" title="Tap to zoom, rotate or trim photo">
            <img src="${item.image}" alt="${escapeHtml(item.name)}">
            <span class="card-color-dot" style="background:${item.color}" title="Color"></span>
          </div>`
@@ -9901,11 +10037,11 @@ function renderWardrobe() {
       <div class="clothing-card" style="animation-delay:${idx * 0.04}s">
         <div class="card-actions">
           <div class="card-actions-left">
-            <span class="card-actions-swatch" style="background:${item.color}" title="Color"></span>
+            <span class="card-actions-swatch" style="background:${item.color}" title="Primary Color"></span>
+            ${extraSwatches}
             <span class="card-actions-cat">${escapeHtml(getCategoryLabel(item.category))}</span>
           </div>
           <div class="card-actions-btns">
-            ${item.image ? `<button type="button" class="icon-btn icon-btn-edit" onclick="event.stopPropagation(); openCropForWardrobeItem('${item.id}')" title="Rotate &amp; Trim photo" aria-label="Rotate and trim photo">✂️</button>` : ''}
             <button type="button" class="icon-btn icon-btn-edit" onclick="event.stopPropagation(); openEditModal('${item.id}')" title="Edit ${escapeHtml(item.name)}" aria-label="Edit">✏️</button>
             <button type="button" class="icon-btn icon-btn-delete" onclick="event.stopPropagation(); deleteItem('${item.id}')" title="Delete ${escapeHtml(item.name)}" aria-label="Delete">✕</button>
           </div>
@@ -9918,6 +10054,7 @@ function renderWardrobe() {
           <span class="badge ${fitBadgeClass}" title="${escapeHtml(fit.reason)}">${fitIcon} ${fit.score}/10 Fit</span>
           <span class="badge badge-category">${escapeHtml(getCategoryLabel(item.category))}</span>
           <span class="badge badge-formality">${escapeHtml(getFormalityDisplayLabel(item.formality))}</span>
+          ${patternBadge ? `<span class="badge" style="background:rgba(167,139,250,0.16); color:#c4b5fd; border:1px solid rgba(167,139,250,0.35);">${patternBadge}</span>` : ''}
           ${lenLabel ? `<span class="badge badge-length">${lenLabel}</span>` : ''}
           ${seasonBadge ? `<span class="badge" style="background:#f4efe6; color:#5a4632;">${seasonBadge}</span>` : ''}
         </div>
@@ -12532,20 +12669,276 @@ function selectSavedGalleryImage(index) {
   }
 }
 
-function openPhotoLightbox(src, title) {
+let lightboxState = {
+  src: null,
+  itemId: null,
+  isTrimMode: false,
+  img: null,
+  left: 0,
+  right: 0,
+  top: 0,
+  bottom: 0,
+  dragging: false,
+  startX: 0,
+  startY: 0
+};
+
+async function loadImageSafeForCanvas(src) {
+  let loadSrc = src;
+  let revokeUrl = null;
+  if (src && /^https?:\/\//i.test(src)) {
+    try {
+      const resp = await fetch(src, { mode: 'cors' });
+      if (resp.ok) {
+        const blob = await resp.blob();
+        loadSrc = URL.createObjectURL(blob);
+        revokeUrl = loadSrc;
+      }
+    } catch (e) {
+      // fallback to direct src below
+    }
+  }
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    if (/^https?:\/\//i.test(loadSrc)) img.crossOrigin = 'anonymous';
+    img.onload = () => resolve({ img, revoke: () => { if (revokeUrl) URL.revokeObjectURL(revokeUrl); } });
+    img.onerror = (err) => {
+      if (revokeUrl) URL.revokeObjectURL(revokeUrl);
+      reject(err);
+    };
+    img.src = loadSrc;
+  });
+}
+
+function openPhotoLightbox(src, title, itemId = null) {
   if (!src) return;
-  const img = document.getElementById('lightbox-img');
+  lightboxState.src = src;
+  lightboxState.itemId = itemId || null;
+  lightboxState.isTrimMode = false;
+
+  const imgEl = document.getElementById('lightbox-img');
   const ttl = document.getElementById('lightbox-title');
   const modal = document.getElementById('photo-lightbox-modal');
-  if (img) img.src = src;
+  const viewWrap = document.getElementById('lightbox-view-wrap');
+  const trimWrap = document.getElementById('lightbox-trim-wrap');
+  const actionsView = document.getElementById('lightbox-actions-view');
+  const actionsTrim = document.getElementById('lightbox-actions-trim');
+
+  if (imgEl) imgEl.src = src;
   if (ttl) ttl.textContent = title || 'Saved Photo';
+  if (viewWrap) viewWrap.style.display = 'flex';
+  if (trimWrap) trimWrap.style.display = 'none';
+  if (actionsView) actionsView.style.display = 'flex';
+  if (actionsTrim) actionsTrim.style.display = 'none';
+
+  const canEdit = Boolean(itemId);
+  ['lb-btn-rot-left', 'lb-btn-rot-right', 'lb-btn-trim'].forEach(btnId => {
+    const b = document.getElementById(btnId);
+    if (b) b.style.display = canEdit ? 'inline-flex' : 'none';
+  });
+
   if (modal) modal.classList.add('active');
 }
 
 function closePhotoLightbox() {
+  lightboxState.isTrimMode = false;
   const modal = document.getElementById('photo-lightbox-modal');
   if (modal) modal.classList.remove('active');
 }
+
+function persistLightboxImageToItem(newDataUrl) {
+  lightboxState.src = newDataUrl;
+  const imgEl = document.getElementById('lightbox-img');
+  if (imgEl) imgEl.src = newDataUrl;
+  if (lightboxState.itemId) {
+    const idx = wardrobe.findIndex(w => w.id === lightboxState.itemId);
+    if (idx !== -1) {
+      wardrobe[idx].image = newDataUrl;
+      wardrobe[idx].imageUrl = null;
+      saveLocalDataOnly();
+      renderWardrobe();
+      renderOutfit();
+      if (typeof syncWardrobeItemsToCloud === 'function') {
+        syncWardrobeItemsToCloud([wardrobe[idx]]).catch(() => {});
+      }
+    }
+  }
+}
+
+async function lightboxRotate(deg) {
+  if (!lightboxState.src) return;
+  try {
+    const { img, revoke } = await loadImageSafeForCanvas(lightboxState.src);
+    const canvas = document.createElement('canvas');
+    const swap = Math.abs(deg) % 180 === 90;
+    canvas.width = swap ? img.height : img.width;
+    canvas.height = swap ? img.width : img.height;
+    const ctx = canvas.getContext('2d');
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate((deg * Math.PI) / 180);
+    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+    revoke();
+    const outUrl = canvas.toDataURL('image/jpeg', 0.88);
+    persistLightboxImageToItem(outUrl);
+    toast(`🔄 Rotated ${deg > 0 ? '+90°' : '-90°'} & saved!`);
+  } catch (e) {
+    console.warn('Lightbox rotate error:', e);
+    toast('Could not rotate this image (format or CORS restriction)');
+  }
+}
+
+function lightboxResetTrim(redraw = true) {
+  lightboxState.left = 0;
+  lightboxState.right = 0;
+  lightboxState.top = 0;
+  lightboxState.bottom = 0;
+  ['left', 'right', 'top', 'bottom'].forEach(side => {
+    const el = document.getElementById(`lb-crop-${side}`);
+    const lbl = document.getElementById(`lb-crop-lbl-${side}`);
+    if (el) el.value = 0;
+    if (lbl) lbl.textContent = '0%';
+  });
+  if (redraw) drawLightboxCropCanvas();
+}
+
+async function lightboxStartTrim() {
+  if (!lightboxState.src) return;
+  try {
+    const { img, revoke } = await loadImageSafeForCanvas(lightboxState.src);
+    lightboxState.img = img;
+    lightboxState._revoke = revoke;
+    lightboxState.isTrimMode = true;
+    lightboxResetTrim(false);
+
+    document.getElementById('lightbox-view-wrap').style.display = 'none';
+    document.getElementById('lightbox-trim-wrap').style.display = 'block';
+    document.getElementById('lightbox-actions-view').style.display = 'none';
+    document.getElementById('lightbox-actions-trim').style.display = 'flex';
+    drawLightboxCropCanvas();
+  } catch (e) {
+    console.warn('Lightbox trim load error:', e);
+    toast('Could not load image for trimming');
+  }
+}
+
+function lightboxCancelTrim() {
+  lightboxState.isTrimMode = false;
+  if (lightboxState._revoke) { lightboxState._revoke(); lightboxState._revoke = null; }
+  document.getElementById('lightbox-view-wrap').style.display = 'flex';
+  document.getElementById('lightbox-trim-wrap').style.display = 'none';
+  document.getElementById('lightbox-actions-view').style.display = 'flex';
+  document.getElementById('lightbox-actions-trim').style.display = 'none';
+}
+
+function updateLightboxCropSlider() {
+  ['left', 'right', 'top', 'bottom'].forEach(side => {
+    const el = document.getElementById(`lb-crop-${side}`);
+    const lbl = document.getElementById(`lb-crop-lbl-${side}`);
+    const val = el ? parseInt(el.value, 10) || 0 : 0;
+    lightboxState[side] = val;
+    if (lbl) lbl.textContent = `${val}%`;
+  });
+  drawLightboxCropCanvas();
+}
+
+function drawLightboxCropCanvas() {
+  const canvas = document.getElementById('lightbox-crop-canvas');
+  const img = lightboxState.img;
+  if (!canvas || !img) return;
+  const maxW = 480;
+  const maxH = 310;
+  const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+  canvas.width = Math.max(1, Math.round(img.width * scale));
+  canvas.height = Math.max(1, Math.round(img.height * scale));
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+  const x1 = (lightboxState.left / 100) * canvas.width;
+  const y1 = (lightboxState.top / 100) * canvas.height;
+  const x2 = canvas.width - (lightboxState.right / 100) * canvas.width;
+  const y2 = canvas.height - (lightboxState.bottom / 100) * canvas.height;
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+  ctx.fillRect(0, 0, canvas.width, y1);
+  ctx.fillRect(0, y2, canvas.width, canvas.height - y2);
+  ctx.fillRect(0, y1, x1, y2 - y1);
+  ctx.fillRect(x2, y1, canvas.width - x2, y2 - y1);
+
+  ctx.strokeStyle = '#00e5c0';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x1, y1, Math.max(4, x2 - x1), Math.max(4, y2 - y1));
+}
+
+function lightboxApplyTrim() {
+  const img = lightboxState.img;
+  if (!img) return;
+  const sx = Math.round((lightboxState.left / 100) * img.width);
+  const sy = Math.round((lightboxState.top / 100) * img.height);
+  const sw = Math.max(20, img.width - sx - Math.round((lightboxState.right / 100) * img.width));
+  const sh = Math.max(20, img.height - sy - Math.round((lightboxState.bottom / 100) * img.height));
+
+  const maxOut = 900;
+  const outScale = Math.min(1, maxOut / Math.max(sw, sh));
+  const outCanvas = document.createElement('canvas');
+  outCanvas.width = Math.round(sw * outScale);
+  outCanvas.height = Math.round(sh * outScale);
+  const ctx = outCanvas.getContext('2d');
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outCanvas.width, outCanvas.height);
+
+  const trimmedUrl = outCanvas.toDataURL('image/jpeg', 0.88);
+  persistLightboxImageToItem(trimmedUrl);
+  lightboxCancelTrim();
+  toast('✂️ Image trimmed & saved!');
+}
+
+(function initLightboxCropDrag() {
+  const canvas = document.getElementById('lightbox-crop-canvas');
+  if (!canvas) return;
+  const getPt = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+      x: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+    };
+  };
+  const onStart = (e) => {
+    if (!lightboxState.isTrimMode) return;
+    lightboxState.dragging = true;
+    const p = getPt(e);
+    lightboxState.startX = p.x;
+    lightboxState.startY = p.y;
+  };
+  const onMove = (e) => {
+    if (!lightboxState.dragging || !lightboxState.isTrimMode) return;
+    const p = getPt(e);
+    const minX = Math.min(lightboxState.startX, p.x);
+    const maxX = Math.max(lightboxState.startX, p.x);
+    const minY = Math.min(lightboxState.startY, p.y);
+    const maxY = Math.max(lightboxState.startY, p.y);
+    if (maxX - minX < 0.08 || maxY - minY < 0.08) return;
+    lightboxState.left = Math.min(45, Math.round(minX * 100));
+    lightboxState.right = Math.min(45, Math.round((1 - maxX) * 100));
+    lightboxState.top = Math.min(45, Math.round(minY * 100));
+    lightboxState.bottom = Math.min(45, Math.round((1 - maxY) * 100));
+    ['left', 'right', 'top', 'bottom'].forEach(side => {
+      const el = document.getElementById(`lb-crop-${side}`);
+      const lbl = document.getElementById(`lb-crop-lbl-${side}`);
+      if (el) el.value = lightboxState[side];
+      if (lbl) lbl.textContent = `${lightboxState[side]}%`;
+    });
+    drawLightboxCropCanvas();
+  };
+  const onEnd = () => { lightboxState.dragging = false; };
+  canvas.addEventListener('mousedown', onStart);
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onEnd);
+  canvas.addEventListener('touchstart', onStart, { passive: true });
+  window.addEventListener('touchmove', onMove, { passive: true });
+  window.addEventListener('touchend', onEnd);
+})();
 
 function updateLengthOptions(selectedLength) {
   const cat = document.getElementById('item-category').value;
@@ -12602,6 +12995,142 @@ function updateSubTypes(selectedSub) {
   syncItemModalAutoFields({ updateTypeProps: true });
 }
 
+function toggleSecondaryColorInput(slot) {
+  const cb = document.getElementById(`item-color-${slot}-enabled`);
+  const inp = document.getElementById(`item-color-${slot}`);
+  if (!cb || !inp) return;
+  inp.disabled = !cb.checked;
+  inp.style.opacity = cb.checked ? '1' : '0.4';
+}
+
+function setSecondaryColorUI(slot, hexVal) {
+  const cb = document.getElementById(`item-color-${slot}-enabled`);
+  const inp = document.getElementById(`item-color-${slot}`);
+  if (!cb || !inp) return;
+  if (hexVal) {
+    cb.checked = true;
+    inp.value = hexVal;
+    inp.disabled = false;
+    inp.style.opacity = '1';
+  } else {
+    cb.checked = false;
+    inp.value = slot === 2 ? '#ffffff' : '#1e293b';
+    inp.disabled = true;
+    inp.style.opacity = '0.4';
+  }
+}
+
+async function verifyItemWithAI() {
+  const geminiKey = (localStorage.getItem('wtw_gemini_apikey') || '').trim();
+  if (!geminiKey) {
+    toast('Add your Gemini API key in Profile & Settings first');
+    return;
+  }
+  const btn = document.getElementById('btn-ai-verify-item');
+  const statusEl = document.getElementById('ai-item-check-status');
+  if (btn) { btn.disabled = true; btn.textContent = '🤖 Checking...'; }
+  if (statusEl) statusEl.textContent = 'AI is inspecting this item...';
+
+  try {
+    const parts = [];
+    if (currentItemPhoto) {
+      let dataUrl = currentItemPhoto;
+      if (/^https?:\/\//i.test(dataUrl)) {
+        try {
+          const resp = await fetch(dataUrl, { mode: 'cors' });
+          const blob = await resp.blob();
+          dataUrl = await new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onloadend = () => resolve(r.result);
+            r.onerror = reject;
+            r.readAsDataURL(blob);
+          });
+        } catch (e) { /* ignore if CORS blocks fetch */ }
+      }
+      const m = /^data:([^;]+);base64,(.+)$/.exec(dataUrl || '');
+      if (m) {
+        parts.push({ inlineData: { mimeType: m[1], data: m[2] } });
+      }
+    }
+
+    const curName = document.getElementById('item-name')?.value || '';
+    const curCat = document.getElementById('item-category')?.value || 'tops';
+    const curSub = document.getElementById('item-subtype')?.value || '';
+    const promptText = [
+      `Inspect this clothing item${parts.length ? ' photo' : ''} and current description ("${curName}", category: ${curCat}, type: ${curSub}).`,
+      `Accurately identify:`,
+      `- category: one of tops, bottoms, shoes, outerwear, accessories`,
+      `- garment_type: concise garment type (e.g. Oxford Shirt, Polo Shirt, Chinos, Sneakers, Blazer)`,
+      `- length: one of short, long, sleeveless, shorts, cropped, none`,
+      `- color_hex (#RRGGBB) & color_name`,
+      `- secondary_color_hex (#RRGGBB or null if plain/solid)`,
+      `- tertiary_color_hex (#RRGGBB or null if fewer than 3 colors)`,
+      `- pattern: one of solid, stripes, check, dots, graphic, logo, colorblock, textured`,
+      `- season: one of all-season, spring-summer, autumn-winter, spring, summer, autumn, winter`,
+      `- formality: one of casual, lounge, athleisure, elevated-casual, smart-casual, business-casual, formal, cocktail, black-tie`,
+      `- notes: 1 short sentence summarizing what you observed (colors, lines/marks/brand, cut).`,
+      `Return ONLY valid JSON with those exact keys.`
+    ].join('\n');
+    parts.push({ text: promptText });
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: { temperature: 0.2, responseMimeType: 'application/json' }
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const payload = await res.json();
+    const raw = payload?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const parsed = JSON.parse(raw.replace(/^```json\s*/i, '').replace(/```$/i, '').trim());
+
+    if (parsed.category && ['tops', 'bottoms', 'shoes', 'outerwear', 'accessories'].includes(parsed.category)) {
+      document.getElementById('item-category').value = parsed.category;
+      updateSubTypes(parsed.garment_type);
+    }
+    if (parsed.garment_type) {
+      const subSel = document.getElementById('item-subtype');
+      if (subSel && ![...subSel.options].some(o => o.value === parsed.garment_type)) {
+        const cat = document.getElementById('item-category').value;
+        if (!userProfile.customSubTypes) userProfile.customSubTypes = {};
+        if (!Array.isArray(userProfile.customSubTypes[cat])) userProfile.customSubTypes[cat] = [];
+        userProfile.customSubTypes[cat].push(parsed.garment_type);
+        updateSubTypes(parsed.garment_type);
+      }
+      if (subSel) subSel.value = parsed.garment_type;
+    }
+    if (parsed.length && parsed.length !== 'none') {
+      updateLengthOptions(parsed.length);
+    }
+    if (parsed.color_hex && /^#[0-9a-f]{6}$/i.test(parsed.color_hex)) {
+      document.getElementById('item-color').value = parsed.color_hex;
+    }
+    setSecondaryColorUI(2, (parsed.secondary_color_hex && /^#[0-9a-f]{6}$/i.test(parsed.secondary_color_hex)) ? parsed.secondary_color_hex : null);
+    setSecondaryColorUI(3, (parsed.tertiary_color_hex && /^#[0-9a-f]{6}$/i.test(parsed.tertiary_color_hex)) ? parsed.tertiary_color_hex : null);
+    if (parsed.pattern && document.getElementById('item-pattern')) {
+      document.getElementById('item-pattern').value = parsed.pattern;
+    }
+    if (parsed.season && document.getElementById('item-season')) {
+      document.getElementById('item-season').value = parsed.season;
+    }
+    if (parsed.formality) {
+      updateFormalityDropdown(parsed.formality);
+    }
+    syncItemModalAutoFields({ updateTypeProps: false, forceNameRecalc: true });
+    if (statusEl) statusEl.textContent = parsed.notes || 'AI verified & updated fields! Review and click Save Item.';
+    toast('🤖 AI checked & updated item details!');
+  } catch (e) {
+    console.warn('AI item check failed:', e);
+    if (statusEl) statusEl.textContent = 'AI check failed — verify your Gemini API key or network.';
+    toast('AI check failed — check Gemini API key in Settings');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✨ AI Check Item'; }
+  }
+}
+
 function openAddModal() {
   document.getElementById('modal-title').textContent = 'Add Clothing Item';
   document.getElementById('edit-id').value = '';
@@ -12616,6 +13145,11 @@ function openAddModal() {
   const seasonSel = document.getElementById('item-season');
   if (seasonSel) seasonSel.dataset.userEdited = 'false';
   document.getElementById('item-color').value = '#4a7db5';
+  setSecondaryColorUI(2, null);
+  setSecondaryColorUI(3, null);
+  if (document.getElementById('item-pattern')) document.getElementById('item-pattern').value = 'solid';
+  const aiStatus = document.getElementById('ai-item-check-status');
+  if (aiStatus) aiStatus.textContent = 'Have AI inspect this photo & description to verify type, colors, pattern, length & formality.';
   updateCategoryDropdown('tops');
   document.getElementById('item-category').value = 'tops';
   updateFormalityDropdown('casual');
@@ -12664,6 +13198,13 @@ function openEditModal(id) {
   document.getElementById('item-subtype').value = item.subType;
   updateLengthOptions(item.length || getItemLength(item));
   document.getElementById('item-color').value = item.color;
+  setSecondaryColorUI(2, item.secondaryColor || null);
+  setSecondaryColorUI(3, item.tertiaryColor || null);
+  if (document.getElementById('item-pattern')) {
+    document.getElementById('item-pattern').value = item.pattern || 'solid';
+  }
+  const aiStatus = document.getElementById('ai-item-check-status');
+  if (aiStatus) aiStatus.textContent = 'Have AI inspect this photo & description to verify type, colors, pattern, length & formality.';
   updateFormalityDropdown(item.formality || inferFormalityFromRecognizedPiece(item.category, item.subType, 'casual'));
   if (seasonSel) {
     seasonSel.value = item.season || inferItemSeasonSuitability(item);
@@ -12693,6 +13234,11 @@ async function saveItem() {
   const subType = cleanGarmentType(document.getElementById('item-subtype').value);
   const color = document.getElementById('item-color').value;
   const colorName = getColorNameFromHex(color);
+  const c2On = document.getElementById('item-color-2-enabled')?.checked;
+  const c3On = document.getElementById('item-color-3-enabled')?.checked;
+  const secondaryColor = c2On ? (document.getElementById('item-color-2')?.value || null) : null;
+  const tertiaryColor = c3On ? (document.getElementById('item-color-3')?.value || null) : null;
+  const pattern = document.getElementById('item-pattern')?.value || 'solid';
   const editId = document.getElementById('edit-id').value;
   const lengthSel = document.getElementById('item-length');
   const lengthRow = document.getElementById('length-row');
@@ -12713,6 +13259,11 @@ async function saveItem() {
     season,
     color,
     colorName,
+    secondaryColor,
+    secondaryColorName: secondaryColor ? getColorNameFromHex(secondaryColor) : null,
+    tertiaryColor,
+    tertiaryColorName: tertiaryColor ? getColorNameFromHex(tertiaryColor) : null,
+    pattern,
     formality,
     image: currentItemPhoto || null
   };
