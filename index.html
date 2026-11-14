@@ -4159,9 +4159,6 @@ input[type="text"]:focus, select:focus, textarea:focus {
       <div id="photo-controls" class="photo-badge-bar" style="display:none; flex-wrap:wrap; gap:6px;">
         <span id="detected-color-badge" class="auto-badge">✨ Garment &amp; Color Identified</span>
         <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="rotateModalPhoto(-90)" style="padding:3px 9px; font-size:0.72rem;" title="Rotate 90° left">↺ Rotate</button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="rotateModalPhoto(90)" style="padding:3px 9px; font-size:0.72rem;" title="Rotate 90° right">↻ Rotate</button>
-          <button type="button" class="btn btn-accent btn-sm" onclick="openPhotoCropModal()" style="padding:3px 9px; font-size:0.72rem;" title="Trim / crop image">✂️ Trim</button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="removePhoto(event)" style="padding:3px 9px; font-size:0.72rem;">✕ Remove</button>
         </div>
         <div id="cv-alternatives-bar" class="cv-alt-chips" style="display:none; width:100%;"></div>
@@ -5727,9 +5724,16 @@ function normalizeRemoteWardrobeItem(raw, scope) {
     season: raw.season || 'all-season',
     color: raw.color || '#4a7db5',
     colorName: raw.colorName || '',
+    secondaryColor: raw.secondaryColor || '',
+    secondaryColorName: raw.secondaryColorName || '',
+    tertiaryColor: raw.tertiaryColor || '',
+    tertiaryColorName: raw.tertiaryColorName || '',
+    pattern: raw.pattern || 'solid',
     formality: raw.formality || 'casual',
+    wearCount: raw.wearCount || 0,
     image: imgUrl,
     imageUrl: imgUrl,
+    imageTransform: raw.imageTransform || null,
     storagePath: raw.storagePath || null,
     userId: raw.userId || scope.userId,
     authUid: raw.authUid || null,
@@ -9266,7 +9270,7 @@ function renderOutfitItem(item, label, stepBadge) {
 
   const visualHtml = photoSrc
     ? `<div class="item-visual-wrap" onclick="openPhotoLightbox(getItemDisplayPhotoSrc(wardrobe.find(w=>w.id==='${safeId}') || {name:'${safeName}',subType:'${safeSub}',category:'${item.category}',color:'${item.color}'}), '${safeName}', '${safeId}')" title="Tap to zoom, rotate or trim photo">
-         <img class="item-photo" src="${photoSrc}" alt="${escapeHtml(item.name)}">
+         <img class="item-photo" src="${photoSrc}" alt="${escapeHtml(item.name)}" style="${getItemImageTransformStyle(item)}">
          <span class="photo-source-tag">${hasRealPhoto ? '📷 Photo' : '🧥 Preview'}</span>
          <span class="mini-dot" style="background:${item.color}" title="Item Color: ${item.color}"></span>
        </div>`
