@@ -3794,9 +3794,10 @@ input[type="text"]:focus, select:focus, textarea:focus {
           Real fashion photography curated to reflect what you love to wear, the impression you want to give, your seasonal color palette, and wardrobe gaps.
         </p>
       </div>
-      <button class="btn btn-secondary btn-sm" onclick="renderShopRecommendations()">🔄 Refresh Suggestions</button>
+      <button class="btn btn-secondary btn-sm" id="btn-refresh-shop-ai" onclick="refreshShopSuggestionsWithAI()">🔄 Refresh Suggestions</button>
     </div>
     <div id="shop-persona-summary"></div>
+    <div id="shop-ai-gap-summary" style="display:none; margin-bottom:14px;"></div>
     <div class="shop-grid" id="shop-grid"></div>
   </div>
 
@@ -15987,6 +15988,110 @@ async function addEvaluatedShopItemToWardrobe() {
   clearShopEval();
 }
 
+let aiShopRecommendations = null;
+let aiShopGapSummary = '';
+
+async function refreshShopSuggestionsWithAI() {
+  const geminiKey = (
+    localStorage.getItem('wtw_gemini_apikey') ||
+    document.getElementById('setting-gemini-apikey')?.value ||
+    ''
+  ).trim();
+  if (!geminiKey) {
+    renderShopRecommendations();
+    toast('Refreshed local suggestions (add Gemini API key in Settings for full AI analysis)');
+    return;
+  }
+
+  const btn = document.getElementById('btn-refresh-shop-ai');
+  const gapEl = document.getElementById('shop-ai-gap-summary');
+  if (btn) { btn.disabled = true; btn.textContent = '🤖 Analyzing Wardrobe...'; }
+  if (gapEl) {
+    gapEl.style.display = 'block';
+    gapEl.innerHTML = `<div class="card" style="padding:12px 14px; border:1px solid rgba(0,229,192,0.3); background:rgba(0,229,192,0.06); font-size:0.82rem;">🤖 Running full AI analysis of your ${wardrobe.length}-piece wardrobe and style objectives to rank the top 10 needed items...</div>`;
+  }
+
+  try {
+    const bp = buildPersonalStyleBlueprint();
+    const sInfo = getLocationSeasonInfo();
+    const compactWardrobe = wardrobe.map(w => ({
+      name: w.name,
+      category: w.category,
+      subType: w.subType,
+      color: w.colorName || getColorNameFromHex(w.color),
+      secondaryColor: w.secondaryColor ? (w.secondaryColorName || getColorNameFromHex(w.secondaryColor)) : null,
+      pattern: w.pattern || 'solid',
+      formality: w.formality,
+      season: w.season || 'all-season',
+      wearCount: getItemWearCount(w),
+      aiDescription: w.aiDescription || ''
+    }));
+
+    const prompt = [
+      `You are a master wardrobe strategist. Perform a FULL analysis of the user's wardrobe and style objectives, then rank the TOP 10 needed items to buy.`,
+      `User Objectives & Personal Image:`,
+      `- Style Gender: ${userProfile.styleGender || 'male'}`,
+      `- Palette: ${bp.palette.name} (${bp.contrastLabel}), Signature Colors: ${bp.signatureColors.map(c => c.name).join(', ')}`,
+      `- Face/Body Rules: ${bp.faceRule?.label || ''}, ${bp.bodyRule?.label || ''}`,
+      `- Archetype: ${bp.archRule?.name || ''}, Desired Impressions: ${(bp.impressions || []).join(', ')}`,
+      `- Personal Statement/Objective: "${bp.statement || 'Cohesive, versatile daily wardrobe'}"`,
+      `- Disliked Styles (NEVER suggest): ${JSON.stringify(userProfile.dislikedStyles || [])}`,
+      `- Current Location Season: ${sInfo.name}`,
+      `Current Wardrobe (${wardrobe.length} pieces): ${JSON.stringify(compactWardrobe)}`,
+      `Return ONLY valid JSON with:`,
+      `- gap_summary: 2 concise sentences summarizing wardrobe strengths, missing gaps, and how these additions serve the user's objective.`,
+      `- items: array of EXACTLY 10 objects ranked 1 (highest priority) to 10, each with keys: rank (1-10), need_score (1-100), name, category (tops|bottoms|shoes|outerwear|accessories), subType, color_hex (#RRGGBB), color_name, formality, length (short|long|shorts|cropped|none), season, reason (1-2 sentences explaining the wardrobe gap, objective fit, and owned pieces it unlocks).`
+    ].join('\n');
+
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3, responseMimeType: 'application/json' }
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jm = raw.match(/\{[\s\S]*\}/);
+    if (!jm) throw new Error('Unexpected AI response format');
+    const parsed = JSON.parse(jm[0]);
+    const rawItems = Array.isArray(parsed.items) ? parsed.items : [];
+    if (rawItems.length === 0) throw new Error('No ranked items returned');
+
+    aiShopGapSummary = parsed.gap_summary || '';
+    aiShopRecommendations = rawItems.slice(0, 10).map((it, i) => {
+      const rank = it.rank || (i + 1);
+      const needScore = Math.max(1, Math.min(100, Math.round(it.need_score || (98 - i * 4))));
+      const hex = (it.color_hex && /^#[0-9a-f]{6}$/i.test(it.color_hex)) ? it.color_hex : '#3d5a4a';
+      return {
+        name: it.name || `${it.color_name || ''} ${it.subType || 'Piece'}`.trim(),
+        category: ['tops', 'bottoms', 'shoes', 'outerwear', 'accessories'].includes(it.category) ? it.category : 'tops',
+        subType: cleanGarmentType(it.subType || 'Item'),
+        color: hex,
+        colorName: it.color_name || getColorNameFromHex(hex),
+        formality: it.formality || 'smart-casual',
+        length: it.length && it.length !== 'none' ? it.length : '',
+        season: it.season || 'all-season',
+        badge: `#${rank} Need · ${needScore}/100`,
+        reason: it.reason || 'High-impact wardrobe gap filler aligned with your style objective.',
+        photoQuery: `${it.color_name || ''} ${it.subType || it.name || ''}`.trim()
+      };
+    }).filter(it => !isItemDisliked(it));
+
+    renderShopRecommendations();
+    toast(`🤖 Ranked top ${aiShopRecommendations.length} needed pieces for your wardrobe!`);
+  } catch (err) {
+    console.warn('AI Shop Refresh failed:', err);
+    toast(`AI analysis failed (${err?.message || 'error'}) — showing local suggestions`);
+    renderShopRecommendations();
+  } finally {
+    const b = document.getElementById('btn-refresh-shop-ai');
+    if (b) { b.disabled = false; b.textContent = '🔄 Refresh Suggestions'; }
+  }
+}
+
 function renderShopRecommendations() {
   const container = document.getElementById('shop-grid');
   if (!container) return;
@@ -16017,8 +16122,21 @@ function renderShopRecommendations() {
     `;
   }
 
+  const gapSummaryEl = document.getElementById('shop-ai-gap-summary');
+  if (gapSummaryEl) {
+    if (aiShopGapSummary) {
+      gapSummaryEl.style.display = 'block';
+      gapSummaryEl.innerHTML = `<div class="card" style="padding:12px 14px; border:1px solid rgba(0,229,192,0.3); background:rgba(0,229,192,0.06); font-size:0.82rem; line-height:1.45;"><strong>🤖 AI Wardrobe &amp; Objective Analysis:</strong> ${escapeHtml(aiShopGapSummary)}</div>`;
+    } else {
+      gapSummaryEl.style.display = 'none';
+      gapSummaryEl.innerHTML = '';
+    }
+  }
+
   const seq = ++shopRenderSequence;
-  const items = generateShopRecommendations();
+  const items = (Array.isArray(aiShopRecommendations) && aiShopRecommendations.length > 0)
+    ? aiShopRecommendations
+    : generateShopRecommendations();
   lastRenderedShopItems = items;
 
   container.innerHTML = items.map((item, idx) => {
