@@ -10027,7 +10027,7 @@ function renderWardrobe() {
     ).join('');
     const visualContent = item.image
       ? `<div class="card-photo-wrap" onclick="openPhotoLightbox(wardrobe.find(w=>w.id==='${item.id}')?.image, '${escapeHtml(item.name).replace(/'/g, "\\'")}', '${item.id}')" style="cursor:zoom-in;" title="Tap to zoom, rotate or trim photo">
-           <img src="${item.image}" alt="${escapeHtml(item.name)}">
+           <img src="${item.image}" alt="${escapeHtml(item.name)}" style="${getItemImageTransformStyle(item)}">
            <span class="card-color-dot" style="background:${item.color}" title="Color"></span>
          </div>`
       : `<div class="card-color" style="background:${item.color}"></div>
@@ -12674,6 +12674,7 @@ let lightboxState = {
   itemId: null,
   isTrimMode: false,
   img: null,
+  tainted: false,
   left: 0,
   right: 0,
   top: 0,
@@ -12683,9 +12684,24 @@ let lightboxState = {
   startY: 0
 };
 
+function getItemImageTransformStyle(item) {
+  if (!item || !item.imageTransform) return '';
+  const tf = item.imageTransform;
+  const parts = [];
+  if (tf.rotate) parts.push(`transform: rotate(${tf.rotate}deg);`);
+  if (tf.crop) {
+    const c = tf.crop;
+    if (c.top || c.right || c.bottom || c.left) {
+      parts.push(`clip-path: inset(${c.top || 0}% ${c.right || 0}% ${c.bottom || 0}% ${c.left || 0}%);`);
+    }
+  }
+  return parts.join(' ');
+}
+
 async function loadImageSafeForCanvas(src) {
   let loadSrc = src;
   let revokeUrl = null;
+  let tainted = false;
   if (src && /^https?:\/\//i.test(src)) {
     try {
       const resp = await fetch(src, { mode: 'cors' });
@@ -12693,21 +12709,34 @@ async function loadImageSafeForCanvas(src) {
         const blob = await resp.blob();
         loadSrc = URL.createObjectURL(blob);
         revokeUrl = loadSrc;
+      } else {
+        tainted = true;
       }
     } catch (e) {
-      // fallback to direct src below
+      tainted = true;
     }
   }
   return new Promise((resolve, reject) => {
     const img = new Image();
-    if (/^https?:\/\//i.test(loadSrc)) img.crossOrigin = 'anonymous';
-    img.onload = () => resolve({ img, revoke: () => { if (revokeUrl) URL.revokeObjectURL(revokeUrl); } });
+    img.onload = () => resolve({ img, tainted, revoke: () => { if (revokeUrl) URL.revokeObjectURL(revokeUrl); } });
     img.onerror = (err) => {
       if (revokeUrl) URL.revokeObjectURL(revokeUrl);
       reject(err);
     };
     img.src = loadSrc;
   });
+}
+
+function applyTransformToLightboxImg(item) {
+  const imgEl = document.getElementById('lightbox-img');
+  if (!imgEl) return;
+  const tf = item && item.imageTransform ? item.imageTransform : null;
+  imgEl.style.transform = tf && tf.rotate ? `rotate(${tf.rotate}deg)` : '';
+  if (tf && tf.crop && (tf.crop.top || tf.crop.right || tf.crop.bottom || tf.crop.left)) {
+    imgEl.style.clipPath = `inset(${tf.crop.top || 0}% ${tf.crop.right || 0}% ${tf.crop.bottom || 0}% ${tf.crop.left || 0}%)`;
+  } else {
+    imgEl.style.clipPath = '';
+  }
 }
 
 function openPhotoLightbox(src, title, itemId = null) {
@@ -12724,7 +12753,11 @@ function openPhotoLightbox(src, title, itemId = null) {
   const actionsView = document.getElementById('lightbox-actions-view');
   const actionsTrim = document.getElementById('lightbox-actions-trim');
 
-  if (imgEl) imgEl.src = src;
+  if (imgEl) {
+    imgEl.src = src;
+    const item = itemId ? wardrobe.find(w => w.id === itemId) : null;
+    applyTransformToLightboxImg(item);
+  }
   if (ttl) ttl.textContent = title || 'Saved Photo';
   if (viewWrap) viewWrap.style.display = 'flex';
   if (trimWrap) trimWrap.style.display = 'none';
@@ -12742,6 +12775,7 @@ function openPhotoLightbox(src, title, itemId = null) {
 
 function closePhotoLightbox() {
   lightboxState.isTrimMode = false;
+  if (lightboxState._revoke) { lightboxState._revoke(); lightboxState._revoke = null; }
   const modal = document.getElementById('photo-lightbox-modal');
   if (modal) modal.classList.remove('active');
 }
@@ -12749,18 +12783,38 @@ function closePhotoLightbox() {
 function persistLightboxImageToItem(newDataUrl) {
   lightboxState.src = newDataUrl;
   const imgEl = document.getElementById('lightbox-img');
-  if (imgEl) imgEl.src = newDataUrl;
+  if (imgEl) {
+    imgEl.src = newDataUrl;
+    imgEl.style.transform = '';
+    imgEl.style.clipPath = '';
+  }
   if (lightboxState.itemId) {
     const idx = wardrobe.findIndex(w => w.id === lightboxState.itemId);
     if (idx !== -1) {
       wardrobe[idx].image = newDataUrl;
       wardrobe[idx].imageUrl = null;
+      delete wardrobe[idx].imageTransform;
       saveLocalDataOnly();
       renderWardrobe();
       renderOutfit();
       if (typeof syncWardrobeItemsToCloud === 'function') {
         syncWardrobeItemsToCloud([wardrobe[idx]]).catch(() => {});
       }
+    }
+  }
+}
+
+function persistLightboxTransformToItem(transformObj) {
+  if (!lightboxState.itemId) return;
+  const idx = wardrobe.findIndex(w => w.id === lightboxState.itemId);
+  if (idx !== -1) {
+    wardrobe[idx].imageTransform = transformObj;
+    applyTransformToLightboxImg(wardrobe[idx]);
+    saveLocalDataOnly();
+    renderWardrobe();
+    renderOutfit();
+    if (typeof syncWardrobeItemsToCloud === 'function') {
+      syncWardrobeItemsToCloud([wardrobe[idx]]).catch(() => {});
     }
   }
 }
@@ -12782,8 +12836,12 @@ async function lightboxRotate(deg) {
     persistLightboxImageToItem(outUrl);
     toast(`🔄 Rotated ${deg > 0 ? '+90°' : '-90°'} & saved!`);
   } catch (e) {
-    console.warn('Lightbox rotate error:', e);
-    toast('Could not rotate this image (format or CORS restriction)');
+    // Fallback for CORS-restricted remote URLs or file:// images: save CSS transform
+    const item = lightboxState.itemId ? wardrobe.find(w => w.id === lightboxState.itemId) : null;
+    const prevTf = (item && item.imageTransform) ? { ...item.imageTransform } : {};
+    const nextRot = (((prevTf.rotate || 0) + deg) % 360 + 360) % 360;
+    persistLightboxTransformToItem({ ...prevTf, rotate: nextRot });
+    toast(`🔄 Rotated ${deg > 0 ? '+90°' : '-90°'} & saved!`);
   }
 }
 
@@ -12804,11 +12862,24 @@ function lightboxResetTrim(redraw = true) {
 async function lightboxStartTrim() {
   if (!lightboxState.src) return;
   try {
-    const { img, revoke } = await loadImageSafeForCanvas(lightboxState.src);
+    const { img, tainted, revoke } = await loadImageSafeForCanvas(lightboxState.src);
     lightboxState.img = img;
+    lightboxState.tainted = tainted;
     lightboxState._revoke = revoke;
     lightboxState.isTrimMode = true;
-    lightboxResetTrim(false);
+
+    const item = lightboxState.itemId ? wardrobe.find(w => w.id === lightboxState.itemId) : null;
+    const existingCrop = item && item.imageTransform && item.imageTransform.crop ? item.imageTransform.crop : null;
+    lightboxState.left = existingCrop ? (existingCrop.left || 0) : 0;
+    lightboxState.right = existingCrop ? (existingCrop.right || 0) : 0;
+    lightboxState.top = existingCrop ? (existingCrop.top || 0) : 0;
+    lightboxState.bottom = existingCrop ? (existingCrop.bottom || 0) : 0;
+    ['left', 'right', 'top', 'bottom'].forEach(side => {
+      const el = document.getElementById(`lb-crop-${side}`);
+      const lbl = document.getElementById(`lb-crop-lbl-${side}`);
+      if (el) el.value = lightboxState[side];
+      if (lbl) lbl.textContent = `${lightboxState[side]}%`;
+    });
 
     document.getElementById('lightbox-view-wrap').style.display = 'none';
     document.getElementById('lightbox-trim-wrap').style.display = 'block';
@@ -12873,21 +12944,36 @@ function drawLightboxCropCanvas() {
 function lightboxApplyTrim() {
   const img = lightboxState.img;
   if (!img) return;
-  const sx = Math.round((lightboxState.left / 100) * img.width);
-  const sy = Math.round((lightboxState.top / 100) * img.height);
-  const sw = Math.max(20, img.width - sx - Math.round((lightboxState.right / 100) * img.width));
-  const sh = Math.max(20, img.height - sy - Math.round((lightboxState.bottom / 100) * img.height));
+  try {
+    const sx = Math.round((lightboxState.left / 100) * img.width);
+    const sy = Math.round((lightboxState.top / 100) * img.height);
+    const sw = Math.max(20, img.width - sx - Math.round((lightboxState.right / 100) * img.width));
+    const sh = Math.max(20, img.height - sy - Math.round((lightboxState.bottom / 100) * img.height));
 
-  const maxOut = 900;
-  const outScale = Math.min(1, maxOut / Math.max(sw, sh));
-  const outCanvas = document.createElement('canvas');
-  outCanvas.width = Math.round(sw * outScale);
-  outCanvas.height = Math.round(sh * outScale);
-  const ctx = outCanvas.getContext('2d');
-  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outCanvas.width, outCanvas.height);
+    const maxOut = 900;
+    const outScale = Math.min(1, maxOut / Math.max(sw, sh));
+    const outCanvas = document.createElement('canvas');
+    outCanvas.width = Math.round(sw * outScale);
+    outCanvas.height = Math.round(sh * outScale);
+    const ctx = outCanvas.getContext('2d');
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outCanvas.width, outCanvas.height);
 
-  const trimmedUrl = outCanvas.toDataURL('image/jpeg', 0.88);
-  persistLightboxImageToItem(trimmedUrl);
+    const trimmedUrl = outCanvas.toDataURL('image/jpeg', 0.88);
+    persistLightboxImageToItem(trimmedUrl);
+  } catch (e) {
+    // Fallback for CORS-restricted remote URLs or file:// images: save CSS crop transform
+    const item = lightboxState.itemId ? wardrobe.find(w => w.id === lightboxState.itemId) : null;
+    const prevTf = (item && item.imageTransform) ? { ...item.imageTransform } : {};
+    persistLightboxTransformToItem({
+      ...prevTf,
+      crop: {
+        left: lightboxState.left,
+        right: lightboxState.right,
+        top: lightboxState.top,
+        bottom: lightboxState.bottom
+      }
+    });
+  }
   lightboxCancelTrim();
   toast('✂️ Image trimmed & saved!');
 }
