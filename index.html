@@ -3729,6 +3729,7 @@ input[type="text"]:focus, select:focus, textarea:focus {
           <option value="wear-desc">👕 Most Worn</option>
           <option value="wear-asc">🧺 Least Worn</option>
         </select>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-ai-reassess-ranks" onclick="reassessWardrobeRanksWithAI()" title="Re-rank every wardrobe item (1-10) with AI against your Persona, Color, Silhouette & Desired Style">🤖 AI Reassess Ranks</button>
         <button type="button" class="btn btn-secondary btn-sm" id="btn-batch-ai-describe" onclick="generateAllMissingAIDescriptions()" title="Generate AI descriptions for items missing one">🤖 AI Describe Missing</button>
         <button type="button" class="btn btn-accent btn-sm" onclick="openMassUploadPicker()">📚 Mass Upload Photos</button>
         <button type="button" class="btn btn-secondary btn-sm" onclick="openSavedImagesModal('wardrobe')">🖼️ Saved Images</button>
@@ -6953,6 +6954,7 @@ async function fetchWeather() {
           temp: Math.round(data.main.temp),
           feels: Math.round(data.main.feels_like),
           desc: data.weather[0].description,
+          description: data.weather[0].description,
           main: data.weather[0].main.toLowerCase(),
           city: data.name + (data.sys && data.sys.country ? `, ${data.sys.country}` : ''),
           latitude: data.coord ? data.coord.lat : null,
@@ -6969,9 +6971,14 @@ async function fetchWeather() {
 
   // 2. Fetch live hourly temperature & rain probability via Open-Meteo (free, no API key required)
   try {
-    const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`);
-    if (geoRes.ok) {
-      const geoData = await geoRes.json();
+    let geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`);
+    let geoData = geoRes.ok ? await geoRes.json() : null;
+    if ((!geoData || !geoData.results || !geoData.results.length) && city.includes(',')) {
+      const bareCity = city.split(',')[0].trim();
+      geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(bareCity)}&count=1&language=en&format=json`);
+      geoData = geoRes.ok ? await geoRes.json() : null;
+    }
+    if (geoData) {
       const loc = geoData && geoData.results && geoData.results[0];
       if (loc) {
         const wxUrl = `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code&hourly=temperature_2m,precipitation_probability&forecast_days=1&timezone=auto`;
@@ -7001,6 +7008,7 @@ async function fetchWeather() {
               temp: Math.round(cur.temperature_2m ?? 21),
               feels: Math.round(cur.apparent_temperature ?? cur.temperature_2m ?? 21),
               desc: descMap[mainType] || 'pleasant conditions',
+              description: descMap[mainType] || 'pleasant conditions',
               main: mainType,
               city: loc.name + (loc.country_code ? `, ${loc.country_code.toUpperCase()}` : ''),
               latitude: typeof loc.latitude === 'number' ? loc.latitude : null,
@@ -7124,8 +7132,9 @@ function detectLocationHemisphere(wxOverride) {
   const countryCode = ((activeWx && activeWx.countryCode) || '').toUpperCase();
   const southernCountries = ['AU', 'NZ', 'AR', 'CL', 'UY', 'PY', 'ZA', 'BR', 'PE', 'BO', 'NA', 'BW', 'ZW', 'MZ', 'MG'];
   if (southernCountries.includes(countryCode)) return 'south';
+  if (/,\s*(au|nz|ar|cl|uy|py|za|br|pe|bo)\b/i.test(cityStr)) return 'south';
   const southernKeywords = [
-    'sydney', 'melbourne', 'brisbane', 'perth', 'adelaide', 'canberra', 'hobart', 'gold coast', 'australia',
+    'sydney', 'melbourne', 'brisbane', 'perth', 'adelaide', 'canberra', 'hobart', 'gold coast', 'bathurst', 'newcastle', 'wollongong', 'geelong', 'darwin', 'cairns', 'australia',
     'auckland', 'wellington', 'christchurch', 'queenstown', 'new zealand',
     'buenos aires', 'cordoba', 'rosario', 'mendoza', 'argentina',
     'santiago', 'valparaiso', 'chile',
@@ -9693,7 +9702,7 @@ function renderOutfit() {
 
   const targetLayers = outfit.targetLayers || 2;
   const wc = getWeatherCategory();
-  const sInfo = outfit.seasonInfo || getLocationSeasonInfo();
+  const sInfo = outfit.tripContext ? (outfit.seasonInfo || getLocationSeasonInfo()) : getLocationSeasonInfo();
   const isAc = (wc.cat === 'hot' || wc.cat === 'warm') && targetLayers === 2;
   const currentTemp = weather && typeof weather.temp === 'number' ? weather.temp : 21;
   const cityLabel = (weather && weather.city) || getSettings().city || 'Today';
@@ -9942,10 +9951,12 @@ let lastAIDailyAttemptKey = null;
 function getAIDailyOutfitCacheKey() {
   const todayStr = new Date().toISOString().slice(0, 10);
   const temp = weather && typeof weather.temp === 'number' ? Math.round(weather.temp) : 21;
-  const desc = (weather && weather.description) ? weather.description : 'clear';
+  const desc = (weather && (weather.desc || weather.description)) ? (weather.desc || weather.description) : 'clear';
+  const cityKey = (weather && weather.city) || getSettings().city || '';
+  const sInfo = typeof getLocationSeasonInfo === 'function' ? getLocationSeasonInfo() : { id: 'spring', hemisphere: 'south' };
   const form = (typeof getDayFormality === 'function') ? getDayFormality() : 'casual';
   const arch = (userProfile && userProfile.personaArchetype) || 'quiet-luxury';
-  return `${todayStr}|${temp}|${desc}|${layerOverride}|${form}|${wardrobe.length}|${arch}`;
+  return `${todayStr}|${cityKey}|${sInfo.id}|${sInfo.hemisphere}|${temp}|${desc}|${layerOverride}|${form}|${wardrobe.length}|${arch}`;
 }
 
 function maybeTriggerAIDailyOutfit(forceRefresh = false, avoidIds = []) {
@@ -10321,6 +10332,13 @@ function computeItemPersonaFitRank(item, blueprintOverride) {
   if (typeof isItemDisliked === 'function' && isItemDisliked(item)) {
     return { score: 1, reason: 'Matches your disliked styles list' };
   }
+  if (typeof item.aiFitScore === 'number' && !Number.isNaN(item.aiFitScore)) {
+    return {
+      score: Math.max(1, Math.min(10, Math.round(item.aiFitScore))),
+      reason: item.aiFitReason || 'AI Persona, Color & Silhouette Assessment',
+      isAI: true
+    };
+  }
   const bp = blueprintOverride || buildPersonalStyleBlueprint();
   let raw = 5.5;
   const reasons = [];
@@ -10400,6 +10418,105 @@ function setFilter(f) {
   activeFilter = f;
   renderFilters();
   renderWardrobe();
+}
+
+async function reassessWardrobeRanksWithAI() {
+  if (!wardrobe || wardrobe.length === 0) {
+    toast('Add items to your wardrobe first');
+    return;
+  }
+  const geminiKey = (
+    localStorage.getItem('wtw_gemini_apikey') ||
+    document.getElementById('setting-gemini-apikey')?.value ||
+    ''
+  ).trim();
+  if (!geminiKey) {
+    toast('Add your Gemini API key in Profile & Settings to reassess wardrobe ranks with AI');
+    return;
+  }
+
+  const btn = document.getElementById('btn-ai-reassess-ranks');
+  const origHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Reassessing Ranks...';
+  }
+  toast(`🤖 Reassessing fit ranks for ${wardrobe.length} wardrobe items against your Persona, Color & Silhouette...`);
+
+  try {
+    const masterContext = typeof buildMasterPersonalContextForAI === 'function'
+      ? buildMasterPersonalContextForAI()
+      : '';
+    const batchSize = 35;
+    const updatedItems = [];
+
+    for (let i = 0; i < wardrobe.length; i += batchSize) {
+      const slice = wardrobe.slice(i, i + batchSize);
+      const compact = slice.map(it => ({
+        id: it.id,
+        name: it.name,
+        category: it.category,
+        subType: it.subType,
+        color: it.colorName || getColorNameFromHex(it.color),
+        secondaryColor: it.secondaryColor ? (it.secondaryColorName || getColorNameFromHex(it.secondaryColor)) : null,
+        tertiaryColor: it.tertiaryColor ? (it.tertiaryColorName || getColorNameFromHex(it.tertiaryColor)) : null,
+        pattern: it.pattern || 'solid',
+        formality: it.formality,
+        length: getItemLength(it),
+        season: it.season || 'all-season',
+        aiDescription: it.aiDescription || ''
+      }));
+
+      const prompt = [
+        `You are a strict personal stylist evaluating every garment in the user's wardrobe.`,
+        masterContext,
+        `Score each item from 1 to 10 (10 = extraordinary match to the user's personal color palette, face/body silhouette cuts, and desired persona/style; 1 = clashes with palette, unflattering cut, or matches disliked styles).`,
+        `Use each item's aiDescription, colors, cut/length, formality, and pattern as your primary evidence.`,
+        `Items: ${JSON.stringify(compact)}`,
+        `Return ONLY valid JSON with key "rankings": an array of { "id": string, "rank": integer 1-10, "reason": string (5-12 words explaining color/silhouette/persona fit) }.`
+      ].join('\n');
+
+      const payload = await callGeminiGenerateContent(geminiKey, {
+        parts: [{ text: prompt }],
+        temperature: 0.2,
+        responseMimeType: 'application/json'
+      });
+      const raw = payload?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const jm = raw.match(/\{[\s\S]*\}/);
+      if (!jm) continue;
+      const parsed = JSON.parse(jm[0]);
+      const rankings = Array.isArray(parsed.rankings) ? parsed.rankings : [];
+      rankings.forEach(r => {
+        const item = wardrobe.find(w => w.id === r.id);
+        if (!item) return;
+        const score = Math.max(1, Math.min(10, Math.round(Number(r.rank) || 5)));
+        item.aiFitScore = score;
+        item.aiFitReason = (r.reason || 'AI Persona, Color & Silhouette Assessment').trim();
+        item.aiFitUpdatedAt = Date.now();
+        updatedItems.push(item);
+      });
+    }
+
+    if (updatedItems.length > 0) {
+      saveLocalDataOnly();
+      if (typeof syncWardrobeItemsToCloud === 'function') {
+        syncWardrobeItemsToCloud(updatedItems).catch(() => {});
+      }
+      renderWardrobe();
+      renderOutfit();
+      toast(`🤖 AI reassessed ranks for ${updatedItems.length} wardrobe items!`);
+    } else {
+      toast('Could not parse AI rankings — try again');
+    }
+  } catch (err) {
+    console.warn('AI Wardrobe Rank Reassessment failed:', err);
+    toast(`⚠️ AI rank reassessment failed (${err.message || 'error'})`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml || '🤖 AI Reassess Ranks';
+    }
+  }
 }
 
 function renderWardrobe() {
