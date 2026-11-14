@@ -13368,7 +13368,7 @@ function setSecondaryColorUI(slot, hexVal) {
   }
 }
 
-async function runGeminiItemInspection(photoSrc, curName = '', curCat = 'tops', curSub = '') {
+async function runGeminiItemInspection(photoSrc, curName = '', curCat = 'tops', curSub = '', itemId = null) {
   const geminiKey = (
     localStorage.getItem('wtw_gemini_apikey') ||
     document.getElementById('setting-gemini-apikey')?.value ||
@@ -13383,28 +13383,37 @@ async function runGeminiItemInspection(photoSrc, curName = '', curCat = 'tops', 
   if (photoSrc) {
     let dataUrl = photoSrc;
     if (/^https?:\/\//i.test(dataUrl)) {
-      try {
-        const resp = await fetch(dataUrl, { mode: 'cors' });
-        if (resp.ok) {
-          const blob = await resp.blob();
-          dataUrl = await new Promise((resolve, reject) => {
-            const r = new FileReader();
-            r.onloadend = () => resolve(r.result);
-            r.onerror = reject;
-            r.readAsDataURL(blob);
-          });
-        }
-      } catch (e) { /* ignore if CORS blocks fetch */ }
+      const cached = itemId ? await getCachedItemPhotoDataUrl(itemId) : null;
+      if (cached) {
+        dataUrl = cached;
+      } else {
+        try {
+          const resp = await fetch(dataUrl, { mode: 'cors' });
+          if (resp.ok) {
+            const blob = await resp.blob();
+            dataUrl = await new Promise((resolve, reject) => {
+              const r = new FileReader();
+              r.onloadend = () => resolve(r.result);
+              r.onerror = reject;
+              r.readAsDataURL(blob);
+            });
+          }
+        } catch (e) { /* ignore if CORS blocks fetch */ }
+      }
     }
     const m = /^data:([^;]+);base64,(.+)$/.exec(dataUrl || '');
     if (m) {
       parts.push({ inlineData: { mimeType: m[1], data: m[2] } });
       attachedPhoto = true;
+    } else if (/^https?:\/\//i.test(photoSrc)) {
+      throw new Error('Remote photo is blocked by Firebase Storage CORS — re-select the photo from Photo Library/Take Photo to inspect it locally, or enable CORS on your Firebase Storage bucket.');
     }
   }
 
   const promptText = [
-    `Inspect this clothing item${attachedPhoto ? ' photo' : ''} and current description ("${curName}", category: ${curCat}, type: ${curSub}).`,
+    attachedPhoto
+      ? `Inspect this clothing item photo independently from what you actually see in the image (do NOT assume any previous label is right — it may be completely wrong, e.g. shorts labeled as a t-shirt).`
+      : `Inspect this clothing item description ("${curName}", category: ${curCat}, type: ${curSub}).`,
     `Accurately identify:`,
     `- category: one of tops, bottoms, shoes, outerwear, accessories`,
     `- garment_type: concise garment type (e.g. Oxford Shirt, Polo Shirt, Chinos, Sneakers, Blazer)`,
@@ -13541,7 +13550,8 @@ async function verifyItemWithAI() {
     const curName = document.getElementById('item-name')?.value || '';
     const curCat = document.getElementById('item-category')?.value || 'tops';
     const curSub = document.getElementById('item-subtype')?.value || '';
-    const parsed = await runGeminiItemInspection(currentItemPhoto, curName, curCat, curSub);
+    const editId = document.getElementById('edit-id')?.value || null;
+    const parsed = await runGeminiItemInspection(currentItemPhoto, curName, curCat, curSub, editId);
     const attachedPhoto = Boolean(currentItemPhoto);
 
     if (parsed.category && ['tops', 'bottoms', 'shoes', 'outerwear', 'accessories'].includes(parsed.category)) {
@@ -13758,6 +13768,9 @@ async function saveItem() {
     wardrobe.push(savedItem);
   }
 
+  if (savedItem && isInlineBase64DataUrl(savedItem.image)) {
+    cacheItemPhotoDataUrl(savedItem.id, savedItem.image);
+  }
   saveLocalDataOnly();
   renderFilters();
   renderWardrobe();
