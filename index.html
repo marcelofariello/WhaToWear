@@ -4715,6 +4715,7 @@ let userProfile = {
   inspoPhotos: safeJSON('wtw_inspo_photos', []),
   inspoPalette: safeJSON('wtw_inspo_palette', []),
   inspoAnalysis: safeJSON('wtw_inspo_analysis', null),
+  ownStyleSynthesis: safeJSON('wtw_own_style_synthesis', null),
   dislikedSubTypes: safeJSON('wtw_disliked_subtypes', ['Polo Shirt']),
   dislikedItemNames: safeJSON('wtw_disliked_names', ['Piqué Polo']),
   customCategories: safeJSON('wtw_custom_categories', {}),
@@ -6504,6 +6505,7 @@ async function buildCloudProfilePayload(scope) {
     inspoPhotos: safeInspo,
     inspoPalette: userProfile.inspoPalette || [],
     inspoAnalysis: userProfile.inspoAnalysis || null,
+    ownStyleSynthesis: userProfile.ownStyleSynthesis || null,
     dislikedSubTypes: userProfile.dislikedSubTypes || [],
     dislikedItemNames: userProfile.dislikedItemNames || [],
     customCategories: userProfile.customCategories || {},
@@ -8192,13 +8194,26 @@ function buildPersonalStyleBlueprint() {
   const impressions = Array.isArray(userProfile.personaImpressions) ? userProfile.personaImpressions : [];
   const statement = (userProfile.personaStatement || '').trim();
   const inspoHexes = Array.isArray(userProfile.inspoPalette) ? userProfile.inspoPalette : [];
+  const ownSynth = userProfile.ownStyleSynthesis || null;
+
+  const aiBestColors = (ownSynth && Array.isArray(ownSynth.signature_palette) && ownSynth.signature_palette.length)
+    ? ownSynth.signature_palette.filter(c => c && c.hex)
+    : ((analysis && Array.isArray(analysis.bestColors) && analysis.bestColors.length)
+      ? analysis.bestColors.filter(c => c && c.hex)
+      : []);
+  const sigColors = aiBestColors.length ? aiBestColors : (pal.colors || []);
+  const aiAvoidHexes = (analysis && Array.isArray(analysis.avoidColors) && analysis.avoidColors.length)
+    ? analysis.avoidColors.map(c => c && c.hex).filter(h => h && /^#[0-9a-f]{6}$/i.test(h))
+    : [];
+  const avoidHexes = aiAvoidHexes.length ? aiAvoidHexes : getSeasonalAvoidColors(seasonKey);
 
   return {
     seasonKey,
     palette: pal,
-    signatureColors: pal.colors || [],
+    signatureColors: sigColors,
     inspoColors: inspoHexes,
-    avoidHexes: getSeasonalAvoidColors(seasonKey),
+    avoidHexes,
+    ownStyleSynthesis: ownSynth,
     undertoneLabel: (analysis && analysis.undertoneLabel) || (seasonKey === 'spring' || seasonKey === 'autumn' ? 'Warm / Golden' : 'Cool / Rose-Neutral'),
     contrastLabel: (analysis && analysis.contrastLabel) || (seasonKey === 'winter' || seasonKey === 'spring' ? 'Clear / Medium-High' : 'Soft / Blended'),
     faceKey,
@@ -15150,8 +15165,28 @@ function renderPersonalBlueprintUI() {
         return getClosestColorName(r, g, b);
       });
   const ia = userProfile.inspoAnalysis || {};
+  const own = userProfile.ownStyleSynthesis || null;
+  const ownPaletteHtml = (own && Array.isArray(own.signature_palette) && own.signature_palette.length)
+    ? `<div class="blueprint-tag-row" style="margin-top:6px;">${own.signature_palette.map(c => `<span class="blueprint-tag" style="display:inline-flex; align-items:center; gap:5px;"><span style="width:9px; height:9px; border-radius:50%; background:${c.hex}; border:1px solid rgba(255,255,255,0.4);"></span>${escapeHtml(c.name)}${c.role ? ` <small style="opacity:0.7;">(${escapeHtml(c.role)})</small>` : ''}</span>`).join('')}</div>`
+    : '';
+  const ownStyleCardHtml = own && own.master_north_star_description ? `
+    <div style="margin-top:10px; padding:12px 14px; border-radius:12px; background:linear-gradient(135deg,rgba(0,229,192,0.12),rgba(15,23,42,0.72)); border:1px solid rgba(0,229,192,0.42); font-size:0.78rem; line-height:1.5; color:#f1f5f9;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:6px;">
+        <strong style="color:#5eead4; font-size:0.86rem;">🌟 My Own Style: ${escapeHtml(own.own_style_name || 'Signature Style')} (North Star)</strong>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-synthesize-own-style" onclick="synthesizeOwnStyleWithAI()" style="padding:3px 10px; font-size:0.72rem;">✨ Refresh My Own Style</button>
+      </div>
+      <div>${escapeHtml(own.master_north_star_description)}</div>
+      ${own.color_translation_rules ? `<div style="margin-top:6px; color:#cbd5e1;"><strong style="color:#ffd166;">🎨 Color Translation:</strong> ${escapeHtml(own.color_translation_rules)}</div>` : ''}
+      ${own.silhouette_adaptation_rules ? `<div style="margin-top:4px; color:#cbd5e1;"><strong style="color:#93c5fd;">📐 Silhouette Adaptation:</strong> ${escapeHtml(own.silhouette_adaptation_rules)}</div>` : ''}
+      ${ownPaletteHtml}
+    </div>` : `
+    <div style="margin-top:10px; padding:10px 12px; border-radius:10px; background:rgba(0,229,192,0.08); border:1px dashed rgba(0,229,192,0.35); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; font-size:0.77rem; color:#cbd5e1;">
+      <span>🌟 <strong>Create My Own Style:</strong> Fuse your Desired Style with your Best Personal Colors &amp; Silhouette as the starting point for all outfits &amp; rankings.</span>
+      <button type="button" class="btn btn-primary btn-sm" id="btn-synthesize-own-style" onclick="synthesizeOwnStyleWithAI()">✨ Synthesize My Own Style</button>
+    </div>`;
+
   const dossierHtml = (aInfo?.aiDetailedDescription || ia?.aiDetailedDescription) ? `
-    <div style="margin-top:12px; padding:10px 12px; border-radius:10px; background:rgba(15,23,42,0.55); border:1px solid rgba(0,229,192,0.28); font-size:0.76rem; line-height:1.5; color:#e2e8f0;">
+    <div style="margin-top:10px; padding:10px 12px; border-radius:10px; background:rgba(15,23,42,0.55); border:1px solid rgba(0,229,192,0.28); font-size:0.76rem; line-height:1.5; color:#e2e8f0;">
       ${aInfo?.aiDetailedDescription ? `<div style="margin-bottom:${ia?.aiDetailedDescription ? '8px' : '0'};"><strong style="color:#5eead4;">🧬 AI Color &amp; Silhouette Dossier${aInfo.subSeason ? ` (${escapeHtml(aInfo.subSeason)})` : ''}:</strong> ${escapeHtml(aInfo.aiDetailedDescription)}${aInfo.metalsAndAccents ? `<div style="margin-top:4px; color:#94a3b8;"><strong>Metals &amp; Accents:</strong> ${escapeHtml(aInfo.metalsAndAccents)}</div>` : ''}</div>` : ''}
       ${ia?.aiDetailedDescription ? `<div><strong style="color:#5eead4;">🎭 AI Persona &amp; Desired Style Dossier:</strong> ${escapeHtml(ia.aiDetailedDescription)}</div>` : ''}
     </div>` : '';
@@ -15164,6 +15199,7 @@ function renderPersonalBlueprintUI() {
         ${aInfo ? escapeHtml(aInfo.sourceSummary || 'Photo Biometrics Active') : 'Profile Active · Add photos to refine'}
       </span>
     </div>
+    ${ownStyleCardHtml}
     <div class="persona-blueprint-grid">
       <div class="blueprint-pill-card">
         <div class="blueprint-pill-title">🎨 Best Colors For Your Skin (${escapeHtml(bp.palette.name)})</div>
@@ -18071,8 +18107,28 @@ function buildMasterPersonalContextForAI() {
   const bp = typeof buildPersonalStyleBlueprint === 'function' ? buildPersonalStyleBlueprint() : {};
   const pa = userProfile.personalAnalysis || {};
   const ia = userProfile.inspoAnalysis || {};
+  const own = userProfile.ownStyleSynthesis || null;
 
-  const lines = [
+  const lines = [];
+  if (own && own.master_north_star_description) {
+    lines.push(`🌟 MY OWN STYLE (PRIMARY NORTH STAR — START EVERYTHING FROM HERE):`);
+    lines.push(`- Signature Style Identity: "${own.own_style_name || 'Signature Tailored Style'}"`);
+    lines.push(`- Core Rule: Achieve the user's Desired Style aesthetic, silhouettes, fabrics, and mood, while STRICTLY using the colors that flatter their personal complexion & contrast (and adapting cuts to their face/body silhouette).`);
+    lines.push(`- North Star Manifesto: ${own.master_north_star_description}`);
+    if (own.color_translation_rules) lines.push(`- Color Translation Rule (Desired Style -> Best Personal Colors): ${own.color_translation_rules}`);
+    if (own.silhouette_adaptation_rules) lines.push(`- Silhouette Adaptation Rule: ${own.silhouette_adaptation_rules}`);
+    if (Array.isArray(own.signature_palette) && own.signature_palette.length) {
+      lines.push(`- Adapted Signature Palette: ${own.signature_palette.map(c => `${c.name}${c.role ? ` (${c.role})` : ''}`).join(', ')}`);
+    }
+    if (Array.isArray(own.core_wardrobe_formula) && own.core_wardrobe_formula.length) {
+      lines.push(`- Core Wardrobe Formula: ${own.core_wardrobe_formula.join(' | ')}`);
+    }
+    lines.push('');
+  } else {
+    lines.push(`🌟 PRIMARY STYLING RULE: Achieve an aesthetic close to the user's Desired Style, but ALWAYS translate colors into the user's Best Personal Colors and adapt cuts to their Face & Body Silhouette to create their own unique style.`);
+  }
+
+  lines.push(
     `USER MASTER PERSONAL PROFILE & AI DOSSIER:`,
     `- Style Preference: ${userProfile.styleGender === 'female' ? 'Feminine' : 'Masculine'} wardrobe`,
     `- Color Season: ${bp.palette?.name || userProfile.palette || 'autumn'}${pa.subSeason ? ` (${pa.subSeason})` : ''} · Undertone: ${pa.undertoneLabel || bp.undertoneLabel || 'Balanced'} · Contrast: ${pa.contrastLabel || bp.contrastLabel || 'Medium'}`,
@@ -18080,7 +18136,7 @@ function buildMasterPersonalContextForAI() {
     `- Desired Persona Archetype: ${bp.archRule?.name || userProfile.personaArchetype || 'quiet-luxury'} · Impressions: ${(userProfile.personaImpressions || []).join(', ')}`,
     `- Personal Vision Statement: "${userProfile.personaStatement || bp.statement || ''}"`,
     `- Disliked Styles/Items (NEVER recommend): ${JSON.stringify({ styles: userProfile.dislikedStyles || [], subTypes: userProfile.dislikedSubTypes || [], names: userProfile.dislikedItemNames || [] })}`
-  ];
+  );
 
   if (pa.aiDetailedDescription) {
     lines.push(`- AI PERSONAL COLOR & SILHOUETTE DOSSIER (from user photos): ${pa.aiDetailedDescription}`);
@@ -18244,6 +18300,9 @@ async function analyzePersonalColorAndSilhouetteWithAI(opts = {}) {
       notice.innerHTML = `🤖 Gemini Vision Result: <strong>${escapeHtml(summary.subSeason)}</strong> · <strong>${faceShape.toUpperCase()} Face</strong> &amp; <strong>${bodyShape.toUpperCase()} Silhouette</strong>.`;
     }
 
+    if (typeof synthesizeOwnStyleWithAI === 'function') {
+      await synthesizeOwnStyleWithAI({ silent: true });
+    }
     renderUserProfileUI();
     renderPersonalBlueprintUI();
     renderOutfit();
@@ -18367,6 +18426,9 @@ async function analyzePersonaAndDesiredStyleWithAI(opts = {}) {
     } catch {}
     if (typeof scheduleCloudPush === 'function') scheduleCloudPush();
 
+    if (typeof synthesizeOwnStyleWithAI === 'function') {
+      await synthesizeOwnStyleWithAI({ silent: true });
+    }
     if (typeof renderPersonaArchetypeUI === 'function') renderPersonaArchetypeUI();
     if (typeof renderInspoUI === 'function') renderInspoUI();
     if (typeof renderPersonalBlueprintUI === 'function') renderPersonalBlueprintUI();
@@ -18386,6 +18448,102 @@ async function analyzePersonaAndDesiredStyleWithAI(opts = {}) {
     if (btn) {
       btn.disabled = false;
       btn.innerHTML = origBtnHtml || '🤖 AI Analyze Persona &amp; Style';
+    }
+  }
+}
+
+async function synthesizeOwnStyleWithAI(opts = {}) {
+  const geminiKey = (
+    localStorage.getItem('wtw_gemini_apikey') ||
+    document.getElementById('setting-gemini-apikey')?.value ||
+    ''
+  ).trim();
+  if (!geminiKey) {
+    if (!opts.silent) toast('Add your Gemini API key in Profile & Settings to synthesize My Own Style');
+    return null;
+  }
+
+  const btn = document.getElementById('btn-synthesize-own-style');
+  const origHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Synthesizing My Own Style...';
+  }
+  if (!opts.silent) toast('✨ Blending your Desired Style with your Best Personal Colors & Silhouette...');
+
+  try {
+    const bp = typeof buildPersonalStyleBlueprint === 'function' ? buildPersonalStyleBlueprint() : {};
+    const pa = userProfile.personalAnalysis || {};
+    const ia = userProfile.inspoAnalysis || {};
+
+    const prompt = [
+      `You are the master creative director of WhaToWear. Your job is to fuse the user's DESIRED STYLE with their PERSONAL COLOR PALETTE & SILHOUETTE to create their own unique, signature style — which becomes the #1 starting point for all outfits, wardrobe rankings, and shopping suggestions.`,
+      ``,
+      `1. USER PERSONAL COLOR & SILHOUETTE (what physically flatters them):`,
+      `- Style Gender: ${userProfile.styleGender === 'female' ? 'Feminine' : 'Masculine'}`,
+      `- Season: ${bp.palette?.name || userProfile.palette}${pa.subSeason ? ` (${pa.subSeason})` : ''} · Undertone: ${pa.undertoneLabel || bp.undertoneLabel} · Contrast: ${pa.contrastLabel || bp.contrastLabel}`,
+      `- Best Colors Near Face: ${(pa.bestColors || bp.signatureColors || []).map(c => `${c.name || c} (${c.hex || ''})`).join(', ')}`,
+      `- Caution/Avoid Colors: ${(pa.avoidColors || []).map(c => c.name || c).join(', ')}`,
+      `- Face Shape: ${bp.faceRule?.label || userProfile.faceShape} · Body Silhouette: ${bp.bodyRule?.label || userProfile.bodyShape}`,
+      pa.aiDetailedDescription ? `- Color & Silhouette Dossier: ${pa.aiDetailedDescription}` : '',
+      ``,
+      `2. USER DESIRED STYLE & PERSONA (how they want to look):`,
+      `- Archetype: ${bp.archRule?.name || userProfile.personaArchetype} · Impressions: ${(userProfile.personaImpressions || []).join(', ')}`,
+      `- Statement: "${userProfile.personaStatement || ''}"`,
+      ia.aiDetailedDescription ? `- Persona & Desired Style Dossier: ${ia.aiDetailedDescription}` : '',
+      Array.isArray(ia.signatureGarments) && ia.signatureGarments.length ? `- Signature Garments: ${ia.signatureGarments.join(', ')}` : '',
+      ``,
+      `3. DISLIKES (NEVER include): ${JSON.stringify({ styles: userProfile.dislikedStyles || [], subTypes: userProfile.dislikedSubTypes || [], names: userProfile.dislikedItemNames || [] })}`,
+      ``,
+      `Return ONLY valid JSON with these exact keys:`,
+      `- own_style_name: catchy 3-5 word name for their signature fused style (e.g. "Cool-Toned Structured Quiet Luxury")`,
+      `- signature_palette: array of 6-8 objects { "name": string, "hex": "#RRGGBB", "role": "Base Neutral" | "Accent" | "Near-Face Hero" | "Layering Tone" } that achieve the Desired Style mood using ONLY colors that flatter the user's personal season & undertone`,
+      `- color_translation_rules: 1-2 crisp sentences explaining which colors from the desired style to keep and which to swap for the user's better personal tones`,
+      `- silhouette_adaptation_rules: 1-2 crisp sentences explaining how to wear the desired garments/layering for their exact face shape & body proportions`,
+      `- core_wardrobe_formula: array of 5-6 signature outfit/garment formulas that define their own style`,
+      `- master_north_star_description: comprehensive 2-paragraph manifesto (120-180 words) defining "My Own Style" so every future AI outfit, wardrobe rank, and shopping pick starts from this exact blueprint.`
+    ].filter(Boolean).join('\n');
+
+    const payload = await callGeminiGenerateContent(geminiKey, {
+      parts: [{ text: prompt }],
+      temperature: 0.3,
+      responseMimeType: 'application/json'
+    });
+    const raw = payload?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jm = raw.match(/\{[\s\S]*\}/);
+    if (!jm) throw new Error('Unexpected AI response format');
+    const parsed = JSON.parse(jm[0]);
+
+    userProfile.ownStyleSynthesis = {
+      own_style_name: parsed.own_style_name || `${bp.palette?.name || ''} ${bp.archRule?.name || 'Signature Style'}`.trim(),
+      signature_palette: Array.isArray(parsed.signature_palette) ? parsed.signature_palette.filter(c => c && /^#[0-9a-f]{6}$/i.test(c.hex)).slice(0, 8) : [],
+      color_translation_rules: parsed.color_translation_rules || '',
+      silhouette_adaptation_rules: parsed.silhouette_adaptation_rules || '',
+      core_wardrobe_formula: Array.isArray(parsed.core_wardrobe_formula) ? parsed.core_wardrobe_formula.slice(0, 6) : [],
+      master_north_star_description: parsed.master_north_star_description || '',
+      updatedAt: Date.now()
+    };
+
+    try {
+      localStorage.setItem('wtw_own_style_synthesis', JSON.stringify(userProfile.ownStyleSynthesis));
+    } catch {}
+    if (typeof scheduleCloudPush === 'function') scheduleCloudPush();
+
+    if (typeof renderPersonalBlueprintUI === 'function') renderPersonalBlueprintUI();
+    if (typeof renderFloatingPersonaCard === 'function') renderFloatingPersonaCard();
+    if (typeof renderOutfit === 'function') renderOutfit();
+    if (!opts.silent) {
+      toast(`✨ Created "${userProfile.ownStyleSynthesis.own_style_name}" — now the starting point for all outfits & rankings!`);
+    }
+    return userProfile.ownStyleSynthesis;
+  } catch (err) {
+    console.warn('Own Style synthesis failed:', err);
+    if (!opts.silent) toast(`⚠️ Could not synthesize Own Style (${err.message || 'error'})`);
+    return null;
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml || '✨ Synthesize My Own Style';
     }
   }
 }
