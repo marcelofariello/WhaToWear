@@ -3504,6 +3504,64 @@ input[type="text"]:focus, select:focus, textarea:focus {
 .crop-sliders-grid input[type="range"] {
   width: 100%;
 }
+.lightbox-trim-stage {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) 74px;
+  grid-template-rows: auto auto auto;
+  grid-template-areas:
+    ". top ."
+    "left canvas right"
+    ". bottom .";
+  align-items: center;
+  justify-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.lb-trim-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+.lb-trim-side label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.lb-trim-side-top { grid-area: top; }
+.lb-trim-side-bottom { grid-area: bottom; }
+.lb-trim-side-left { grid-area: left; width: 100%; }
+.lb-trim-side-right { grid-area: right; width: 100%; }
+.lb-trim-side-left input[type="range"],
+.lb-trim-side-right input[type="range"] {
+  width: 100%;
+  margin: 0;
+}
+.lb-trim-side-right input[type="range"] {
+  direction: rtl;
+}
+.lb-trim-side-top input[type="range"],
+.lb-trim-side-bottom input[type="range"] {
+  writing-mode: vertical-lr;
+  height: 58px;
+  width: 24px;
+  margin: 0;
+}
+.lb-trim-side-top input[type="range"] {
+  direction: ltr;
+}
+.lb-trim-side-bottom input[type="range"] {
+  direction: rtl;
+}
+.lb-trim-canvas-cell {
+  grid-area: canvas;
+  width: 100%;
+  margin-bottom: 0 !important;
+}
 
 /* ===== Collapsible Settings Cards & API Status ===== */
 .settings-toolbar {
@@ -4449,26 +4507,26 @@ input[type="text"]:focus, select:focus, textarea:focus {
       <img id="lightbox-img" src="" alt="Saved Photo" style="max-width:100%; max-height:62vh; object-fit:contain; display:block;">
     </div>
     <div id="lightbox-trim-wrap" style="display:none;">
-      <p style="font-size:0.76rem; color:var(--text-secondary); margin-bottom:8px;">Drag on the image or use sliders to trim edges.</p>
-      <div class="crop-canvas-wrap" style="margin-bottom:10px;">
-        <canvas id="lightbox-crop-canvas" style="max-width:100%; max-height:320px; cursor:crosshair; touch-action:none; border-radius:6px;"></canvas>
-      </div>
-      <div class="crop-sliders-grid">
-        <div>
-          <label><span>Left Trim</span><span id="lb-crop-lbl-left">0%</span></label>
-          <input type="range" id="lb-crop-left" min="0" max="45" value="0" oninput="updateLightboxCropSlider()">
+      <p style="font-size:0.76rem; color:var(--text-secondary); margin-bottom:8px;">Drag on the image or slide each edge inward to trim.</p>
+      <div class="lightbox-trim-stage">
+        <div class="lb-trim-side lb-trim-side-top">
+          <label for="lb-crop-top"><span>Top</span><span id="lb-crop-lbl-top">0%</span></label>
+          <input type="range" id="lb-crop-top" min="0" max="45" value="0" oninput="updateLightboxCropSlider()" title="Slide down to trim top">
         </div>
-        <div>
-          <label><span>Right Trim</span><span id="lb-crop-lbl-right">0%</span></label>
-          <input type="range" id="lb-crop-right" min="0" max="45" value="0" oninput="updateLightboxCropSlider()">
+        <div class="lb-trim-side lb-trim-side-left">
+          <label for="lb-crop-left"><span>Left</span><span id="lb-crop-lbl-left">0%</span></label>
+          <input type="range" id="lb-crop-left" min="0" max="45" value="0" oninput="updateLightboxCropSlider()" title="Slide right to trim left">
         </div>
-        <div>
-          <label><span>Top Trim</span><span id="lb-crop-lbl-top">0%</span></label>
-          <input type="range" id="lb-crop-top" min="0" max="45" value="0" oninput="updateLightboxCropSlider()">
+        <div class="crop-canvas-wrap lb-trim-canvas-cell">
+          <canvas id="lightbox-crop-canvas" style="max-width:100%; max-height:300px; cursor:crosshair; touch-action:none; border-radius:6px;"></canvas>
         </div>
-        <div>
-          <label><span>Bottom Trim</span><span id="lb-crop-lbl-bottom">0%</span></label>
-          <input type="range" id="lb-crop-bottom" min="0" max="45" value="0" oninput="updateLightboxCropSlider()">
+        <div class="lb-trim-side lb-trim-side-right">
+          <label for="lb-crop-right"><span>Right</span><span id="lb-crop-lbl-right">0%</span></label>
+          <input type="range" id="lb-crop-right" min="0" max="45" value="0" oninput="updateLightboxCropSlider()" title="Slide left to trim right">
+        </div>
+        <div class="lb-trim-side lb-trim-side-bottom">
+          <input type="range" id="lb-crop-bottom" min="0" max="45" value="0" oninput="updateLightboxCropSlider()" title="Slide up to trim bottom">
+          <label for="lb-crop-bottom"><span>Bottom</span><span id="lb-crop-lbl-bottom">0%</span></label>
         </div>
       </div>
     </div>
@@ -9344,7 +9402,7 @@ function renderOutfitItem(item, label, stepBadge) {
                 onclick="dislikePieceNow('${safeSub}', '${safeName}', '${safeId}')">
           🚫 Dislike
         </button>
-        <span class="item-emoji">${emoji}</span>
+        <span class="item-emoji" title="${escapeHtml(item.subType || item.name)}">${buildGarmentMiniIconSvg(item)}</span>
       </div>
     </div>`;
 }
@@ -9370,7 +9428,7 @@ function renderProposedMidLayerRow(proposed, stepBadge) {
         <div class="item-name">${escapeHtml(proposed.name)}</div>
         <div class="item-meta" style="color:#581c87;">${escapeHtml(proposed.note)}</div>
       </div>
-      <span class="item-emoji">🧶</span>
+      <span class="item-emoji" title="${escapeHtml(proposed.name)}">${buildGarmentMiniIconSvg({ subType: proposed.subType || 'Sweater', category: 'tops', color: proposed.color })}</span>
     </div>`;
 }
 
@@ -9419,7 +9477,7 @@ function renderBeltOutfitRow(beltRec, stepBadge) {
         <div style="display:flex; align-items:center; gap:6px;">
           ${!hasRealPhoto && belt.id ? `
             <button type="button" class="btn btn-secondary btn-sm" style="padding:3px 8px; font-size:0.68rem;" onclick="openEditModal('${safeBeltId}')">📷 Add Photo</button>` : ''}
-          <span class="item-emoji">🪢</span>
+          <span class="item-emoji" title="${escapeHtml(belt.name)}">${buildGarmentMiniIconSvg(belt)}</span>
         </div>
       </div>`;
   }
@@ -9454,7 +9512,7 @@ function renderBeltOutfitRow(beltRec, stepBadge) {
           </button>
         </div>
       </div>
-      <span class="item-emoji">🪢</span>
+      <span class="item-emoji" title="${safeName} Belt">${buildGarmentMiniIconSvg({ subType: 'Belt', category: 'accessories', color: safeHex })}</span>
     </div>`;
 }
 
@@ -9679,12 +9737,13 @@ function renderOutfit() {
 
   section.innerHTML = `
     <div class="outfit-display">
-      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
-        <div>
-          <h2 style="margin:0; text-align:left;">✨ What to Wear Today</h2>
-          <div style="font-size:0.78rem; color:var(--text-secondary); margin-top:2px;">
-            Ordered from <strong>Top to Bottom</strong> · 🌡️ <strong>${currentTemp}°C</strong> &amp; ${sInfo.icon} <strong>${escapeHtml(sInfo.name)}</strong> in ${escapeHtml(cityLabel)} → <strong>${targetLayers} Top Layer${targetLayers > 1 ? 's' : ''}</strong>
-          </div>
+      <div style="margin-bottom:12px;">
+        <h2 style="margin:0; text-align:left;">✨ WhaToWear — What to Wear Today</h2>
+      </div>
+      <div class="outfit-items">${items}</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-top:12px; margin-bottom:10px;">
+        <div style="font-size:0.78rem; color:var(--text-secondary);">
+          Ordered from <strong>Top to Bottom</strong> · 🌡️ <strong>${currentTemp}°C</strong> &amp; ${sInfo.icon} <strong>${escapeHtml(sInfo.name)}</strong> in ${escapeHtml(cityLabel)} → <strong>${targetLayers} Top Layer${targetLayers > 1 ? 's' : ''}</strong>
         </div>
         <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
           ${freshnessHtml}
@@ -9694,7 +9753,6 @@ function renderOutfit() {
       ${outfit.seasonMessage ? `<div style="margin-bottom:8px;"><span class="badge" style="background:${sInfo.badgeBg}; color:${sInfo.badgeText}; font-weight:600; font-size:0.76rem; padding:5px 12px; border-radius:14px; border:1px solid ${sInfo.badgeBorder}; display:inline-block;">${escapeHtml(outfit.seasonMessage)}</span></div>` : ''}
       ${outfit.personaMessage ? `<div style="margin-bottom:8px;"><span class="badge" style="background:#e8f4ec; color:#2e6945; font-weight:600; font-size:0.78rem; padding:4px 12px; border-radius:14px; border:1px solid #cce5d4;">${escapeHtml(outfit.personaMessage)}</span></div>` : ''}
       ${outfit.astralAligned && outfit.astralMessage ? `<div style="margin-bottom:10px;"><span class="astral-outfit-badge">${outfit.astralMessage}</span></div>` : ''}
-      <div class="outfit-items">${items}</div>
       <div class="outfit-actions">
         <button class="btn btn-primary" onclick="shuffleOutfit()">
           <span id="shuffle-icon">🔀</span> Shuffle Outfit
@@ -14413,17 +14471,46 @@ function renderUserProfileUI() {
 let shopVisualModes = {};
 
 // Build a crisp studio product image of the exact garment type and color shade
-function buildGarmentStudioSvgDataUrl(item) {
+function buildGarmentSilhouettePaths(item) {
   const hex = item.color || '#3d5a4a';
+  const secHex = item.secondaryColor || '';
+  const terHex = item.tertiaryColor || '';
   const sub = (item.subType || '').toLowerCase();
   const cat = (item.category || '').toLowerCase();
   const hsl = hexToHSL(hex);
   const strokeHex = hsl.l < 25 ? '#94a3b8' : '#1e293b';
-  const highlightHex = hsl.l > 80 ? '#cbd5e1' : 'rgba(255,255,255,0.28)';
+  const highlightHex = secHex || (hsl.l > 80 ? '#cbd5e1' : 'rgba(255,255,255,0.28)');
 
   let silhouetteSvg = '';
-  if (sub.includes('blazer') || sub.includes('coat') || sub.includes('jacket') || sub.includes('trench') || sub.includes('parka') || cat === 'outerwear') {
-    // Tailored Jacket / Blazer / Coat (ghost mannequin / flat-lay presentation, no hanger)
+  if (sub.includes('belt')) {
+    const buckleHex = secHex || '#d4af37';
+    silhouetteSvg = `
+      <rect x="96" y="156" width="208" height="36" rx="10" fill="${hex}" stroke="${strokeHex}" stroke-width="4"/>
+      <rect x="172" y="146" width="46" height="56" rx="6" fill="none" stroke="${buckleHex}" stroke-width="7"/>
+      <line x1="196" y1="150" x2="196" y2="198" stroke="${buckleHex}" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="136" cy="174" r="3.5" fill="${strokeHex}"/>
+      <circle cx="152" cy="174" r="3.5" fill="${strokeHex}"/>
+    `;
+  } else if (sub.includes('watch')) {
+    const dialHex = secHex || '#f8fafc';
+    silhouetteSvg = `
+      <rect x="176" y="86" width="48" height="190" rx="10" fill="${hex}" stroke="${strokeHex}" stroke-width="4"/>
+      <circle cx="200" cy="180" r="42" fill="${dialHex}" stroke="${strokeHex}" stroke-width="5"/>
+      <line x1="200" y1="180" x2="200" y2="152" stroke="${strokeHex}" stroke-width="4" stroke-linecap="round"/>
+      <line x1="200" y1="180" x2="220" y2="190" stroke="${strokeHex}" stroke-width="3.5" stroke-linecap="round"/>
+    `;
+  } else if (sub.includes('sunglass') || sub.includes('glass')) {
+    silhouetteSvg = `
+      <rect x="102" y="150" width="84" height="52" rx="16" fill="${hex}" stroke="${strokeHex}" stroke-width="5"/>
+      <rect x="214" y="150" width="84" height="52" rx="16" fill="${hex}" stroke="${strokeHex}" stroke-width="5"/>
+      <path d="M186 168 Q200 158 214 168" fill="none" stroke="${strokeHex}" stroke-width="5"/>
+    `;
+  } else if (sub.includes('cap') || sub.includes('hat') || sub.includes('beanie')) {
+    silhouetteSvg = `
+      <path d="M120 200 C120 128 280 128 280 200 Z" fill="${hex}" stroke="${strokeHex}" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M110 200 Q205 224 302 204 Q255 186 120 198 Z" fill="${secHex || hex}" stroke="${strokeHex}" stroke-width="4" stroke-linejoin="round"/>
+    `;
+  } else if (sub.includes('blazer') || sub.includes('coat') || sub.includes('jacket') || sub.includes('trench') || sub.includes('parka') || cat === 'outerwear') {
     silhouetteSvg = `
       <path d="M138 94 L200 76 L262 94 L298 124 L274 236 L250 232 L254 148 L248 278 L152 278 L146 148 L150 232 L126 236 L102 124 Z" fill="${hex}" stroke="${strokeHex}" stroke-width="4" stroke-linejoin="round"/>
       <path d="M168 86 L200 165 L232 86" fill="none" stroke="${strokeHex}" stroke-width="3.5" stroke-linejoin="round"/>
@@ -14434,26 +14521,24 @@ function buildGarmentStudioSvgDataUrl(item) {
       <rect x="214" y="218" width="26" height="6" rx="2" fill="${highlightHex}" stroke="${strokeHex}" stroke-width="1.5"/>
     `;
   } else if (sub.includes('sweater') || sub.includes('cardigan') || sub.includes('hoodie') || sub.includes('turtleneck')) {
-    // Knit Crewneck Sweater / Cardigan
     silhouetteSvg = `
       <path d="M144 92 C175 106 225 106 256 92 L296 130 L270 242 L244 236 L248 148 L246 268 L154 268 L152 148 L156 236 L130 242 L104 130 Z" fill="${hex}" stroke="${strokeHex}" stroke-width="4" stroke-linejoin="round"/>
       <path d="M168 95 C184 114 216 114 232 95" fill="none" stroke="${strokeHex}" stroke-width="5" stroke-linecap="round"/>
       <line x1="154" y1="254" x2="246" y2="254" stroke="${strokeHex}" stroke-width="3" stroke-dasharray="6 4"/>
       <path d="M170 135 L185 155 L200 135 L215 155 L230 135" fill="none" stroke="${highlightHex}" stroke-width="3" stroke-linecap="round"/>
     `;
-  } else if (sub.includes('shirt') || sub.includes('blouse') || sub.includes('overshirt') || sub.includes('henley')) {
-    // Crisp Button-Up Shirt / Overshirt / Blouse
-    const isShort = item.length === 'short';
+  } else if (sub.includes('shirt') || sub.includes('blouse') || sub.includes('overshirt') || sub.includes('henley') || sub.includes('polo')) {
+    const isShort = item.length === 'short' || sub.includes('polo');
     silhouetteSvg = isShort ? `
       <path d="M145 90 L200 78 L255 90 L294 128 L272 170 L246 154 L246 272 L154 272 L154 154 L128 170 L106 128 Z" fill="${hex}" stroke="${strokeHex}" stroke-width="4" stroke-linejoin="round"/>
-      <path d="M170 84 L200 124 L230 84 L216 76 L184 76 Z" fill="${hex}" stroke="${strokeHex}" stroke-width="3.5" stroke-linejoin="round"/>
+      <path d="M170 84 L200 124 L230 84 L216 76 L184 76 Z" fill="${secHex || hex}" stroke="${strokeHex}" stroke-width="3.5" stroke-linejoin="round"/>
       <line x1="200" y1="124" x2="200" y2="272" stroke="${strokeHex}" stroke-width="2.5"/>
       <circle cx="200" cy="150" r="3.5" fill="${strokeHex}"/>
       <circle cx="200" cy="182" r="3.5" fill="${strokeHex}"/>
       <circle cx="200" cy="214" r="3.5" fill="${strokeHex}"/>
     ` : `
       <path d="M145 90 L200 78 L255 90 L296 128 L274 240 L248 235 L246 150 L246 272 L154 272 L154 150 L152 235 L126 240 L104 128 Z" fill="${hex}" stroke="${strokeHex}" stroke-width="4" stroke-linejoin="round"/>
-      <path d="M170 84 L200 122 L230 84 L216 76 L184 76 Z" fill="${hex}" stroke="${strokeHex}" stroke-width="3.5" stroke-linejoin="round"/>
+      <path d="M170 84 L200 122 L230 84 L216 76 L184 76 Z" fill="${secHex || hex}" stroke="${strokeHex}" stroke-width="3.5" stroke-linejoin="round"/>
       <line x1="200" y1="122" x2="200" y2="272" stroke="${strokeHex}" stroke-width="2.5"/>
       <circle cx="200" cy="148" r="3.5" fill="${strokeHex}"/>
       <circle cx="200" cy="180" r="3.5" fill="${strokeHex}"/>
@@ -14461,7 +14546,6 @@ function buildGarmentStudioSvgDataUrl(item) {
       <rect x="212" y="142" width="24" height="26" rx="3" fill="none" stroke="${strokeHex}" stroke-width="2"/>
     `;
   } else if (sub.includes('short')) {
-    // Tailored Chino / Linen Shorts
     silhouetteSvg = `
       <path d="M136 96 L264 96 L278 228 L212 228 L200 162 L188 228 L122 228 Z" fill="${hex}" stroke="${strokeHex}" stroke-width="4" stroke-linejoin="round"/>
       <line x1="136" y1="114" x2="264" y2="114" stroke="${strokeHex}" stroke-width="3"/>
@@ -14470,7 +14554,6 @@ function buildGarmentStudioSvgDataUrl(item) {
       <path d="M258 118 Q238 145 260 160" fill="none" stroke="${strokeHex}" stroke-width="2.2"/>
     `;
   } else if (cat === 'bottoms' || sub.includes('trouser') || sub.includes('chino') || sub.includes('jean') || sub.includes('pant')) {
-    // Tailored Trousers / Chinos
     silhouetteSvg = `
       <path d="M144 74 L256 74 L268 286 L214 286 L200 144 L186 286 L132 286 Z" fill="${hex}" stroke="${strokeHex}" stroke-width="4" stroke-linejoin="round"/>
       <line x1="144" y1="92" x2="256" y2="92" stroke="${strokeHex}" stroke-width="3"/>
@@ -14479,19 +14562,36 @@ function buildGarmentStudioSvgDataUrl(item) {
       <line x1="238" y1="110" x2="241" y2="278" stroke="${highlightHex}" stroke-width="2" stroke-dasharray="5 5"/>
     `;
   } else if (cat === 'shoes' || sub.includes('shoe') || sub.includes('boot') || sub.includes('sneaker') || sub.includes('loafer')) {
-    // Handcrafted Footwear / Loafers / Boots
+    const soleHex = secHex || '#d6d3d1';
     silhouetteSvg = `
       <path d="M106 208 C106 175 138 148 166 148 L194 172 C222 182 268 184 294 202 C304 210 304 228 292 232 L108 232 Z" fill="${hex}" stroke="${strokeHex}" stroke-width="4" stroke-linejoin="round"/>
-      <rect x="104" y="230" width="194" height="14" rx="5" fill="#d6d3d1" stroke="${strokeHex}" stroke-width="3"/>
+      <rect x="104" y="230" width="194" height="14" rx="5" fill="${soleHex}" stroke="${strokeHex}" stroke-width="3"/>
       <path d="M168 164 L212 182" stroke="${highlightHex}" stroke-width="4" stroke-linecap="round"/>
     `;
   } else {
-    // Default Top / Tee
-    silhouetteSvg = `
+    const isLong = item.length === 'long';
+    silhouetteSvg = isLong ? `
+      <path d="M145 92 L200 82 L255 92 L296 130 L274 240 L248 235 L244 152 L244 268 L156 268 L156 152 L152 235 L126 240 L104 130 Z" fill="${hex}" stroke="${strokeHex}" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M174 88 Q200 108 226 88" fill="none" stroke="${secHex || strokeHex}" stroke-width="4"/>
+    ` : `
       <path d="M145 92 L200 82 L255 92 L292 130 L268 168 L244 152 L244 268 L156 268 L156 152 L132 168 L108 130 Z" fill="${hex}" stroke="${strokeHex}" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M174 88 Q200 108 226 88" fill="none" stroke="${secHex || strokeHex}" stroke-width="4"/>
     `;
   }
 
+  if (terHex) {
+    silhouetteSvg += `<circle cx="256" cy="252" r="10" fill="${terHex}" stroke="${strokeHex}" stroke-width="2.5"/>`;
+  }
+  return silhouetteSvg;
+}
+
+function buildGarmentMiniIconSvg(item) {
+  const paths = buildGarmentSilhouettePaths(item || {});
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="86 66 228 232" width="38" height="38" class="item-drawing-svg" aria-hidden="true" style="display:block; filter:drop-shadow(0 1px 2px rgba(0,0,0,0.35));">${paths}</svg>`;
+}
+
+function buildGarmentStudioSvgDataUrl(item) {
+  const silhouetteSvg = buildGarmentSilhouettePaths(item);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 480">
     <rect width="360" height="480" fill="#F5F5F5"/>
     <ellipse cx="180" cy="398" rx="92" ry="12" fill="rgba(0,0,0,0.06)"/>
