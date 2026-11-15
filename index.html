@@ -6060,6 +6060,16 @@ function applyRemoteCloudData(data, opts = {}) {
       if (birthPlaceInput) birthPlaceInput.value = data.settings.birthPlace || '';
     }
 
+    if (Array.isArray(data.feedbackLog)) {
+      const clearedAt = Math.max(
+        parseInt(localStorage.getItem('wtw_feedback_cleared_at') || '0', 10),
+        Number(data.feedbackClearedAt || 0)
+      );
+      if (clearedAt) localStorage.setItem('wtw_feedback_cleared_at', String(clearedAt));
+      const mergedFeedback = mergeFeedbackLogs(getFeedbackLog(), data.feedbackLog, clearedAt);
+      try { localStorage.setItem('wtw_feedback_log', JSON.stringify(mergedFeedback)); } catch {}
+    }
+
     if (data.updatedAt) {
       localStorage.setItem('wtw_cloud_updated_at', String(data.updatedAt));
     }
@@ -6073,6 +6083,7 @@ function applyRemoteCloudData(data, opts = {}) {
     renderPersonaUI();
     renderOutfit();
     renderShopRecommendations();
+    if (typeof renderFeedbackHistory === 'function') renderFeedbackHistory();
     renderDislikedStylesUI();
 
     if (failedCloudSyncItems.length === 0 && !opts.fromCache) {
@@ -6715,7 +6726,9 @@ async function syncWardrobeItemsToCloud(itemsToSync, { deletedIds = [], onProgre
           userId: scope.userId,
           wardrobe: slimWardrobeForSummary,
           userProfile: safeProfilePayload,
-          settings: getSettings()
+          settings: getSettings(),
+          feedbackLog: getFeedbackLog(),
+          feedbackClearedAt: parseInt(localStorage.getItem('wtw_feedback_cleared_at') || '0', 10)
         };
         const payloadBytes = measureJsonUtf8Bytes(vaultPayload);
         if (payloadBytes > FIRESTORE_SAFE_DOC_BYTES) {
@@ -20016,6 +20029,29 @@ function getFeedbackLog() {
   return safeJSON('wtw_feedback_log', []) || [];
 }
 
+function mergeFeedbackLogs(localLog, remoteLog, clearedAt = 0) {
+  const map = new Map();
+  [...(localLog || []), ...(remoteLog || [])].forEach(e => {
+    if (e && e.id && e.id > clearedAt) map.set(e.id, e);
+  });
+  return Array.from(map.values()).sort((a, b) => b.id - a.id).slice(0, 15);
+}
+
+async function syncFeedbackLogToCloud() {
+  try {
+    if (typeof db === 'undefined' || !db || !syncVaultKey) return;
+    const now = Date.now();
+    await db.collection('wardrobes').doc(syncVaultKey).set({
+      updatedAt: now,
+      feedbackLog: getFeedbackLog(),
+      feedbackClearedAt: parseInt(localStorage.getItem('wtw_feedback_cleared_at') || '0', 10)
+    }, { merge: true });
+    localStorage.setItem('wtw_cloud_updated_at', String(now));
+  } catch (err) {
+    console.warn('Feedback cloud sync failed:', err);
+  }
+}
+
 function formatAntigravityPrompt(entry) {
   const ctx = entry.context || buildAntigravityContextSnapshot();
   return [
@@ -20042,6 +20078,7 @@ async function submitFeedbackBox(copyToClipboard = true) {
   const entry = {
     id: Date.now(),
     kind: kindEl?.value || 'Bug / Issue',
+    device: /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? '📱 Phone' : '💻 PC',
     text,
     createdAt: new Date().toLocaleString(),
     context: buildAntigravityContextSnapshot()
@@ -20051,6 +20088,7 @@ async function submitFeedbackBox(copyToClipboard = true) {
   try { localStorage.setItem('wtw_feedback_log', JSON.stringify(log.slice(0, 15))); } catch {}
   if (textEl) textEl.value = '';
   renderFeedbackHistory();
+  syncFeedbackLogToCloud();
 
   if (copyToClipboard) {
     const promptText = formatAntigravityPrompt(entry);
@@ -20077,8 +20115,12 @@ async function recopyFeedbackEntry(id) {
 }
 
 function clearFeedbackLog() {
-  try { localStorage.removeItem('wtw_feedback_log'); } catch {}
+  try {
+    localStorage.removeItem('wtw_feedback_log');
+    localStorage.setItem('wtw_feedback_cleared_at', String(Date.now()));
+  } catch {}
   renderFeedbackHistory();
+  syncFeedbackLogToCloud();
   toast('Feedback log cleared');
 }
 
@@ -20090,10 +20132,10 @@ function renderFeedbackHistory() {
     listEl.innerHTML = `<div style="font-size:0.74rem; color:#64748b;">No saved requests yet.</div>`;
     return;
   }
-  listEl.innerHTML = log.slice(0, 5).map(e => `
+  listEl.innerHTML = log.slice(0, 8).map(e => `
     <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 8px; background:rgba(15,23,42,0.7); border:1px solid rgba(148,163,184,0.2); border-radius:8px; font-size:0.74rem;">
       <div style="min-width:0; flex:1;">
-        <div style="color:#5eead4; font-weight:700;">${escapeHtml(e.kind)} · <span style="color:#94a3b8; font-weight:400;">${escapeHtml(e.createdAt)}</span></div>
+        <div style="color:#5eead4; font-weight:700;">${escapeHtml(e.kind)}${e.device ? ` · ${escapeHtml(e.device)}` : ''} · <span style="color:#94a3b8; font-weight:400;">${escapeHtml(e.createdAt)}</span></div>
         <div style="color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(e.text)}</div>
       </div>
       <button type="button" class="btn btn-secondary btn-sm" style="padding:3px 8px; font-size:0.68rem;" onclick="recopyFeedbackEntry(${e.id})">📋 Copy</button>
