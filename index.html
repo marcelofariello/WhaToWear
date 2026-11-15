@@ -5983,10 +5983,17 @@ function setupCloudRealtimeListener() {
     if (!data) return;
 
     const localUpdatedAt = parseInt(localStorage.getItem('wtw_cloud_updated_at') || '0', 10);
+    const todayStr = new Date().toISOString().slice(0, 10);
     const hasNewerTrip = data.trip && Number(data.tripUpdatedAt || 0) > parseInt(localStorage.getItem('wtw_trip_updated_at') || '0', 10);
     const localFeedbackIds = new Set((typeof getFeedbackLog === 'function' ? getFeedbackLog() : []).map(e => e.id));
     const hasUnseenFeedback = Array.isArray(data.feedbackLog) && data.feedbackLog.some(e => e && e.id && !localFeedbackIds.has(e.id));
-    if (data.updatedAt && data.updatedAt <= localUpdatedAt && failedCloudSyncItems.length === 0 && !hasNewerTrip && !hasUnseenFeedback) {
+    const localMainLock = safeJSON('wtw_daily_main_lock', null);
+    const hasNewerMainLock = data.dailyMainLock && data.dailyMainLock.date === todayStr &&
+      (!localMainLock || localMainLock.date !== todayStr || Number(data.dailyMainLock.updatedAt || 0) > Number(localMainLock.updatedAt || 0));
+    const localExLock = safeJSON('wtw_exercise_outfit_today', null);
+    const hasNewerExLock = data.dailyExerciseLock && data.dailyExerciseLock.date === todayStr &&
+      (!localExLock || localExLock.date !== todayStr || Number(data.dailyExerciseLock.updatedAt || 0) > Number(localExLock.updatedAt || 0));
+    if (data.updatedAt && data.updatedAt <= localUpdatedAt && failedCloudSyncItems.length === 0 && !hasNewerTrip && !hasUnseenFeedback && !hasNewerMainLock && !hasNewerExLock) {
       if (!doc.metadata?.fromCache) {
         setCloudStatusUI('connected', 'Cloud Synced');
       }
@@ -6072,6 +6079,22 @@ function applyRemoteCloudData(data, opts = {}) {
           localStorage.setItem('wtw_trip', JSON.stringify(trip));
           if (remoteTripAt) localStorage.setItem('wtw_trip_updated_at', String(remoteTripAt));
         } catch {}
+      }
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (data.dailyMainLock && data.dailyMainLock.date === todayStr) {
+      const localMain = safeJSON('wtw_daily_main_lock', null);
+      if (!localMain || localMain.date !== todayStr || Number(data.dailyMainLock.updatedAt || 0) > Number(localMain.updatedAt || 0)) {
+        try { localStorage.setItem('wtw_daily_main_lock', JSON.stringify(data.dailyMainLock)); } catch {}
+        activeAIDailyOutfit = null;
+      }
+    }
+    if (data.dailyExerciseLock && data.dailyExerciseLock.date === todayStr) {
+      const localEx = safeJSON('wtw_exercise_outfit_today', null);
+      if (!localEx || localEx.date !== todayStr || Number(data.dailyExerciseLock.updatedAt || 0) > Number(localEx.updatedAt || 0)) {
+        try { localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify(data.dailyExerciseLock)); } catch {}
+        activeExerciseOutfit = null;
       }
     }
 
@@ -6747,6 +6770,8 @@ async function syncWardrobeItemsToCloud(itemsToSync, { deletedIds = [], onProgre
           settings: getSettings(),
           trip: trip || null,
           tripUpdatedAt: parseInt(localStorage.getItem('wtw_trip_updated_at') || '0', 10) || now,
+          dailyMainLock: safeJSON('wtw_daily_main_lock', null),
+          dailyExerciseLock: safeJSON('wtw_exercise_outfit_today', null),
           feedbackLog: getFeedbackLog(),
           feedbackClearedAt: parseInt(localStorage.getItem('wtw_feedback_cleared_at') || '0', 10)
         };
@@ -9117,9 +9142,22 @@ function generateOutfit() {
     }
   }
 
-  // If an AI Daily Stylist outfit is cached for today's weather/settings, return it
+  // If an AI Daily Stylist outfit is cached for today's weather/settings, lock & return it
   if (!activeSpecialOccasion && typeof activeAIDailyOutfit === 'object' && activeAIDailyOutfit && activeAIDailyOutfit.cacheKey === getAIDailyOutfitCacheKey() && activeAIDailyOutfit.outfit) {
+    saveDailyMainLock(activeAIDailyOutfit.outfit);
     return activeAIDailyOutfit.outfit;
+  }
+
+  // If today's outfit is already locked (from morning first login or synced from another device), return it unchanged
+  if (!activeSpecialOccasion) {
+    const lockedOutfit = hydrateDailyMainLock(getDailyMainLock(), {
+      targetFormality,
+      sInfo,
+      layerInfo,
+      blueprint,
+      accessories: byCategory.accessories
+    });
+    if (lockedOutfit) return lockedOutfit;
   }
 
   // If a Special Occasion AI assignment is active, return those reassigned pieces
@@ -9347,7 +9385,10 @@ function generateOutfit() {
     }
   }
 
-  if (bestOutfit) return bestOutfit;
+  if (bestOutfit) {
+    saveDailyMainLock(bestOutfit);
+    return bestOutfit;
+  }
 
   const fallbackTop = pickItem(baseTopsPool) || pickItem(tops);
   const fallbackBottom = pickItem(bottoms);
@@ -9387,7 +9428,115 @@ function generateOutfit() {
     blueprint
   };
   fallbackOutfit.decisionProfile = generateHowToWearGuide(fallbackOutfit, blueprint);
+  saveDailyMainLock(fallbackOutfit);
   return fallbackOutfit;
+}
+
+function getDailyMainLock() {
+  return safeJSON('wtw_daily_main_lock', null);
+}
+
+function saveDailyMainLock(outfit, forceNewTimestamp = false) {
+  if (!outfit || !outfit.top || !outfit.bottom || !outfit.shoe) return;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const targetFormality = typeof getDayFormality === 'function' ? getDayFormality() : 'casual';
+  const existing = getDailyMainLock();
+  if (!forceNewTimestamp && existing && existing.date === todayStr &&
+      existing.topId === outfit.top.id &&
+      existing.bottomId === outfit.bottom.id &&
+      existing.shoeId === outfit.shoe.id &&
+      (existing.midLayerId || null) === (outfit.midLayer?.id || null) &&
+      (existing.outerwearId || null) === (outfit.outerwear?.id || null) &&
+      existing.formality === targetFormality &&
+      existing.layerOverride === layerOverride) {
+    return;
+  }
+  const lock = {
+    date: todayStr,
+    updatedAt: Date.now(),
+    formality: targetFormality,
+    layerOverride,
+    topId: outfit.top.id,
+    midLayerId: outfit.midLayer?.id || null,
+    outerwearId: outfit.outerwear?.id || null,
+    bottomId: outfit.bottom.id,
+    shoeId: outfit.shoe.id,
+    beltId: outfit.beltRec?.beltItem?.id || null,
+    accessoryId: outfit.accessory?.id || null
+  };
+  try { localStorage.setItem('wtw_daily_main_lock', JSON.stringify(lock)); } catch {}
+  if (!isApplyingRemoteCloudData) syncDailyOutfitsToCloud();
+}
+
+function hydrateDailyMainLock(lock, ctx) {
+  if (!lock || !ctx) return null;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  if (lock.date !== todayStr) return null;
+  if (lock.formality !== ctx.targetFormality || lock.layerOverride !== layerOverride) return null;
+  const findById = (id) => id ? wardrobe.find(w => w.id === id) || null : null;
+  const top = findById(lock.topId);
+  const bottom = findById(lock.bottomId);
+  const shoe = findById(lock.shoeId);
+  if (!top || !bottom || !shoe) return null;
+  if (isItemDisliked(top) || isItemDisliked(bottom) || isItemDisliked(shoe)) return null;
+  const midLayer = findById(lock.midLayerId);
+  const outerwear = findById(lock.outerwearId);
+  const accessory = findById(lock.accessoryId);
+  if ((midLayer && isItemDisliked(midLayer)) || (outerwear && isItemDisliked(outerwear))) return null;
+
+  const targetF = String(ctx.targetFormality || 'casual').toLowerCase();
+  if (targetF !== 'athleisure' && targetF !== 'lounge') {
+    if (isGymOrLoungeItem(top) || isGymOrLoungeItem(bottom) || isGymOrLoungeItem(midLayer) || isGymOrLoungeItem(outerwear)) return null;
+  }
+  if (!areShortsAllowedToday(targetF) && isShortsBottom(bottom)) return null;
+  if (!areSandalsAllowedToday(targetF) && isOpenToeOrSandalShoe(shoe)) return null;
+  if (typeof areTopLayersCompatible === 'function' && !areTopLayersCompatible(top, midLayer, outerwear)) return null;
+
+  const beltItem = isDrawstringOrAthleticBottom(bottom) ? null : findById(lock.beltId);
+  const beltRec = beltItem
+    ? { beltItem, status: 'matched', summary: `Locked belt: ${beltItem.name}` }
+    : proposeBeltForOutfit(shoe, bottom, top, outerwear || midLayer, ctx.accessories || []);
+  const locName = (weather && weather.city) ? weather.city.split(',')[0] : (getSettings().city || 'your location');
+  const evalResult = evaluateOutfit(top, midLayer, outerwear, bottom, shoe, ctx.blueprint);
+  const outfit = {
+    top,
+    midLayer,
+    proposedMidLayer: null,
+    bottom,
+    shoe,
+    outerwear,
+    beltRec,
+    accessory,
+    targetLayers: ctx.layerInfo.count,
+    layerReason: `${ctx.layerInfo.reason} · 🔒 Locked for today`,
+    seasonMessage: `${ctx.sInfo.icon} ${ctx.sInfo.name} in ${locName} (${ctx.sInfo.hemisphereLabel}) — ${ctx.sInfo.styleSummary}`,
+    seasonInfo: ctx.sInfo,
+    astralMessage: evalResult.astralMsg,
+    personaMessage: evalResult.personaMsg,
+    isNeverWorn: evalResult.isNeverWorn,
+    blueprint: ctx.blueprint
+  };
+  outfit.decisionProfile = generateHowToWearGuide(outfit, ctx.blueprint);
+  return outfit;
+}
+
+async function syncDailyOutfitsToCloud() {
+  try {
+    if (typeof db === 'undefined' || !db || !syncVaultKey) return;
+    if (typeof ensureFirebaseAuthSession === 'function') await ensureFirebaseAuthSession();
+    const scope = typeof getSyncUserScope === 'function' ? getSyncUserScope() : { vaultKey: syncVaultKey, userId: 'default' };
+    const now = Date.now();
+    await db.collection('wardrobes').doc(syncVaultKey).set({
+      updatedAt: now,
+      vaultKey: scope.vaultKey,
+      userId: scope.userId,
+      dailyMainLock: getDailyMainLock(),
+      dailyExerciseLock: safeJSON('wtw_exercise_outfit_today', null)
+    }, { merge: true });
+    localStorage.setItem('wtw_cloud_updated_at', String(now));
+  } catch (err) {
+    console.warn('Daily outfit cloud sync failed:', err);
+  }
 }
 
 /* ================================================================
@@ -10268,6 +10417,7 @@ function renderExerciseOutfit() {
     try {
       localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
         date: todayStr,
+        updatedAt: Date.now(),
         topId: activeExerciseOutfit.top.id,
         secondLayerId: activeExerciseOutfit.secondLayer?.id || null,
         bottomId: activeExerciseOutfit.bottom.id,
@@ -10276,6 +10426,7 @@ function renderExerciseOutfit() {
         logged: false
       }));
     } catch {}
+    if (!isApplyingRemoteCloudData) syncDailyOutfitsToCloud();
   }
 
   const ex = activeExerciseOutfit;
@@ -10332,6 +10483,7 @@ function toggleExerciseSecondLayer() {
     try {
       localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
         date: todayStr,
+        updatedAt: Date.now(),
         topId: activeExerciseOutfit.top.id,
         secondLayerId: activeExerciseOutfit.secondLayer?.id || null,
         bottomId: activeExerciseOutfit.bottom.id,
@@ -10340,6 +10492,7 @@ function toggleExerciseSecondLayer() {
         logged: false
       }));
     } catch {}
+    if (!isApplyingRemoteCloudData) syncDailyOutfitsToCloud();
   }
   renderExerciseOutfit();
   toast(exerciseSecondLayer
@@ -10357,9 +10510,10 @@ function toggleExercisePreferShorts() {
       activeExerciseOutfit = { ...activeExerciseOutfit, bottom: picked.bottom, logged: false };
       try {
         localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
-          date: todayStr, topId: activeExerciseOutfit.top.id, secondLayerId: activeExerciseOutfit.secondLayer?.id || null, bottomId: activeExerciseOutfit.bottom.id, shoeId: activeExerciseOutfit.shoe.id, morningTemp: activeExerciseOutfit.morningTemp, logged: false
+          date: todayStr, updatedAt: Date.now(), topId: activeExerciseOutfit.top.id, secondLayerId: activeExerciseOutfit.secondLayer?.id || null, bottomId: activeExerciseOutfit.bottom.id, shoeId: activeExerciseOutfit.shoe.id, morningTemp: activeExerciseOutfit.morningTemp, logged: false
         }));
       } catch {}
+      if (!isApplyingRemoteCloudData) syncDailyOutfitsToCloud();
     }
   } else if (!exercisePreferShorts) {
     const picked = generateExerciseOutfit();
@@ -10367,9 +10521,10 @@ function toggleExercisePreferShorts() {
       activeExerciseOutfit = { date: todayStr, ...picked, logged: false };
       try {
         localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
-          date: todayStr, topId: picked.top.id, secondLayerId: picked.secondLayer?.id || null, bottomId: picked.bottom.id, shoeId: picked.shoe.id, morningTemp: picked.morningTemp, logged: false
+          date: todayStr, updatedAt: Date.now(), topId: picked.top.id, secondLayerId: picked.secondLayer?.id || null, bottomId: picked.bottom.id, shoeId: picked.shoe.id, morningTemp: picked.morningTemp, logged: false
         }));
       } catch {}
+      if (!isApplyingRemoteCloudData) syncDailyOutfitsToCloud();
     }
   }
   renderExerciseOutfit();
@@ -10386,9 +10541,10 @@ function shuffleExerciseOutfit() {
   activeExerciseOutfit = { date: todayStr, ...picked, logged: false };
   try {
     localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
-      date: todayStr, topId: picked.top.id, secondLayerId: picked.secondLayer?.id || null, bottomId: picked.bottom.id, shoeId: picked.shoe.id, morningTemp: picked.morningTemp, logged: false
+      date: todayStr, updatedAt: Date.now(), topId: picked.top.id, secondLayerId: picked.secondLayer?.id || null, bottomId: picked.bottom.id, shoeId: picked.shoe.id, morningTemp: picked.morningTemp, logged: false
     }));
   } catch {}
+  if (!isApplyingRemoteCloudData) syncDailyOutfitsToCloud();
   renderExerciseOutfit();
 }
 
@@ -10643,6 +10799,7 @@ function shuffleOutfit() {
     ? [activeAIDailyOutfit.outfit.top?.id, activeAIDailyOutfit.outfit.bottom?.id].filter(Boolean)
     : [];
   activeAIDailyOutfit = null;
+  try { localStorage.removeItem('wtw_daily_main_lock'); } catch {}
   const icon = document.getElementById('shuffle-icon');
   if (icon) {
     icon.classList.remove('shuffle-spin');
@@ -20264,6 +20421,22 @@ async function pullFeedbackLogFromCloud() {
     const snap = await db.collection('wardrobes').doc(syncVaultKey).get();
     if (!snap.exists) return;
     const data = snap.data() || {};
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (data.dailyMainLock && data.dailyMainLock.date === todayStr) {
+      const localMain = safeJSON('wtw_daily_main_lock', null);
+      if (!localMain || localMain.date !== todayStr || Number(data.dailyMainLock.updatedAt || 0) > Number(localMain.updatedAt || 0)) {
+        try { localStorage.setItem('wtw_daily_main_lock', JSON.stringify(data.dailyMainLock)); } catch {}
+        activeAIDailyOutfit = null;
+      }
+    }
+    if (data.dailyExerciseLock && data.dailyExerciseLock.date === todayStr) {
+      const localEx = safeJSON('wtw_exercise_outfit_today', null);
+      if (!localEx || localEx.date !== todayStr || Number(data.dailyExerciseLock.updatedAt || 0) > Number(localEx.updatedAt || 0)) {
+        try { localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify(data.dailyExerciseLock)); } catch {}
+        activeExerciseOutfit = null;
+      }
+    }
+
     if (Array.isArray(data.feedbackLog)) {
       const clearedAt = Math.max(
         parseInt(localStorage.getItem('wtw_feedback_cleared_at') || '0', 10),
