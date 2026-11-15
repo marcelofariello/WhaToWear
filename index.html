@@ -9163,18 +9163,6 @@ function generateOutfit() {
     return activeAIDailyOutfit.outfit;
   }
 
-  // If today's outfit is already locked (from morning first login or synced from another device), return it unchanged
-  if (!activeSpecialOccasion) {
-    const lockedOutfit = hydrateDailyMainLock(getDailyMainLock(), {
-      targetFormality,
-      sInfo,
-      layerInfo,
-      blueprint,
-      accessories: byCategory.accessories
-    });
-    if (lockedOutfit) return lockedOutfit;
-  }
-
   // If a Special Occasion AI assignment is active, return those reassigned pieces
   if (typeof activeSpecialOccasion === 'object' && activeSpecialOccasion && activeSpecialOccasion.outfitIds) {
     const ids = activeSpecialOccasion.outfitIds;
@@ -9242,6 +9230,17 @@ function generateOutfit() {
   const nonBeltAccessories = filter(byCategory.accessories.filter(a => !isBeltItem(a)));
 
   const layerInfo = getTargetTopLayers();
+  // If today's outfit is already locked (from morning first login or synced from another device), return it unchanged
+  if (!activeSpecialOccasion) {
+    const lockedOutfit = hydrateDailyMainLock(getDailyMainLock(), {
+      targetFormality,
+      sInfo,
+      layerInfo,
+      blueprint,
+      accessories: byCategory.accessories
+    });
+    if (lockedOutfit) return lockedOutfit;
+  }
   const targetLayers = layerInfo.count; // 1, 2 or 3 layers on top
   const wc = getWeatherCategory();
 
