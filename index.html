@@ -9497,7 +9497,11 @@ function hydrateDailyMainLock(lock, ctx) {
     ? { beltItem, status: 'matched', summary: `Locked belt: ${beltItem.name}` }
     : proposeBeltForOutfit(shoe, bottom, top, outerwear || midLayer, ctx.accessories || []);
   const locName = (weather && weather.city) ? weather.city.split(',')[0] : (getSettings().city || 'your location');
-  const evalResult = evaluateOutfit(top, midLayer, outerwear, bottom, shoe, ctx.blueprint);
+  const evalResult = evaluateOutfitScore(top, bottom, shoe, outerwear, accessory, {
+    midLayer,
+    beltItem: beltRec.beltItem,
+    blueprint: ctx.blueprint
+  });
   const outfit = {
     top,
     midLayer,
@@ -9509,8 +9513,9 @@ function hydrateDailyMainLock(lock, ctx) {
     accessory,
     targetLayers: ctx.layerInfo.count,
     layerReason: `${ctx.layerInfo.reason} · 🔒 Locked for today`,
-    seasonMessage: `${ctx.sInfo.icon} ${ctx.sInfo.name} in ${locName} (${ctx.sInfo.hemisphereLabel}) — ${ctx.sInfo.styleSummary}`,
-    seasonInfo: ctx.sInfo,
+    seasonMessage: evalResult.seasonMsg || `${ctx.sInfo.icon} ${ctx.sInfo.name} in ${locName} (${ctx.sInfo.hemisphereLabel}) — ${ctx.sInfo.styleSummary}`,
+    seasonInfo: evalResult.seasonInfo || ctx.sInfo,
+    astralAligned: evalResult.astralAligned,
     astralMessage: evalResult.astralMsg,
     personaMessage: evalResult.personaMsg,
     isNeverWorn: evalResult.isNeverWorn,
