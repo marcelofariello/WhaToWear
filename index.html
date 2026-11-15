@@ -18122,8 +18122,80 @@ function tripTogglePack(id, checked) {
   refreshPackProgress();
 }
 
+function findSimilarTripReplacement(removedEntry) {
+  if (!removedEntry || removedEntry.kind !== 'item') return null;
+  const orig = wardrobe.find(w => w.id === removedEntry.itemId) || {
+    id: removedEntry.itemId,
+    category: removedEntry.cat,
+    subType: removedEntry.sub,
+    color: removedEntry.color,
+    formality: 'casual'
+  };
+  const targetCat = orig.category || removedEntry.cat;
+  const packedIds = new Set((trip.pack || []).filter(p => p.kind === 'item').map(p => p.itemId));
+  const rejectedIds = new Set(trip.removedItemIds || []);
+
+  const candidates = wardrobe.filter(w =>
+    w.category === targetCat &&
+    w.id !== orig.id &&
+    !packedIds.has(w.id) &&
+    !rejectedIds.has(w.id) &&
+    !isItemDisliked(w)
+  );
+  if (!candidates.length) return null;
+
+  const origSub = (orig.subType || '').toLowerCase();
+  const origLen = typeof getItemLength === 'function' ? getItemLength(orig) : (orig.length || '');
+  const origGym = typeof isGymOrLoungeItem === 'function' ? isGymOrLoungeItem(orig) : false;
+
+  const scoreCandidate = (w) => {
+    let s = 0;
+    const wSub = (w.subType || '').toLowerCase();
+    if (origSub && wSub === origSub) s += 40;
+    else if (origSub && (wSub.includes(origSub) || origSub.includes(wSub))) s += 20;
+    const wLen = typeof getItemLength === 'function' ? getItemLength(w) : (w.length || '');
+    if (origLen && wLen === origLen) s += 20;
+    if (w.formality === orig.formality) s += 25;
+    else if (typeof formalityMatch === 'function' && formalityMatch(w.formality, orig.formality)) s += 12;
+    if (w.season === orig.season || w.season === 'all-season') s += 10;
+    if ((typeof isGymOrLoungeItem === 'function' ? isGymOrLoungeItem(w) : false) === origGym) s += 15;
+    if (typeof colorDistanceHSL === 'function' && orig.color && w.color) {
+      const dist = colorDistanceHSL(w.color, orig.color);
+      if (dist < 40) s += 10;
+    }
+    return s;
+  };
+
+  candidates.sort((a, b) => scoreCandidate(b) - scoreCandidate(a));
+  return candidates[0];
+}
+
 function tripRemovePack(id) {
-  trip.pack = trip.pack.filter(x => x.id !== id);
+  const idx = (trip.pack || []).findIndex(x => x.id === id);
+  if (idx === -1) return;
+  const removed = trip.pack[idx];
+  if (removed.itemId) {
+    trip.removedItemIds = Array.isArray(trip.removedItemIds) ? trip.removedItemIds : [];
+    if (!trip.removedItemIds.includes(removed.itemId)) trip.removedItemIds.push(removed.itemId);
+  }
+  const replacement = findSimilarTripReplacement(removed);
+  if (replacement) {
+    trip.pack.splice(idx, 1, {
+      id: 'pk_' + replacement.id,
+      kind: 'item',
+      itemId: replacement.id,
+      label: replacement.name,
+      cat: replacement.category,
+      sub: replacement.subType,
+      color: replacement.color,
+      reason: `Replacement for ${removed.label}`,
+      checked: false
+    });
+    toast(`🔄 Replaced "${removed.label}" with "${replacement.name}"`);
+  } else {
+    trip.pack.splice(idx, 1);
+    toast(`Removed "${removed.label}" (no similar replacement available in wardrobe)`);
+  }
   saveTrip();
   rerenderTrip();
 }
