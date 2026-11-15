@@ -17318,8 +17318,7 @@ async function refreshShopSuggestionsWithAI() {
 
     persistSavedShopList();
     renderShopRecommendations();
-    toast(`🤖 Ranked top ${aiShopRecommendations.length} needed pieces! Generating & saving photos once...`);
-    pregenerateShopPhotosOnRefresh(aiShopRecommendations, geminiKey);
+    toast(`🤖 Ranked top ${aiShopRecommendations.length} needed pieces! (Click "🤖 AI Enhance" on any item to generate & save its photo.)`);
   } catch (err) {
     console.warn('AI Shop Refresh failed:', err);
     toast(`AI analysis failed (${err?.message || 'error'}) — showing local suggestions`);
