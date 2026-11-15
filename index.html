@@ -16168,7 +16168,13 @@ async function enrichShopCardModeWithAI(idx, mode) {
       const existingModel = item.modelPhoto || shopModelMemCache[baseKey]?.imageUrl || (await readShopPhotoCacheIDB(`${baseKey}|model`))?.imageUrl || '';
       const genderWord = userProfile.styleGender === 'female' ? 'woman' : 'man';
       const bodyWord = userProfile.bodyShape || 'athletic';
-      const imgPrompt = `Full-body 3:4 editorial fashion lookbook photo of a ${genderWord} with a ${bodyWord} build wearing a ${item.colorName} ${item.subType} (${item.formality}), styled cleanly with tailored neutrals on a soft studio backdrop, natural lighting, no text.`;
+      const faceWord = userProfile.faceShape || 'oval';
+      const pa = userProfile.personalAnalysis || {};
+      const bp = buildPersonalStyleBlueprint();
+      const toneWord = pa.undertoneLabel || bp.undertoneLabel || '';
+      const contrastWord = pa.contrastLabel || bp.contrastLabel || '';
+      const appearanceHint = pa.aiDetailedDescription ? ` Appearance details: ${String(pa.aiDetailedDescription).slice(0, 140)}.` : '';
+      const imgPrompt = `Full-body 3:4 editorial fashion lookbook photo of a ${genderWord} with a ${bodyWord} build, ${faceWord} face shape${toneWord ? `, ${toneWord} undertone` : ''}${contrastWord ? `, ${contrastWord} contrast` : ''} wearing a ${item.colorName} ${item.subType} (${item.formality}), tailored to flatter a ${bodyWord} silhouette on a soft studio backdrop, natural lighting, no text.${appearanceHint}`;
       const stylePrompt = [
         `You are the personal stylist for WhaToWear.`,
         masterCtx,
@@ -16895,9 +16901,10 @@ async function refreshShopSuggestionsWithAI() {
             `- Disliked Styles (NEVER suggest): ${JSON.stringify(userProfile.dislikedStyles || [])}`
           ].join('\n'),
       `- Current Location Season: ${sInfo.name}`,
+      `CRITICAL FIT & COLOR RULES: Every item's color_hex/color_name MUST flatter the user's personal color season, undertone, and contrast (never pick colors from their avoidColors). Every item's cut, collar/neckline, and silhouette MUST flatter their exact Face Shape & Body Silhouette. In each item's reason, state why the color & cut suit how they look AND which owned pieces it unlocks.`,
       `Current Wardrobe (${wardrobe.length} pieces): ${JSON.stringify(compactWardrobe)}`,
       `Return ONLY valid JSON with:`,
-      `- gap_summary: 2 concise sentences summarizing wardrobe strengths, missing gaps, and how these additions serve the user's objective.`,
+      `- gap_summary: 2 concise sentences summarizing wardrobe strengths, missing gaps, and how these additions fit the user's coloring, body/face shape, and style objective.`,
       `- items: array of EXACTLY 10 objects ranked 1 (highest priority) to 10, each with keys: rank (1-10), need_score (1-100), name, category (tops|bottoms|shoes|outerwear|accessories), subType, color_hex (#RRGGBB), color_name, formality, length (short|long|shorts|cropped|none), season, reason (1-2 sentences explaining the wardrobe gap, objective fit, and owned pieces it unlocks).`
     ].join('\n');
 
@@ -16952,6 +16959,12 @@ async function pregenerateShopPhotosOnRefresh(items, geminiKey) {
   const seq = ++shopPregenSequence;
   const genderWord = userProfile.styleGender === 'female' ? 'woman' : 'man';
   const bodyWord = userProfile.bodyShape || 'athletic';
+  const faceWord = userProfile.faceShape || 'oval';
+  const pa = userProfile.personalAnalysis || {};
+  const bp = buildPersonalStyleBlueprint();
+  const toneWord = pa.undertoneLabel || bp.undertoneLabel || '';
+  const contrastWord = pa.contrastLabel || bp.contrastLabel || '';
+  const appearanceHint = pa.aiDetailedDescription ? ` Appearance details: ${String(pa.aiDetailedDescription).slice(0, 140)}.` : '';
   const queue = items.map((item, idx) => ({ item, idx }));
   const workerCount = Math.min(2, queue.length);
 
@@ -16988,7 +17001,7 @@ async function pregenerateShopPhotosOnRefresh(items, geminiKey) {
         item.modelPhoto = idbModel.imageUrl;
         shopModelMemCache[baseKey] = idbModel;
       } else {
-        const modelPrompt = `Full-body 3:4 editorial fashion lookbook photo of a ${genderWord} with a ${bodyWord} build wearing a ${item.colorName} ${item.subType} (${item.formality}), styled cleanly with tailored neutrals on a soft studio backdrop, natural lighting, no text.`;
+        const modelPrompt = `Full-body 3:4 editorial fashion lookbook photo of a ${genderWord} with a ${bodyWord} build, ${faceWord} face shape${toneWord ? `, ${toneWord} undertone` : ''}${contrastWord ? `, ${contrastWord} contrast` : ''} wearing a ${item.colorName} ${item.subType} (${item.formality}), tailored to flatter a ${bodyWord} silhouette on a soft studio backdrop, natural lighting, no text.${appearanceHint}`;
         const genModelImg = await callGeminiImageGenerate(geminiKey, modelPrompt);
         if (seq !== shopPregenSequence) return;
         if (genModelImg) {
@@ -17024,12 +17037,21 @@ function renderShopRecommendations() {
   const prefs = getWardrobePreferenceSummary();
 
   if (summaryEl) {
+    const bp = buildPersonalStyleBlueprint();
+    const pa = userProfile.personalAnalysis || {};
+    const paletteDisplay = pa.subSeason || bp.palette?.name || userProfile.palette || 'Autumn';
+    const contrastDisplay = pa.contrastLabel || bp.contrastLabel || 'Medium Contrast';
+    const bodyDisplay = bp.bodyRule?.label || userProfile.bodyShape || 'Rectangle';
+    const faceDisplay = bp.faceRule?.label || userProfile.faceShape || 'Oval';
     summaryEl.innerHTML = `
       <div class="shop-persona-banner">
         <div>
-          <div style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.6px; color:#8fb3a0; font-weight:700;">Curated for What You Love to Wear &amp; Your Desired Impression</div>
+          <div style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.6px; color:#8fb3a0; font-weight:700;">Curated for How You Look (Shape &amp; Color), What You Love &amp; Desired Impression</div>
           <div style="font-size:1.02rem; font-weight:700; margin-top:2px;">
             ${archObj.icon} ${escapeHtml(archObj.name)} · Wardrobe Favorites: <span style="color:#ffd166;">${escapeHtml(prefs.favCategory)}</span>
+          </div>
+          <div style="font-size:0.78rem; color:#cbd5e1; margin-top:4px;">
+            🎨 ${escapeHtml(paletteDisplay)} (${escapeHtml(contrastDisplay)}) · 🧍 ${escapeHtml(bodyDisplay)} · 👤 ${escapeHtml(faceDisplay)}
           </div>
           ${userProfile.personaStatement ? `<div style="font-size:0.8rem; opacity:0.9; margin-top:4px; font-style:italic;">"${escapeHtml(userProfile.personaStatement)}"</div>` : ''}
           <div class="shop-persona-chips">
