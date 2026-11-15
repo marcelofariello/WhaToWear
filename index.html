@@ -7725,6 +7725,21 @@ function isGymOrLoungeItem(it) {
   return /\b(athletic|soccer|football|running|gym|workout|training|track|sweatpants|joggers|pajama|sleepwear|swim|trunks)\b/.test(text);
 }
 
+function isShortsBottom(it) {
+  if (!it || it.category !== 'bottoms') return false;
+  if (getItemLength(it) === 'shorts') return true;
+  const text = `${it.name || ''} ${it.subType || ''}`.toLowerCase();
+  return /\b(short|shorts|skort|bermuda|boardshort|sweatshorts)\b/.test(text);
+}
+
+function areShortsAllowedToday(targetFormality) {
+  const day = new Date().getDay(); // 0=Sun, 1..5=Mon..Fri, 6=Sat
+  const isWeekend = (day === 0 || day === 6);
+  const f = String(targetFormality || (typeof getDayFormality === 'function' ? getDayFormality() : 'casual')).toLowerCase();
+  if (f === 'athleisure' || f === 'lounge') return true;
+  return isWeekend && (f === 'casual' || f === 'elevated-casual' || !f);
+}
+
 function isDrawstringOrAthleticBottom(bottom) {
   if (!bottom) return false;
   if (isGymOrLoungeItem(bottom)) return true;
@@ -9094,10 +9109,14 @@ function generateOutfit() {
   }
 
   const allowGymInMain = (targetFormality === 'athleisure' || targetFormality === 'lounge');
+  const allowShortsInMain = areShortsAllowedToday(targetFormality);
   const filter = (items) => {
     const allowed = items.filter(it => !isItemDisliked(it));
-    const nonGym = allowGymInMain ? allowed : allowed.filter(it => !isGymOrLoungeItem(it));
-    const pool = nonGym.length > 0 ? nonGym : (allowed.length > 0 ? allowed : items);
+    const dayFiltered = allowed.filter(it =>
+      (allowGymInMain || !isGymOrLoungeItem(it)) &&
+      (allowShortsInMain || !isShortsBottom(it))
+    );
+    const pool = dayFiltered.length > 0 ? dayFiltered : (allowed.length > 0 ? allowed : items);
     let suitable = pool.filter(it => weatherSuitable(it) && formalityMatch(it.formality, targetFormality));
     if (suitable.length === 0) suitable = pool.filter(it => weatherSuitable(it));
     if (suitable.length === 0) suitable = pool.filter(it => formalityMatch(it.formality, targetFormality));
@@ -10260,6 +10279,9 @@ function hydrateAIDailyOutfitFromPicked(picked, currentTemp) {
       return null;
     }
   }
+  if (!areShortsAllowedToday(targetF) && isShortsBottom(bottom)) {
+    return null;
+  }
   const beltItem = isDrawstringOrAthleticBottom(bottom) ? null : findById(picked.beltId);
   const accessory = findById(picked.accessoryId);
   const actualLayers = 1 + (midLayer ? 1 : 0) + (outerwear ? 1 : 0);
@@ -10348,13 +10370,18 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [] }) 
       : `User locked ${layerOverride} top layer(s).`;
 
     const allowGymInMain = (targetFormality === 'athleisure' || targetFormality === 'lounge');
-    const mainWardrobePool = allowGymInMain ? wardrobe : wardrobe.filter(it => !isGymOrLoungeItem(it));
+    const allowShortsInMain = areShortsAllowedToday(targetFormality);
+    const mainWardrobePool = wardrobe.filter(it =>
+      (allowGymInMain || !isGymOrLoungeItem(it)) &&
+      (allowShortsInMain || !isShortsBottom(it))
+    );
     const compactWardrobe = compactWardrobeForAI(mainWardrobePool.length >= 3 ? mainWardrobePool : wardrobe);
 
     const prompt = [
       `You are the master personal stylist for WhaToWear. Pick today's best outfit from the user's wardrobe JSON.`,
       `Weather: ${currentTemp}°C, ${cond}, Season: ${sInfo.name}. Target Formality: ${targetFormality}.`,
       !allowGymInMain ? `Strictly exclude gym, workout, soccer/athletic shorts, athletic tops, and loungewear/pajamas — those belong in the separate Morning Exercise Outfit.` : '',
+      !allowShortsInMain ? `Strictly exclude all shorts (Mon–Fri / non-casual days require full-length trousers, chinos, jeans, or skirts).` : '',
       `Layering Rule: ${layerRuleText} Never put an athleisure/sport windbreaker over a chunky knit sweater/cardigan or formal shirt. Keep fabrics, formality, and colors coherent.`,
       avoidIds.length ? `Avoid repeating these item IDs as main pieces so the user gets a fresh alternative: ${JSON.stringify(avoidIds)}.` : '',
       typeof buildMasterPersonalContextForAI === 'function'
