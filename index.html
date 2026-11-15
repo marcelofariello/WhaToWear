@@ -3707,8 +3707,8 @@ input[type="text"]:focus, select:focus, textarea:focus {
 
   <!-- Today's Outfit Tab (1. What to Wear Today at the VERY BEGINNING · 2. Settings, Weather, Mood & Astral at the Bottom) -->
   <div class="tab-content active" id="tab-today">
-    <div id="outfit-section"></div>
     <div id="exercise-outfit-section"></div>
+    <div id="outfit-section"></div>
     <div id="trip-banner-section"></div>
     <div class="day-context" id="day-context"></div>
     <div id="weather-section"></div>
@@ -10113,7 +10113,7 @@ function renderExerciseOutfit() {
     renderOutfitItem(ex.shoe, 'Exercise Shoes / Trainers', '👟 #3 · Shoes');
 
   section.innerHTML = `
-    <div class="outfit-display" style="margin-top:14px; border:1px solid rgba(0,229,192,0.28);">
+    <div class="outfit-display" style="margin-bottom:14px; border:1px solid rgba(0,229,192,0.28);">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
         <div>
           <h2 style="margin:0; text-align:left; font-size:1.08rem;">🏃 Morning Exercise Outfit</h2>
