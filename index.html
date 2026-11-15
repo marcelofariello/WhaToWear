@@ -20342,29 +20342,38 @@ function init() {
       }
     });
   }
-  updateGenderUI();
-  syncAstralToggle();
-  updateCategoryDropdown();
-  updateFormalityDropdown();
-  renderPersonaUI();
-  applyPlanetaryPreselectedMood();
-  updateSubTypes();
-  setupDragAndDrop();
-  updateHeaderSeasonPill();
-  renderFilters();
-  renderWardrobe();
-  renderDayContext();
-  renderWeather();
-  renderAstralSection();
-  renderMoodSection();
-  renderWardrobeIllusionSection();
-  renderOutfit();
-  renderShopRecommendations();
-  renderUserProfileUI();
-  renderTripBanner();
-  hydrateUnlimitedPhotosFromIdb();
-  initFirebaseSync();
-  fetchWeather();
+  const safeStep = (name, fn) => {
+    try { fn(); }
+    catch (err) {
+      console.error(`[init:${name}]`, err);
+      try {
+        wtwRuntimeErrors.push({ msg: `[init:${name}] ${err?.message || err}`, line: 0, time: new Date().toLocaleTimeString() });
+      } catch {}
+    }
+  };
+  safeStep('updateGenderUI', updateGenderUI);
+  safeStep('syncAstralToggle', syncAstralToggle);
+  safeStep('updateCategoryDropdown', updateCategoryDropdown);
+  safeStep('updateFormalityDropdown', updateFormalityDropdown);
+  safeStep('renderPersonaUI', renderPersonaUI);
+  safeStep('applyPlanetaryPreselectedMood', applyPlanetaryPreselectedMood);
+  safeStep('updateSubTypes', updateSubTypes);
+  safeStep('setupDragAndDrop', setupDragAndDrop);
+  safeStep('updateHeaderSeasonPill', updateHeaderSeasonPill);
+  safeStep('renderFilters', renderFilters);
+  safeStep('renderWardrobe', renderWardrobe);
+  safeStep('renderDayContext', renderDayContext);
+  safeStep('renderWeather', renderWeather);
+  safeStep('renderAstralSection', renderAstralSection);
+  safeStep('renderMoodSection', renderMoodSection);
+  safeStep('renderWardrobeIllusionSection', renderWardrobeIllusionSection);
+  safeStep('renderOutfit', renderOutfit);
+  safeStep('renderShopRecommendations', renderShopRecommendations);
+  safeStep('renderUserProfileUI', renderUserProfileUI);
+  safeStep('renderTripBanner', renderTripBanner);
+  safeStep('hydrateUnlimitedPhotosFromIdb', hydrateUnlimitedPhotosFromIdb);
+  safeStep('initFirebaseSync', initFirebaseSync);
+  safeStep('fetchWeather', fetchWeather);
 }
 
 /* ================================================================
