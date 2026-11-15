@@ -6060,6 +6060,18 @@ function applyRemoteCloudData(data, opts = {}) {
       if (birthPlaceInput) birthPlaceInput.value = data.settings.birthPlace || '';
     }
 
+    if (data.trip && typeof data.trip === 'object') {
+      const localTripAt = parseInt(localStorage.getItem('wtw_trip_updated_at') || '0', 10);
+      const remoteTripAt = Number(data.tripUpdatedAt || data.updatedAt || 0);
+      if (remoteTripAt >= localTripAt || !trip || trip.stage === 'setup') {
+        trip = data.trip;
+        try {
+          localStorage.setItem('wtw_trip', JSON.stringify(trip));
+          if (remoteTripAt) localStorage.setItem('wtw_trip_updated_at', String(remoteTripAt));
+        } catch {}
+      }
+    }
+
     if (Array.isArray(data.feedbackLog)) {
       const clearedAt = Math.max(
         parseInt(localStorage.getItem('wtw_feedback_cleared_at') || '0', 10),
@@ -6083,6 +6095,9 @@ function applyRemoteCloudData(data, opts = {}) {
     renderPersonaUI();
     renderOutfit();
     renderShopRecommendations();
+    if (typeof renderTripBanner === 'function') renderTripBanner();
+    if (typeof renderTrip === 'function' && document.getElementById('tab-trip')?.classList.contains('active')) renderTrip();
+    if (typeof renderExerciseOutfit === 'function') renderExerciseOutfit();
     if (typeof renderFeedbackHistory === 'function') renderFeedbackHistory();
     renderDislikedStylesUI();
 
@@ -6727,6 +6742,8 @@ async function syncWardrobeItemsToCloud(itemsToSync, { deletedIds = [], onProgre
           wardrobe: slimWardrobeForSummary,
           userProfile: safeProfilePayload,
           settings: getSettings(),
+          trip: trip || null,
+          tripUpdatedAt: parseInt(localStorage.getItem('wtw_trip_updated_at') || '0', 10) || now,
           feedbackLog: getFeedbackLog(),
           feedbackClearedAt: parseInt(localStorage.getItem('wtw_feedback_cleared_at') || '0', 10)
         };
@@ -17605,8 +17622,32 @@ const PURPOSES = {
 let trip = safeJSON('wtw_trip', null);
 
 function saveTrip() {
-  try { localStorage.setItem('wtw_trip', JSON.stringify(trip)); }
-  catch (e) { toast('⚠️ Could not save trip (storage full)'); }
+  const now = Date.now();
+  if (trip && typeof trip === 'object') {
+    trip.escaped = false;
+    trip.updatedAt = now;
+  }
+  try {
+    localStorage.setItem('wtw_trip', JSON.stringify(trip));
+    localStorage.setItem('wtw_trip_updated_at', String(now));
+  } catch (e) { toast('⚠️ Could not save trip (storage full)'); }
+  if (!isApplyingRemoteCloudData) {
+    syncTripToCloud(now);
+  }
+}
+
+async function syncTripToCloud(ts = Date.now()) {
+  try {
+    if (typeof db === 'undefined' || !db || !syncVaultKey) return;
+    await db.collection('wardrobes').doc(syncVaultKey).set({
+      updatedAt: ts,
+      trip: trip || null,
+      tripUpdatedAt: ts
+    }, { merge: true });
+    localStorage.setItem('wtw_cloud_updated_at', String(ts));
+  } catch (err) {
+    console.warn('Trip cloud sync failed:', err);
+  }
 }
 
 function newLeg(purpose) {
@@ -18036,11 +18077,17 @@ function tripBackToSetup() {
 }
 
 function tripNew() {
-  if (!confirm('Start a brand new trip? The current trip, checklist and plan will be cleared.')) return;
+  if (trip && trip.stage === 'active') {
+    if (!confirm('You currently have an active Trip Plan. Cancel it and start a brand new trip? (Only one trip plan can be active at a time across your devices.)')) return;
+  } else {
+    if (!confirm('Start a brand new trip? The current trip, checklist and plan will be cleared.')) return;
+  }
   trip = null;
   ensureTrip();
   renderTrip();
   renderTripBanner();
+  renderOutfit();
+  renderWardrobe();
   window.scrollTo(0, 0);
 }
 
@@ -18468,10 +18515,7 @@ function renderTripPlan() {
       <button type="button" class="btn btn-secondary btn-sm" onclick="tripRemix()">🔄 Re-mix remaining days</button>
       <button type="button" class="btn btn-secondary btn-sm" onclick="tripGoStage('packing')">📋 Packing list</button>
       <button type="button" class="btn btn-secondary btn-sm" onclick="tripBackToSetup()">✏️ Trip details</button>
-      ${trip.escaped
-        ? `<button type="button" class="btn btn-primary btn-sm" onclick="resumeTripMode()">✈️ Resume Trip Mode</button>`
-        : `<button type="button" class="btn btn-secondary btn-sm" onclick="escapeTripMode()">🏠 Escape Trip Mode</button>`}
-      <button type="button" class="btn btn-secondary btn-sm" style="color:#b91c1c;" onclick="cancelActiveTrip()">✕ Cancel Trip</button>
+      <button type="button" class="btn btn-secondary btn-sm" style="color:#b91c1c;" onclick="cancelActiveTrip()">✕ Cancel Trip (Return to Full Wardrobe)</button>
       <button type="button" class="btn btn-secondary btn-sm" onclick="tripNew()">🆕 New trip</button>
     </div>`;
 
@@ -18524,7 +18568,6 @@ function renderTrip() {
 
 function getActiveTripContext(includeEscaped = false) {
   if (!trip || trip.stage !== 'active' || !Array.isArray(trip.days) || !trip.days.length) return null;
-  if (!includeEscaped && trip.escaped) return null;
   const today = isoDate(new Date());
   const dayIndex = trip.days.findIndex(d => d.date === today);
   if (dayIndex === -1) return null;
@@ -18607,26 +18650,14 @@ function renderTripBanner() {
   }
   const p = trip.plan[i];
   const names = p && p.items ? ['top', 'mid', 'outer', 'bottom', 'shoe', 'belt'].map(k => { const it = wardrobe.find(w => w.id === p.items[k]); return it ? escapeHtml(it.name) : ''; }).filter(Boolean).join(' · ') : 'No outfit planned';
-  if (trip.escaped) {
-    el.innerHTML = `
-      <div class="trip-banner" style="background:linear-gradient(135deg,#334155,#1e293b);">
-        <span>⏸️ <strong>${name}</strong> · Day ${i + 1} of ${trip.days.length} (Home Mode override active)</span>
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-          <button type="button" class="btn btn-accent btn-sm" onclick="resumeTripMode()">✈️ Resume Trip Mode</button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="cancelActiveTrip()">✕ Cancel Trip</button>
-        </div>
-      </div>`;
-    return;
-  }
   const ctx = getActiveTripContext();
   const packCount = ctx ? ctx.checklistItems.length : 0;
   el.innerHTML = `
     <div class="trip-banner">
-      <span>✈️ <strong>Trip Mode Active: ${name}</strong> · Day ${i + 1} of ${trip.days.length} in ${escapeHtml(trip.days[i].dest)} · ${packCount} packed items<br>${names}</span>
+      <span>✈️ <strong>Trip Mode Active (All Devices): ${name}</strong> · Day ${i + 1} of ${trip.days.length} in ${escapeHtml(trip.days[i].dest)} · ${packCount} packed items<br>${names}</span>
       <div style="display:flex; gap:6px; flex-wrap:wrap;">
         <button type="button" class="btn btn-accent btn-sm" onclick="switchTab('trip')">📋 Trip Plan</button>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="escapeTripMode()">🏠 Escape Trip</button>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="cancelActiveTrip()">✕ Cancel</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="cancelActiveTrip()">✕ Cancel Trip</button>
       </div>
     </div>`;
 }
