@@ -18153,13 +18153,21 @@ function renderTripPacking() {
     ['tops', '👕 Tops'], ['bottoms', '👖 Bottoms'], ['shoes', '👟 Shoes'],
     ['outerwear', '🧥 Outerwear & AC layers'], ['accessories', '🎒 Accessories']
   ];
-  const row = p => `
+  const row = p => {
+    const wItem = wardrobe.find(w => w.id === p.itemId);
+    const thumbSrc = wItem ? getItemDisplayPhotoSrc(wItem) : '';
+    const safeLabel = (p.label || '').replace(/'/g, "\\'");
+    const thumbHtml = thumbSrc
+      ? `<img src="${thumbSrc}" alt="${escapeHtml(p.label)}" onclick="event.preventDefault(); event.stopPropagation(); openPhotoLightbox(this.src, '${safeLabel}')" title="Tap to view larger photo" style="width:44px; height:44px; object-fit:cover; border-radius:8px; border:1px solid rgba(148,163,184,0.35); flex-shrink:0; cursor:zoom-in;">`
+      : `<span class="pack-swatch" style="background:${p.color}"></span>`;
+    return `
     <label class="pack-row ${p.checked ? 'checked' : ''}" id="pack-${p.id}">
       <input type="checkbox" ${p.checked ? 'checked' : ''} onchange="tripTogglePack('${p.id}', this.checked)">
-      <span class="pack-swatch" style="background:${p.color}"></span>
+      ${thumbHtml}
       <span class="pack-name">${escapeHtml(p.label)}<small>${escapeHtml(p.sub)} · ${escapeHtml(p.reason || '')}</small></span>
       <button type="button" class="pack-remove" onclick="event.preventDefault(); tripRemovePack('${p.id}')" title="Leave at home">✕</button>
     </label>`;
+  };
   const essRow = (p, emoji) => `
     <label class="pack-row ${p.checked ? 'checked' : ''}" id="pack-${p.id}">
       <input type="checkbox" ${p.checked ? 'checked' : ''} onchange="tripTogglePack('${p.id}', this.checked)">
