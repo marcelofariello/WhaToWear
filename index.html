@@ -3708,6 +3708,7 @@ input[type="text"]:focus, select:focus, textarea:focus {
   <!-- Today's Outfit Tab (1. What to Wear Today at the VERY BEGINNING · 2. Settings, Weather, Mood & Astral at the Bottom) -->
   <div class="tab-content active" id="tab-today">
     <div id="outfit-section"></div>
+    <div id="exercise-outfit-section"></div>
     <div id="trip-banner-section"></div>
     <div class="day-context" id="day-context"></div>
     <div id="weather-section"></div>
@@ -9974,7 +9975,212 @@ function renderOutfit() {
     </div>`;
 
   renderWardrobeIllusionSection();
+  if (typeof renderExerciseOutfit === 'function') renderExerciseOutfit();
   maybeTriggerAIDailyOutfit();
+}
+
+let activeExerciseOutfit = null;
+
+function isExerciseCandidate(it) {
+  if (!it || isItemDisliked(it)) return false;
+  const txt = ((it.formality || '') + ' ' + (it.subType || '') + ' ' + (it.name || '') + ' ' + (it.aiDescription || '')).toLowerCase();
+  return it.formality === 'athleisure' || /\b(athleisure|athletic|sport|gym|running|training|workout|jogger|track|sweatpant|performance|dry-fit|dri-fit|mesh|trainer|sneaker|tank|tee|t-shirt|shorts)\b/i.test(txt);
+}
+
+function isStrictSportPiece(it) {
+  if (!it) return false;
+  const txt = ((it.formality || '') + ' ' + (it.subType || '') + ' ' + (it.name || '') + ' ' + (it.aiDescription || '')).toLowerCase();
+  return it.formality === 'athleisure' || /\b(athleisure|athletic|sport|gym|running|training|workout|jogger|track|sweatpant|performance|dry-fit|dri-fit|trainer|running shoe|mesh)\b/i.test(txt);
+}
+
+function generateExerciseOutfit(avoidIds = []) {
+  const tripCtx = (typeof getActiveTripContext === 'function') ? getActiveTripContext() : null;
+  const pool = (tripCtx && tripCtx.checklistItems.length >= 3) ? tripCtx.checklistItems : wardrobe;
+  if (!pool || pool.length < 3) return null;
+
+  const morningTemp = (weather && Array.isArray(weather.hourly) && weather.hourly[0] && typeof weather.hourly[0].temp === 'number')
+    ? weather.hourly[0].temp
+    : (weather && typeof weather.temp === 'number' ? weather.temp : 18);
+
+  const topsPool = pool.filter(i => i.category === 'tops' && !isItemDisliked(i));
+  const bottomsPool = pool.filter(i => i.category === 'bottoms' && !isItemDisliked(i));
+  const shoesPool = pool.filter(i => i.category === 'shoes' && !isItemDisliked(i));
+  if (!topsPool.length || !bottomsPool.length || !shoesPool.length) return null;
+
+  const preferSport = (list, cat) => {
+    const strict = list.filter(isStrictSportPiece);
+    if (strict.length) return strict;
+    const broader = list.filter(isExerciseCandidate);
+    if (broader.length) return broader;
+    if (cat === 'shoes') {
+      const casualShoes = list.filter(s => /\b(sneaker|trainer|runner|slip-on)\b/i.test((s.subType || '') + ' ' + (s.name || '')));
+      if (casualShoes.length) return casualShoes;
+    }
+    return list;
+  };
+
+  let exTops = preferSport(topsPool, 'tops');
+  let exBottoms = preferSport(bottomsPool, 'bottoms');
+  let exShoes = preferSport(shoesPool, 'shoes');
+
+  // Filter out formal pieces if casual/sport alternatives exist
+  const nonFormal = (arr) => {
+    const nf = arr.filter(i => !['formal', 'black-tie', 'cocktail', 'business-casual'].includes(i.formality));
+    return nf.length ? nf : arr;
+  };
+  exTops = nonFormal(exTops);
+  exBottoms = nonFormal(exBottoms);
+  exShoes = nonFormal(exShoes);
+
+  // Date-seeded daily tie-breaker so it proposes a consistent daily look all morning
+  const dayNum = Math.floor(Date.now() / 86400000);
+  const pickBest = (list, scorer) => {
+    const filtered = avoidIds.length && list.some(x => !avoidIds.includes(x.id))
+      ? list.filter(x => !avoidIds.includes(x.id))
+      : list;
+    return [...filtered].sort((a, b) => scorer(b) - scorer(a))[0];
+  };
+
+  const scoreTop = (t) => {
+    let s = isStrictSportPiece(t) ? 30 : 10;
+    const len = getItemLength(t);
+    if (morningTemp >= 16 && (len === 'short' || len === 'sleeveless')) s += 12;
+    if (morningTemp < 14 && len === 'long') s += 12;
+    s -= getItemWearCount(t) * 2;
+    s += ((dayNum + t.id.charCodeAt(0)) % 7) * 0.5;
+    return s;
+  };
+
+  const scoreBottom = (b) => {
+    let s = isStrictSportPiece(b) ? 30 : 10;
+    const len = getItemLength(b);
+    if (morningTemp >= 17 && len === 'shorts') s += 15;
+    else if (morningTemp < 17 && len === 'long') s += 15;
+    s -= getItemWearCount(b) * 2;
+    s += ((dayNum + b.id.charCodeAt(0)) % 7) * 0.5;
+    return s;
+  };
+
+  const scoreShoe = (sh) => {
+    let s = isStrictSportPiece(sh) ? 35 : (/\b(sneaker|trainer|runner)\b/i.test((sh.subType || '') + ' ' + (sh.name || '')) ? 22 : 0);
+    s -= getItemWearCount(sh) * 1.5;
+    s += ((dayNum + sh.id.charCodeAt(0)) % 5) * 0.5;
+    return s;
+  };
+
+  const top = pickBest(exTops, scoreTop);
+  const bottom = pickBest(exBottoms, scoreBottom);
+  const shoe = pickBest(exShoes, scoreShoe);
+  if (!top || !bottom || !shoe) return null;
+
+  return { top, bottom, shoe, morningTemp };
+}
+
+function renderExerciseOutfit() {
+  const section = document.getElementById('exercise-outfit-section');
+  if (!section) return;
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  if (!activeExerciseOutfit || activeExerciseOutfit.date !== todayStr) {
+    try {
+      const saved = safeJSON('wtw_exercise_outfit_today', null);
+      if (saved && saved.date === todayStr) {
+        const top = wardrobe.find(w => w.id === saved.topId);
+        const bottom = wardrobe.find(w => w.id === saved.bottomId);
+        const shoe = wardrobe.find(w => w.id === saved.shoeId);
+        if (top && bottom && shoe) {
+          activeExerciseOutfit = { date: todayStr, top, bottom, shoe, morningTemp: saved.morningTemp ?? 18, logged: !!saved.logged };
+        }
+      }
+    } catch {}
+  }
+
+  if (!activeExerciseOutfit || activeExerciseOutfit.date !== todayStr) {
+    const picked = generateExerciseOutfit();
+    if (!picked) { section.innerHTML = ''; return; }
+    activeExerciseOutfit = { date: todayStr, ...picked, logged: false };
+    try {
+      localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
+        date: todayStr, topId: picked.top.id, bottomId: picked.bottom.id, shoeId: picked.shoe.id, morningTemp: picked.morningTemp, logged: false
+      }));
+    } catch {}
+  }
+
+  const ex = activeExerciseOutfit;
+  const itemsHtml =
+    renderOutfitItem(ex.top, 'Exercise Top (Breathable / Performance)', '🏃 #1 · Top') +
+    renderOutfitItem(ex.bottom, 'Exercise Pants / Shorts', '🩳 #2 · Bottom') +
+    renderOutfitItem(ex.shoe, 'Exercise Shoes / Trainers', '👟 #3 · Shoes');
+
+  section.innerHTML = `
+    <div class="outfit-display" style="margin-top:14px; border:1px solid rgba(0,229,192,0.28);">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
+        <div>
+          <h2 style="margin:0; text-align:left; font-size:1.08rem;">🏃 Morning Exercise Outfit</h2>
+          <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">
+            Daily workout pick · 🌅 Morning ~${Math.round(ex.morningTemp)}°C · Top + Pants + Shoes
+          </div>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="shuffleExerciseOutfit()">🔀 Shuffle</button>
+          <button type="button" id="btn-wear-exercise" class="btn-wear-today ${ex.logged ? 'logged' : ''}" onclick="logExerciseWearToday('${ex.top.id}', '${ex.bottom.id}', '${ex.shoe.id}')">
+            ${ex.logged ? '✓ Logged (3 items worn)' : '📌 Wearing for Workout!'}
+          </button>
+        </div>
+      </div>
+      <div class="outfit-items">${itemsHtml}</div>
+    </div>`;
+}
+
+function shuffleExerciseOutfit() {
+  const avoid = activeExerciseOutfit
+    ? [activeExerciseOutfit.top?.id, activeExerciseOutfit.bottom?.id].filter(Boolean)
+    : [];
+  const picked = generateExerciseOutfit(avoid);
+  if (!picked) { toast('No alternative exercise pieces found'); return; }
+  const todayStr = new Date().toISOString().slice(0, 10);
+  activeExerciseOutfit = { date: todayStr, ...picked, logged: false };
+  try {
+    localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
+      date: todayStr, topId: picked.top.id, bottomId: picked.bottom.id, shoeId: picked.shoe.id, morningTemp: picked.morningTemp, logged: false
+    }));
+  } catch {}
+  renderExerciseOutfit();
+}
+
+function logExerciseWearToday(topId, bottomId, shoeId) {
+  const ids = [topId, bottomId, shoeId].filter(Boolean);
+  const updated = [];
+  ids.forEach(id => {
+    const it = wardrobe.find(w => w.id === id);
+    if (it) {
+      it.wearCount = (typeof it.wearCount === 'number' ? it.wearCount : Math.max(0, getItemWearCount(it) - 1)) + 1;
+      updated.push(it);
+    }
+  });
+  if (updated.length) {
+    saveLocalDataOnly();
+    if (typeof syncWardrobeItemsToCloud === 'function') {
+      syncWardrobeItemsToCloud(updated).catch(() => {});
+    }
+  }
+  if (activeExerciseOutfit) {
+    activeExerciseOutfit.logged = true;
+    try {
+      const saved = safeJSON('wtw_exercise_outfit_today', null);
+      if (saved) {
+        saved.logged = true;
+        localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify(saved));
+      }
+    } catch {}
+  }
+  const btn = document.getElementById('btn-wear-exercise');
+  if (btn) {
+    btn.classList.add('logged');
+    btn.innerHTML = `✓ Logged (${updated.length} items worn)`;
+  }
+  renderWardrobe();
+  toast(`🏃 Workout logged! Counted ${updated.length} items worn.`);
 }
 
 let activeAIDailyOutfit = null;
