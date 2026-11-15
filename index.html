@@ -7755,7 +7755,7 @@ function isGymOrLoungeItem(it) {
   const f = (it.formality || '').toLowerCase();
   if (f === 'athleisure' || f === 'lounge') return true;
   const text = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''}`.toLowerCase();
-  return /\b(athleisure|athletic|soccer|football|running|gym|workout|training|track|sweatpants|joggers|pajama|sleepwear|swim|trunks)\b/.test(text);
+  return /\b(athleisure|athletic|soccer|football|running|gym|workout|training|track|sweatpants|joggers|pajama|sleepwear|swim|swimming|trunks|board\s*shorts?|beachwear)\b/.test(text);
 }
 
 function isShortsBottom(it) {
@@ -7791,7 +7791,7 @@ function isDrawstringOrAthleticBottom(bottom) {
   if (!bottom) return false;
   if (isGymOrLoungeItem(bottom)) return true;
   const text = `${bottom.name || ''} ${bottom.subType || ''} ${bottom.aiDescription || ''}`.toLowerCase();
-  return /\b(drawstring|elastic waist|elasticated waist|pull-on|sweatshorts|boardshorts|track pants|cargo joggers|leggings)\b/.test(text);
+  return /\b(drawstring|elastic|elasticated|pull-on|sweat\s*shorts?|board\s*shorts?|swim\s*(shorts?|trunks?)|beachwear|track pants|cargo joggers|leggings)\b/.test(text);
 }
 
 function formalityMatch(itemFormality, targetFormality) {
