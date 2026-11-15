@@ -5857,9 +5857,19 @@ function initFirebaseSync() {
         if (user) lastFirebaseAuthError = null;
       });
     }
-    ensureFirebaseAuthSession().finally(() => {
+    const authWithTimeout = Promise.race([
+      ensureFirebaseAuthSession(),
+      new Promise(resolve => setTimeout(() => resolve(null), 4000))
+    ]);
+    authWithTimeout.finally(() => {
       setupCloudRealtimeListener();
     });
+    setTimeout(() => {
+      const txt = document.getElementById('header-cloud-text')?.textContent || '';
+      if (txt === 'Connecting...') {
+        setCloudStatusUI('offline', 'Local Mode (Cloud Timeout)');
+      }
+    }, 10000);
   } catch (err) {
     console.error('Firebase init error:', err);
     setCloudStatusUI('error', 'Sync Init Error');
@@ -5970,37 +5980,42 @@ function setupCloudRealtimeListener() {
   });
 
   cloudUnsubscribeListener = vaultDocRef.onSnapshot((doc) => {
-    if (doc.metadata?.hasPendingWrites) return;
-    if (!doc.exists) {
-      if ((wardrobe || []).length > 0) {
-        syncPushToCloud(false);
-      } else if (failedCloudSyncItems.length === 0 && !doc.metadata?.fromCache) {
-        setCloudStatusUI('connected', 'Cloud Synced');
+    try {
+      if (doc.metadata?.hasPendingWrites) return;
+      if (!doc.exists) {
+        if ((wardrobe || []).length > 0) {
+          syncPushToCloud(false);
+        } else if (failedCloudSyncItems.length === 0 && !doc.metadata?.fromCache) {
+          setCloudStatusUI('connected', 'Cloud Synced');
+        }
+        return;
       }
-      return;
-    }
-    const data = doc.data();
-    if (!data) return;
+      const data = doc.data();
+      if (!data) return;
 
-    const localUpdatedAt = parseInt(localStorage.getItem('wtw_cloud_updated_at') || '0', 10);
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const hasNewerTrip = data.trip && Number(data.tripUpdatedAt || 0) > parseInt(localStorage.getItem('wtw_trip_updated_at') || '0', 10);
-    const localFeedbackIds = new Set((typeof getFeedbackLog === 'function' ? getFeedbackLog() : []).map(e => e.id));
-    const hasUnseenFeedback = Array.isArray(data.feedbackLog) && data.feedbackLog.some(e => e && e.id && !localFeedbackIds.has(e.id));
-    const localMainLock = safeJSON('wtw_daily_main_lock', null);
-    const hasNewerMainLock = data.dailyMainLock && data.dailyMainLock.date === todayStr &&
-      (!localMainLock || localMainLock.date !== todayStr || Number(data.dailyMainLock.updatedAt || 0) > Number(localMainLock.updatedAt || 0));
-    const localExLock = safeJSON('wtw_exercise_outfit_today', null);
-    const hasNewerExLock = data.dailyExerciseLock && data.dailyExerciseLock.date === todayStr &&
-      (!localExLock || localExLock.date !== todayStr || Number(data.dailyExerciseLock.updatedAt || 0) > Number(localExLock.updatedAt || 0));
-    if (data.updatedAt && data.updatedAt <= localUpdatedAt && failedCloudSyncItems.length === 0 && !hasNewerTrip && !hasUnseenFeedback && !hasNewerMainLock && !hasNewerExLock) {
-      if (!doc.metadata?.fromCache) {
-        setCloudStatusUI('connected', 'Cloud Synced');
+      const localUpdatedAt = parseInt(localStorage.getItem('wtw_cloud_updated_at') || '0', 10);
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const hasNewerTrip = data.trip && Number(data.tripUpdatedAt || 0) > parseInt(localStorage.getItem('wtw_trip_updated_at') || '0', 10);
+      const localFeedbackIds = new Set((typeof getFeedbackLog === 'function' ? getFeedbackLog() : []).map(e => e.id));
+      const hasUnseenFeedback = Array.isArray(data.feedbackLog) && data.feedbackLog.some(e => e && e.id && !localFeedbackIds.has(e.id));
+      const localMainLock = safeJSON('wtw_daily_main_lock', null);
+      const hasNewerMainLock = data.dailyMainLock && data.dailyMainLock.date === todayStr &&
+        (!localMainLock || localMainLock.date !== todayStr || Number(data.dailyMainLock.updatedAt || 0) > Number(localMainLock.updatedAt || 0));
+      const localExLock = safeJSON('wtw_exercise_outfit_today', null);
+      const hasNewerExLock = data.dailyExerciseLock && data.dailyExerciseLock.date === todayStr &&
+        (!localExLock || localExLock.date !== todayStr || Number(data.dailyExerciseLock.updatedAt || 0) > Number(localExLock.updatedAt || 0));
+      if (data.updatedAt && data.updatedAt <= localUpdatedAt && failedCloudSyncItems.length === 0 && !hasNewerTrip && !hasUnseenFeedback && !hasNewerMainLock && !hasNewerExLock) {
+        if (!doc.metadata?.fromCache) {
+          setCloudStatusUI('connected', 'Cloud Synced');
+        }
+        return;
       }
-      return;
-    }
 
-    applyRemoteCloudData(data, { fromCache: Boolean(doc.metadata?.fromCache) });
+      applyRemoteCloudData(data, { fromCache: Boolean(doc.metadata?.fromCache) });
+    } catch (snapErr) {
+      console.error('Vault snapshot processing error:', snapErr);
+      setCloudStatusUI('error', 'Sync Processing Error');
+    }
   }, (err) => {
     console.error('Firestore listener error:', err);
     setCloudStatusUI('error', `Sync Listener Error: ${err.code || err.message || err}`);
