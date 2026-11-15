@@ -7773,6 +7773,20 @@ function areShortsAllowedToday(targetFormality) {
   return isWeekend && (f === 'casual' || f === 'elevated-casual' || !f);
 }
 
+function isOpenToeOrSandalShoe(it) {
+  if (!it || it.category !== 'shoes') return false;
+  const text = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''}`.toLowerCase();
+  return /\b(sandal|sandals|slide|slides|flip-flop|flip-flops|thong|thongs|clog|clogs)\b/.test(text);
+}
+
+function areSandalsAllowedToday(targetFormality) {
+  const day = new Date().getDay(); // 0=Sun, 1..5=Mon..Fri, 6=Sat
+  const isWeekend = (day === 0 || day === 6);
+  const f = String(targetFormality || (typeof getDayFormality === 'function' ? getDayFormality() : 'casual')).toLowerCase();
+  if (f === 'lounge') return true;
+  return isWeekend && (f === 'casual' || f === 'elevated-casual' || !f);
+}
+
 function isDrawstringOrAthleticBottom(bottom) {
   if (!bottom) return false;
   if (isGymOrLoungeItem(bottom)) return true;
@@ -9150,11 +9164,13 @@ function generateOutfit() {
 
   const allowGymInMain = (targetFormality === 'athleisure' || targetFormality === 'lounge');
   const allowShortsInMain = areShortsAllowedToday(targetFormality);
+  const allowSandalsInMain = areSandalsAllowedToday(targetFormality);
   const filter = (items) => {
     const allowed = items.filter(it => !isItemDisliked(it));
     const dayFiltered = allowed.filter(it =>
       (allowGymInMain || !isGymOrLoungeItem(it)) &&
-      (allowShortsInMain || !isShortsBottom(it))
+      (allowShortsInMain || !isShortsBottom(it)) &&
+      (allowSandalsInMain || !isOpenToeOrSandalShoe(it))
     );
     const pool = dayFiltered.length > 0 ? dayFiltered : (allowed.length > 0 ? allowed : items);
     let suitable = pool.filter(it => weatherSuitable(it) && formalityMatch(it.formality, targetFormality));
@@ -10365,6 +10381,9 @@ function hydrateAIDailyOutfitFromPicked(picked, currentTemp) {
   if (!areShortsAllowedToday(targetF) && isShortsBottom(bottom)) {
     return null;
   }
+  if (!areSandalsAllowedToday(targetF) && isOpenToeOrSandalShoe(shoe)) {
+    return null;
+  }
   if (typeof areTopLayersCompatible === 'function' && !areTopLayersCompatible(top, midLayer, outerwear)) {
     return null;
   }
@@ -10457,9 +10476,11 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [] }) 
 
     const allowGymInMain = (targetFormality === 'athleisure' || targetFormality === 'lounge');
     const allowShortsInMain = areShortsAllowedToday(targetFormality);
+    const allowSandalsInMain = areSandalsAllowedToday(targetFormality);
     const mainWardrobePool = wardrobe.filter(it =>
       (allowGymInMain || !isGymOrLoungeItem(it)) &&
-      (allowShortsInMain || !isShortsBottom(it))
+      (allowShortsInMain || !isShortsBottom(it)) &&
+      (allowSandalsInMain || !isOpenToeOrSandalShoe(it))
     );
     const compactWardrobe = compactWardrobeForAI(mainWardrobePool.length >= 3 ? mainWardrobePool : wardrobe);
 
@@ -10468,6 +10489,7 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [] }) 
       `Weather: ${currentTemp}°C, ${cond}, Season: ${sInfo.name}. Target Formality: ${targetFormality}.`,
       !allowGymInMain ? `Strictly exclude gym, workout, soccer/athletic shorts, athletic tops, and loungewear/pajamas — those belong in the separate Morning Exercise Outfit.` : '',
       !allowShortsInMain ? `Strictly exclude all shorts (Mon–Fri / non-casual days require full-length trousers, chinos, jeans, or skirts).` : '',
+      !allowSandalsInMain ? `Strictly exclude sandals, slides, and flip-flops (never suggest open-toe/beach footwear for workdays Mon–Fri or smart-casual/formal outfits).` : '',
       `Layering Rule: ${layerRuleText} Never put an athleisure/sport windbreaker over a chunky knit sweater/cardigan or formal shirt, and never put a denim jacket, blazer, or tailored coat over a zip hoodie or gym/fleece hoodie. Keep fabrics, formality, and colors coherent.`,
       avoidIds.length ? `Avoid repeating these item IDs as main pieces so the user gets a fresh alternative: ${JSON.stringify(avoidIds)}.` : '',
       typeof buildMasterPersonalContextForAI === 'function'
