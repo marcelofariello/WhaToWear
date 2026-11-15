@@ -15834,8 +15834,10 @@ const REAL_FASHION_PHOTOS = {
 const SHOP_PHOTO_DB_NAME = 'wtw_shop_photo_cache_v1';
 const SHOP_PHOTO_STORE_NAME = 'garmentPhotos';
 const shopStudioMemCache = {};
+const shopModelMemCache = {};
 const shopStudioInflight = new Map();
 let shopRenderSequence = 0;
+let shopPregenSequence = 0;
 let lastRenderedShopItems = [];
 let shopStudioApiCooldownUntil = 0;
 let shopPhotoDbPromise = null;
@@ -15995,7 +15997,11 @@ function handleShopStudioImageError(imgEl, idx) {
   if (!item) return;
 
   const key = getShopStudioItemKey(item);
-  if (item.generatedPhoto && imgEl.src.includes(item.generatedPhoto)) {
+  if (item.modelPhoto && imgEl.src.includes(item.modelPhoto)) {
+    delete shopModelMemCache[key];
+    delete item.modelPhoto;
+    deleteShopPhotoCacheIDB(`${key}|model`);
+  } else if (item.generatedPhoto && imgEl.src.includes(item.generatedPhoto)) {
     delete shopStudioMemCache[key];
     delete item.generatedPhoto;
     deleteShopPhotoCacheIDB(key);
@@ -16014,17 +16020,29 @@ async function hydrateShopStudioPhotos(items, seq) {
       const next = queue.shift();
       if (!next) return;
       const { item, idx } = next;
+      const key = getShopStudioItemKey(item);
 
-      const result = await requestShopStudioPhoto(item, { allowRemote });
+      const [result, cachedModel] = await Promise.all([
+        requestShopStudioPhoto(item, { allowRemote }),
+        shopModelMemCache[key]?.imageUrl
+          ? Promise.resolve(shopModelMemCache[key])
+          : readShopPhotoCacheIDB(`${key}|model`)
+      ]);
       if (seq !== shopRenderSequence) return;
+
+      if (result?.imageUrl) {
+        item.generatedPhoto = result.imageUrl;
+        shopStudioMemCache[key] = result;
+      }
+      if (cachedModel?.imageUrl) {
+        item.modelPhoto = cachedModel.imageUrl;
+        shopModelMemCache[key] = cachedModel;
+      }
 
       const stage = document.getElementById(`shop-stage-${idx}`);
       const activeMode = shopVisualModes[idx] || 'garment';
-      if (stage && activeMode === 'garment') {
-        if (result?.imageUrl) {
-          item.generatedPhoto = result.imageUrl;
-        }
-        stage.classList.toggle('is-model-mode', false);
+      if (stage && (activeMode === 'garment' || activeMode === 'model')) {
+        stage.classList.toggle('is-model-mode', activeMode === 'model');
         stage.innerHTML = getShopPhotoStageHtml(item, activeMode, idx);
       }
     }
@@ -16116,6 +16134,7 @@ async function enrichShopCardModeWithAI(idx, mode) {
     }));
 
     if (mode === 'garment') {
+      const existingGarment = item.generatedPhoto || shopStudioMemCache[baseKey]?.imageUrl || (await readShopPhotoCacheIDB(baseKey))?.imageUrl || '';
       const imgPrompt = `Clean 3:4 studio e-commerce product photograph on a soft light neutral studio background, centered, no mannequin, no text: ${item.colorName} (${item.color}) ${item.subType}, ${item.formality} style, crisp fabric texture, realistic lighting.`;
       const specPrompt = [
         `You are a menswear/womenswear product specialist.`,
@@ -16128,13 +16147,15 @@ async function enrichShopCardModeWithAI(idx, mode) {
       ].join('\n');
 
       const [genImg, specRes] = await Promise.all([
-        !item.generatedPhoto ? callGeminiImageGenerate(geminiKey, imgPrompt) : Promise.resolve(item.generatedPhoto),
+        existingGarment ? Promise.resolve(existingGarment) : callGeminiImageGenerate(geminiKey, imgPrompt),
         callGeminiGenerateContent(geminiKey, { parts: [{ text: specPrompt }], temperature: 0.25, responseMimeType: 'application/json' }).catch(() => null)
       ]);
 
       if (genImg) {
         item.generatedPhoto = genImg;
-        shopStudioMemCache[baseKey] = { imageUrl: genImg, cachedAt: Date.now() };
+        const rec = { imageUrl: genImg, cachedAt: Date.now() };
+        shopStudioMemCache[baseKey] = rec;
+        if (!existingGarment) await writeShopPhotoCacheIDB(baseKey, rec);
       }
       const raw = specRes?.candidates?.[0]?.content?.parts?.[0]?.text || '';
       const jm = raw.match(/\{[\s\S]*\}/);
@@ -16144,6 +16165,7 @@ async function enrichShopCardModeWithAI(idx, mode) {
         shopCardAICache[cacheKey] = { fabric_weave: `${item.formality} ${item.subType}`, construction_details: 'Clean tailored finish matching your Own Style' };
       }
     } else if (mode === 'model') {
+      const existingModel = item.modelPhoto || shopModelMemCache[baseKey]?.imageUrl || (await readShopPhotoCacheIDB(`${baseKey}|model`))?.imageUrl || '';
       const genderWord = userProfile.styleGender === 'female' ? 'woman' : 'man';
       const bodyWord = userProfile.bodyShape || 'athletic';
       const imgPrompt = `Full-body 3:4 editorial fashion lookbook photo of a ${genderWord} with a ${bodyWord} build wearing a ${item.colorName} ${item.subType} (${item.formality}), styled cleanly with tailored neutrals on a soft studio backdrop, natural lighting, no text.`;
@@ -16160,11 +16182,16 @@ async function enrichShopCardModeWithAI(idx, mode) {
       ].join('\n');
 
       const [genModelImg, styleRes] = await Promise.all([
-        !item.modelPhoto ? callGeminiImageGenerate(geminiKey, imgPrompt) : Promise.resolve(item.modelPhoto),
+        existingModel ? Promise.resolve(existingModel) : callGeminiImageGenerate(geminiKey, imgPrompt),
         callGeminiGenerateContent(geminiKey, { parts: [{ text: stylePrompt }], temperature: 0.3, responseMimeType: 'application/json' }).catch(() => null)
       ]);
 
-      if (genModelImg) item.modelPhoto = genModelImg;
+      if (genModelImg) {
+        item.modelPhoto = genModelImg;
+        const rec = { imageUrl: genModelImg, cachedAt: Date.now() };
+        shopModelMemCache[baseKey] = rec;
+        if (!existingModel) await writeShopPhotoCacheIDB(`${baseKey}|model`, rec);
+      }
       const raw = styleRes?.candidates?.[0]?.content?.parts?.[0]?.text || '';
       const jm = raw.match(/\{[\s\S]*\}/);
       if (jm) {
@@ -16211,13 +16238,15 @@ function getShopPhotoStageHtml(item, mode, idx = 0, isAILoading = false) {
   const studioFallback = buildGarmentStudioSvgDataUrl(item);
   const key = getShopStudioItemKey(item);
   const cachedRecord = shopStudioMemCache[key];
+  const cachedModelRecord = shopModelMemCache[key];
   const resolvedStudioUrl = item.generatedPhoto || cachedRecord?.imageUrl || '';
+  const resolvedModelUrl = item.modelPhoto || cachedModelRecord?.imageUrl || '';
   const aiData = shopCardAICache[`${key}|${effectiveMode}`] || null;
   const inflight = isAILoading || shopCardAIInflight.has(`${key}|${effectiveMode}`);
 
   const photoUrl = effectiveMode === 'color-cad'
     ? studioFallback
-    : (isModel ? (item.modelPhoto || resolvedStudioUrl || studioFallback) : (resolvedStudioUrl || studioFallback));
+    : (isModel ? (resolvedModelUrl || resolvedStudioUrl || studioFallback) : (resolvedStudioUrl || studioFallback));
 
   const modeLabel = effectiveMode === 'color-cad'
     ? `🎨 AI Exact Shade · ${item.colorName}`
@@ -16906,7 +16935,8 @@ async function refreshShopSuggestionsWithAI() {
 
     persistSavedShopList();
     renderShopRecommendations();
-    toast(`🤖 Ranked top ${aiShopRecommendations.length} needed pieces for your wardrobe!`);
+    toast(`🤖 Ranked top ${aiShopRecommendations.length} needed pieces! Generating & saving photos once...`);
+    pregenerateShopPhotosOnRefresh(aiShopRecommendations, geminiKey);
   } catch (err) {
     console.warn('AI Shop Refresh failed:', err);
     toast(`AI analysis failed (${err?.message || 'error'}) — showing local suggestions`);
@@ -16915,6 +16945,70 @@ async function refreshShopSuggestionsWithAI() {
     const b = document.getElementById('btn-refresh-shop-ai');
     if (b) { b.disabled = false; b.textContent = '🔄 Refresh Suggestions'; }
   }
+}
+
+async function pregenerateShopPhotosOnRefresh(items, geminiKey) {
+  if (!Array.isArray(items) || !items.length || !geminiKey) return;
+  const seq = ++shopPregenSequence;
+  const genderWord = userProfile.styleGender === 'female' ? 'woman' : 'man';
+  const bodyWord = userProfile.bodyShape || 'athletic';
+  const queue = items.map((item, idx) => ({ item, idx }));
+  const workerCount = Math.min(2, queue.length);
+
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (queue.length > 0) {
+      if (seq !== shopPregenSequence) return;
+      const next = queue.shift();
+      if (!next) return;
+      const { item, idx } = next;
+      const baseKey = getShopStudioItemKey(item);
+
+      const [idbGarment, idbModel] = await Promise.all([
+        shopStudioMemCache[baseKey]?.imageUrl ? Promise.resolve(shopStudioMemCache[baseKey]) : readShopPhotoCacheIDB(baseKey),
+        shopModelMemCache[baseKey]?.imageUrl ? Promise.resolve(shopModelMemCache[baseKey]) : readShopPhotoCacheIDB(`${baseKey}|model`)
+      ]);
+      if (seq !== shopPregenSequence) return;
+
+      if (idbGarment?.imageUrl) {
+        item.generatedPhoto = idbGarment.imageUrl;
+        shopStudioMemCache[baseKey] = idbGarment;
+      } else {
+        const garmentPrompt = `Clean 3:4 studio e-commerce product photograph on a soft light neutral studio background, centered, no mannequin, no text: ${item.colorName} (${item.color}) ${item.subType}, ${item.formality} style, crisp fabric texture, realistic lighting.`;
+        const genImg = await callGeminiImageGenerate(geminiKey, garmentPrompt);
+        if (seq !== shopPregenSequence) return;
+        if (genImg) {
+          item.generatedPhoto = genImg;
+          const rec = { imageUrl: genImg, cachedAt: Date.now() };
+          shopStudioMemCache[baseKey] = rec;
+          await writeShopPhotoCacheIDB(baseKey, rec);
+        }
+      }
+
+      if (idbModel?.imageUrl) {
+        item.modelPhoto = idbModel.imageUrl;
+        shopModelMemCache[baseKey] = idbModel;
+      } else {
+        const modelPrompt = `Full-body 3:4 editorial fashion lookbook photo of a ${genderWord} with a ${bodyWord} build wearing a ${item.colorName} ${item.subType} (${item.formality}), styled cleanly with tailored neutrals on a soft studio backdrop, natural lighting, no text.`;
+        const genModelImg = await callGeminiImageGenerate(geminiKey, modelPrompt);
+        if (seq !== shopPregenSequence) return;
+        if (genModelImg) {
+          item.modelPhoto = genModelImg;
+          const rec = { imageUrl: genModelImg, cachedAt: Date.now() };
+          shopModelMemCache[baseKey] = rec;
+          await writeShopPhotoCacheIDB(`${baseKey}|model`, rec);
+        }
+      }
+
+      const stage = document.getElementById(`shop-stage-${idx}`);
+      const activeMode = shopVisualModes[idx] || 'garment';
+      if (stage && (activeMode === 'garment' || activeMode === 'model')) {
+        stage.classList.toggle('is-model-mode', activeMode === 'model');
+        stage.innerHTML = getShopPhotoStageHtml(item, activeMode, idx, false);
+      }
+    }
+  });
+
+  await Promise.all(workers);
 }
 
 function renderShopRecommendations() {
