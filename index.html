@@ -7717,9 +7717,28 @@ function formalityScore(f) {
   }[f] ?? 2;
 }
 
+function isGymOrLoungeItem(it) {
+  if (!it) return false;
+  const f = (it.formality || '').toLowerCase();
+  if (f === 'athleisure' || f === 'lounge') return true;
+  const text = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''}`.toLowerCase();
+  return /\b(athletic|soccer|football|running|gym|workout|training|track|sweatpants|joggers|pajama|sleepwear|swim|trunks)\b/.test(text);
+}
+
+function isDrawstringOrAthleticBottom(bottom) {
+  if (!bottom) return false;
+  if (isGymOrLoungeItem(bottom)) return true;
+  const text = `${bottom.name || ''} ${bottom.subType || ''} ${bottom.aiDescription || ''}`.toLowerCase();
+  return /\b(drawstring|elastic waist|elasticated waist|pull-on|sweatshorts|boardshorts|track pants|cargo joggers|leggings)\b/.test(text);
+}
+
 function formalityMatch(itemFormality, targetFormality) {
   if (!itemFormality || !targetFormality) return true;
   if (itemFormality === targetFormality) return true;
+  const itemF = String(itemFormality).toLowerCase();
+  const targetF = String(targetFormality).toLowerCase();
+  const isGymTarget = (targetF === 'athleisure' || targetF === 'lounge');
+  if (!isGymTarget && (itemF === 'athleisure' || itemF === 'lounge')) return false;
   const diff = Math.abs(formalityScore(itemFormality) - formalityScore(targetFormality));
   return diff <= 1.25; // allow adjacent formality tiers to blend naturally
 }
@@ -8557,6 +8576,16 @@ function colorDistanceHSL(hex1, hex2) {
 }
 
 function proposeBeltForOutfit(shoe, bottom, top, outer, accessoryPool) {
+  if (isDrawstringOrAthleticBottom(bottom)) {
+    return {
+      beltItem: null,
+      colorMatchClose: false,
+      proposedHex: null,
+      proposedColorName: null,
+      status: 'none',
+      styleNote: 'No belt needed for elastic / drawstring / athletic bottoms'
+    };
+  }
   const shoeColor = shoe ? shoe.color : '#222222';
   const shoeName = ((shoe ? shoe.name : '') + ' ' + (shoe ? shoe.subType : '')).toLowerCase();
   const botColor = bottom ? bottom.color : '#1e293b';
@@ -9064,9 +9093,11 @@ function generateOutfit() {
     }
   }
 
+  const allowGymInMain = (targetFormality === 'athleisure' || targetFormality === 'lounge');
   const filter = (items) => {
     const allowed = items.filter(it => !isItemDisliked(it));
-    const pool = allowed.length > 0 ? allowed : items;
+    const nonGym = allowGymInMain ? allowed : allowed.filter(it => !isGymOrLoungeItem(it));
+    const pool = nonGym.length > 0 ? nonGym : (allowed.length > 0 ? allowed : items);
     let suitable = pool.filter(it => weatherSuitable(it) && formalityMatch(it.formality, targetFormality));
     if (suitable.length === 0) suitable = pool.filter(it => weatherSuitable(it));
     if (suitable.length === 0) suitable = pool.filter(it => formalityMatch(it.formality, targetFormality));
@@ -9077,7 +9108,9 @@ function generateOutfit() {
   const tops = filter(byCategory.tops);
   const bottoms = filter(byCategory.bottoms);
   const shoes = filter(byCategory.shoes);
-  const rawOuterwear = byCategory.outerwear.filter(it => !isItemDisliked(it));
+  const rawOuterwearAll = byCategory.outerwear.filter(it => !isItemDisliked(it));
+  const rawOuterwearNonGym = allowGymInMain ? rawOuterwearAll : rawOuterwearAll.filter(it => !isGymOrLoungeItem(it));
+  const rawOuterwear = rawOuterwearNonGym.length > 0 ? rawOuterwearNonGym : rawOuterwearAll;
   const nonBeltAccessories = filter(byCategory.accessories.filter(a => !isBeltItem(a)));
 
   const layerInfo = getTargetTopLayers();
@@ -9615,7 +9648,7 @@ function renderProposedMidLayerRow(proposed, stepBadge) {
 }
 
 function renderBeltOutfitRow(beltRec, stepBadge) {
-  if (!beltRec) return '';
+  if (!beltRec || beltRec.status === 'none') return '';
   const belt = beltRec.beltItem;
   const safeHex = escapeHtml(beltRec.proposedHex || '#7a4e2d');
   const safeName = escapeHtml(beltRec.proposedColorName || 'Cognac Brown Leather');
@@ -9775,7 +9808,9 @@ function renderOutfit() {
   }
 
   // 4. WAIST: Belt (Accessories) — sits between tops and bottoms!
-  items += renderBeltOutfitRow(outfit.beltRec, `↔️ #${stepNum++} · Waist / Belt`);
+  if (outfit.beltRec && outfit.beltRec.status !== 'none') {
+    items += renderBeltOutfitRow(outfit.beltRec, `↔️ #${stepNum++} · Waist / Belt`);
+  }
 
   // 5. LEGS: Bottoms (Jeans, Chinos, Trousers, Skirt, Shorts)
   items += renderOutfitItem(outfit.bottom, 'Bottoms (Legs)', `⬇️ #${stepNum++} · Bottoms`);
@@ -10219,7 +10254,13 @@ function hydrateAIDailyOutfitFromPicked(picked, currentTemp) {
   const bp = buildPersonalStyleBlueprint();
   const midLayer = findById(picked.midLayerId);
   const outerwear = findById(picked.outerwearId);
-  const beltItem = findById(picked.beltId);
+  const targetF = (typeof getDayFormality === 'function' ? getDayFormality() : 'casual').toLowerCase();
+  if (targetF !== 'athleisure' && targetF !== 'lounge') {
+    if (isGymOrLoungeItem(top) || isGymOrLoungeItem(bottom) || isGymOrLoungeItem(midLayer) || isGymOrLoungeItem(outerwear)) {
+      return null;
+    }
+  }
+  const beltItem = isDrawstringOrAthleticBottom(bottom) ? null : findById(picked.beltId);
   const accessory = findById(picked.accessoryId);
   const actualLayers = 1 + (midLayer ? 1 : 0) + (outerwear ? 1 : 0);
   const beltRec = beltItem
@@ -10306,11 +10347,14 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [] }) 
       ? `Choose the most sensible number of top layers (1, 2, or 3) for ${currentTemp}°C ${cond}. Do NOT over-layer in warm weather (23°C+ usually needs 1 layer, maybe 2 only if rain/evening chill).`
       : `User locked ${layerOverride} top layer(s).`;
 
-    const compactWardrobe = compactWardrobeForAI(wardrobe);
+    const allowGymInMain = (targetFormality === 'athleisure' || targetFormality === 'lounge');
+    const mainWardrobePool = allowGymInMain ? wardrobe : wardrobe.filter(it => !isGymOrLoungeItem(it));
+    const compactWardrobe = compactWardrobeForAI(mainWardrobePool.length >= 3 ? mainWardrobePool : wardrobe);
 
     const prompt = [
       `You are the master personal stylist for WhaToWear. Pick today's best outfit from the user's wardrobe JSON.`,
       `Weather: ${currentTemp}°C, ${cond}, Season: ${sInfo.name}. Target Formality: ${targetFormality}.`,
+      !allowGymInMain ? `Strictly exclude gym, workout, soccer/athletic shorts, athletic tops, and loungewear/pajamas — those belong in the separate Morning Exercise Outfit.` : '',
       `Layering Rule: ${layerRuleText} Never put an athleisure/sport windbreaker over a chunky knit sweater/cardigan or formal shirt. Keep fabrics, formality, and colors coherent.`,
       avoidIds.length ? `Avoid repeating these item IDs as main pieces so the user gets a fresh alternative: ${JSON.stringify(avoidIds)}.` : '',
       typeof buildMasterPersonalContextForAI === 'function'
