@@ -10105,6 +10105,22 @@ function isStrictSportPiece(it) {
 }
 
 let exercisePreferShorts = localStorage.getItem('wtw_exercise_prefer_shorts') === 'true';
+let exerciseSecondLayer = localStorage.getItem('wtw_exercise_second_layer') === 'true';
+
+function isNonExerciseStreetBottom(it) {
+  if (!it || it.category !== 'bottoms') return false;
+  const text = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''}`.toLowerCase();
+  return /\b(jeans|denim|chino|chinos|trouser|trousers|dress pant|slacks|corduroy|suit|khaki)\b/.test(text);
+}
+
+function isExerciseSecondLayerCandidate(it) {
+  if (!it || isItemDisliked(it)) return false;
+  if (it.category !== 'outerwear' && it.category !== 'tops') return false;
+  const text = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''}`.toLowerCase();
+  if (/\b(blazer|suit|trench|overcoat|topcoat|pea coat|denim jacket|leather|moto|dress shirt|button-down|oxford)\b/.test(text)) return false;
+  return /\b(zip hoodie|hoodie|sweatshirt|fleece|windbreaker|track jacket|pullover|quarter-zip|half-zip|anorak|running jacket|gym jacket|training jacket)\b/.test(text)
+    || (it.category === 'outerwear' && (it.formality === 'athleisure' || /\b(sport|athletic|gym|running|training|athleisure)\b/.test(text)));
+}
 
 function generateExerciseOutfit(avoidIds = []) {
   const tripCtx = (typeof getActiveTripContext === 'function') ? getActiveTripContext() : null;
@@ -10116,7 +10132,9 @@ function generateExerciseOutfit(avoidIds = []) {
     : (weather && typeof weather.temp === 'number' ? weather.temp : 18);
 
   const topsPool = pool.filter(i => i.category === 'tops' && !isItemDisliked(i));
-  const bottomsPool = pool.filter(i => i.category === 'bottoms' && !isItemDisliked(i));
+  const rawBottomsPool = pool.filter(i => i.category === 'bottoms' && !isItemDisliked(i));
+  const comfBottoms = rawBottomsPool.filter(i => !isNonExerciseStreetBottom(i));
+  const bottomsPool = comfBottoms.length ? comfBottoms : rawBottomsPool;
   const shoesPool = pool.filter(i => i.category === 'shoes' && !isItemDisliked(i));
   if (!topsPool.length || !bottomsPool.length || !shoesPool.length) return null;
 
@@ -10191,7 +10209,21 @@ function generateExerciseOutfit(avoidIds = []) {
   const shoe = pickBest(exShoes, scoreShoe);
   if (!top || !bottom || !shoe) return null;
 
-  return { top, bottom, shoe, morningTemp };
+  let secondLayer = null;
+  if (exerciseSecondLayer) {
+    const layerPool = pool.filter(i => i.id !== top.id && isExerciseSecondLayerCandidate(i));
+    if (layerPool.length) {
+      secondLayer = pickBest(layerPool, (l) => {
+        let s = isStrictSportPiece(l) ? 30 : 12;
+        if (l.formality === 'athleisure') s += 12;
+        s -= getItemWearCount(l) * 1.5;
+        s += ((dayNum + l.id.charCodeAt(0)) % 5) * 0.5;
+        return s;
+      });
+    }
+  }
+
+  return { top, secondLayer, bottom, shoe, morningTemp };
 }
 
 function renderExerciseOutfit() {
@@ -10204,34 +10236,57 @@ function renderExerciseOutfit() {
       const saved = safeJSON('wtw_exercise_outfit_today', null);
       if (saved && saved.date === todayStr) {
         const top = wardrobe.find(w => w.id === saved.topId);
+        const secondLayer = saved.secondLayerId ? wardrobe.find(w => w.id === saved.secondLayerId) : null;
         const bottom = wardrobe.find(w => w.id === saved.bottomId);
         const shoe = wardrobe.find(w => w.id === saved.shoeId);
         if (top && bottom && shoe) {
-          activeExerciseOutfit = { date: todayStr, top, bottom, shoe, morningTemp: saved.morningTemp ?? 18, logged: !!saved.logged };
+          activeExerciseOutfit = { date: todayStr, top, secondLayer, bottom, shoe, morningTemp: saved.morningTemp ?? 18, logged: !!saved.logged };
         }
       }
     } catch {}
   }
 
-  if (!activeExerciseOutfit || activeExerciseOutfit.date !== todayStr || (exercisePreferShorts && !isShortsBottom(activeExerciseOutfit.bottom))) {
+  const needsRefresh = !activeExerciseOutfit
+    || activeExerciseOutfit.date !== todayStr
+    || isNonExerciseStreetBottom(activeExerciseOutfit.bottom)
+    || (exercisePreferShorts && !isShortsBottom(activeExerciseOutfit.bottom))
+    || (exerciseSecondLayer && !activeExerciseOutfit.secondLayer)
+    || (!exerciseSecondLayer && activeExerciseOutfit.secondLayer);
+
+  if (needsRefresh) {
     const picked = generateExerciseOutfit();
     if (!picked) { section.innerHTML = ''; return; }
-    const keepExisting = activeExerciseOutfit && activeExerciseOutfit.date === todayStr;
-    activeExerciseOutfit = keepExisting
-      ? { ...activeExerciseOutfit, bottom: picked.bottom, logged: false }
+    const keepBase = activeExerciseOutfit && activeExerciseOutfit.date === todayStr && !isNonExerciseStreetBottom(activeExerciseOutfit.bottom);
+    activeExerciseOutfit = keepBase
+      ? {
+          ...activeExerciseOutfit,
+          bottom: (exercisePreferShorts && !isShortsBottom(activeExerciseOutfit.bottom)) ? picked.bottom : activeExerciseOutfit.bottom,
+          secondLayer: exerciseSecondLayer ? (activeExerciseOutfit.secondLayer || picked.secondLayer) : null,
+          logged: false
+        }
       : { date: todayStr, ...picked, logged: false };
     try {
       localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
-        date: todayStr, topId: activeExerciseOutfit.top.id, bottomId: activeExerciseOutfit.bottom.id, shoeId: activeExerciseOutfit.shoe.id, morningTemp: activeExerciseOutfit.morningTemp, logged: false
+        date: todayStr,
+        topId: activeExerciseOutfit.top.id,
+        secondLayerId: activeExerciseOutfit.secondLayer?.id || null,
+        bottomId: activeExerciseOutfit.bottom.id,
+        shoeId: activeExerciseOutfit.shoe.id,
+        morningTemp: activeExerciseOutfit.morningTemp,
+        logged: false
       }));
     } catch {}
   }
 
   const ex = activeExerciseOutfit;
-  const itemsHtml =
-    renderOutfitItem(ex.top, 'Exercise Top (Breathable / Performance)', '🏃 #1 · Top') +
-    renderOutfitItem(ex.bottom, 'Exercise Pants / Shorts', '🩳 #2 · Bottom') +
-    renderOutfitItem(ex.shoe, 'Exercise Shoes / Trainers', '👟 #3 · Shoes');
+  let step = 1;
+  let itemsHtml = renderOutfitItem(ex.top, 'Exercise Top (Breathable / Performance)', `🏃 #${step++} · Top`);
+  if (ex.secondLayer) {
+    itemsHtml += renderOutfitItem(ex.secondLayer, 'Exercise 2nd Layer (Hoodie / Windbreaker / Fleece)', `🧥 #${step++} · 2nd Layer`);
+  }
+  itemsHtml += renderOutfitItem(ex.bottom, 'Exercise Pants / Shorts', `🩳 #${step++} · Bottom`);
+  itemsHtml += renderOutfitItem(ex.shoe, 'Exercise Shoes / Trainers', `👟 #${step++} · Shoes`);
+  const itemCount = ex.secondLayer ? 4 : 3;
 
   section.innerHTML = `
     <div class="outfit-display" style="margin-bottom:14px; border:1px solid rgba(0,229,192,0.28);">
@@ -10239,21 +10294,57 @@ function renderExerciseOutfit() {
         <div>
           <h2 style="margin:0; text-align:left; font-size:1.08rem;">🏃 Morning Exercise Outfit</h2>
           <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">
-            Daily workout pick · 🌅 Morning ~${Math.round(ex.morningTemp)}°C · Top + ${isShortsBottom(ex.bottom) ? 'Shorts' : 'Pants'} + Shoes
+            Daily workout pick · 🌅 Morning ~${Math.round(ex.morningTemp)}°C · Top${ex.secondLayer ? ' + 2nd Layer' : ''} + ${isShortsBottom(ex.bottom) ? 'Shorts' : 'Pants'} + Shoes
           </div>
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
           <button type="button" class="override-btn ${exercisePreferShorts ? 'active' : ''}" onclick="toggleExercisePreferShorts()" style="font-size:0.75rem; padding:5px 11px;">
             ${exercisePreferShorts ? '✓ Prefer Shorts ON' : '🩳 I Prefer Shorts'}
           </button>
+          <button type="button" class="override-btn ${exerciseSecondLayer ? 'active' : ''}" onclick="toggleExerciseSecondLayer()" style="font-size:0.75rem; padding:5px 11px;">
+            ${exerciseSecondLayer ? '✓ 2nd Layer ON' : '🧥 I Need 2nd Layer'}
+          </button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="shuffleExerciseOutfit()">🔀 Shuffle</button>
-          <button type="button" id="btn-wear-exercise" class="btn-wear-today ${ex.logged ? 'logged' : ''}" onclick="logExerciseWearToday('${ex.top.id}', '${ex.bottom.id}', '${ex.shoe.id}')">
-            ${ex.logged ? '✓ Logged (3 items worn)' : '📌 Wearing for Workout!'}
+          <button type="button" id="btn-wear-exercise" class="btn-wear-today ${ex.logged ? 'logged' : ''}" onclick="logExerciseWearToday('${ex.top.id}', '${ex.secondLayer?.id || ''}', '${ex.bottom.id}', '${ex.shoe.id}')">
+            ${ex.logged ? `✓ Logged (${itemCount} items worn)` : '📌 Wearing for Workout!'}
           </button>
         </div>
       </div>
       <div class="outfit-items">${itemsHtml}</div>
     </div>`;
+}
+
+function toggleExerciseSecondLayer() {
+  exerciseSecondLayer = !exerciseSecondLayer;
+  try { localStorage.setItem('wtw_exercise_second_layer', exerciseSecondLayer ? 'true' : 'false'); } catch {}
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const picked = generateExerciseOutfit();
+  if (picked) {
+    if (activeExerciseOutfit && activeExerciseOutfit.date === todayStr) {
+      activeExerciseOutfit = {
+        ...activeExerciseOutfit,
+        secondLayer: exerciseSecondLayer ? picked.secondLayer : null,
+        logged: false
+      };
+    } else {
+      activeExerciseOutfit = { date: todayStr, ...picked, logged: false };
+    }
+    try {
+      localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
+        date: todayStr,
+        topId: activeExerciseOutfit.top.id,
+        secondLayerId: activeExerciseOutfit.secondLayer?.id || null,
+        bottomId: activeExerciseOutfit.bottom.id,
+        shoeId: activeExerciseOutfit.shoe.id,
+        morningTemp: activeExerciseOutfit.morningTemp,
+        logged: false
+      }));
+    } catch {}
+  }
+  renderExerciseOutfit();
+  toast(exerciseSecondLayer
+    ? (activeExerciseOutfit?.secondLayer ? `🧥 Added 2nd layer: ${activeExerciseOutfit.secondLayer.name}` : '🧥 2nd Layer ON (no sport hoodie/windbreaker found in wardrobe)')
+    : '🏃 Removed 2nd layer from Morning Exercise');
 }
 
 function toggleExercisePreferShorts() {
@@ -10266,7 +10357,7 @@ function toggleExercisePreferShorts() {
       activeExerciseOutfit = { ...activeExerciseOutfit, bottom: picked.bottom, logged: false };
       try {
         localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
-          date: todayStr, topId: activeExerciseOutfit.top.id, bottomId: activeExerciseOutfit.bottom.id, shoeId: activeExerciseOutfit.shoe.id, morningTemp: activeExerciseOutfit.morningTemp, logged: false
+          date: todayStr, topId: activeExerciseOutfit.top.id, secondLayerId: activeExerciseOutfit.secondLayer?.id || null, bottomId: activeExerciseOutfit.bottom.id, shoeId: activeExerciseOutfit.shoe.id, morningTemp: activeExerciseOutfit.morningTemp, logged: false
         }));
       } catch {}
     }
@@ -10276,7 +10367,7 @@ function toggleExercisePreferShorts() {
       activeExerciseOutfit = { date: todayStr, ...picked, logged: false };
       try {
         localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
-          date: todayStr, topId: picked.top.id, bottomId: picked.bottom.id, shoeId: picked.shoe.id, morningTemp: picked.morningTemp, logged: false
+          date: todayStr, topId: picked.top.id, secondLayerId: picked.secondLayer?.id || null, bottomId: picked.bottom.id, shoeId: picked.shoe.id, morningTemp: picked.morningTemp, logged: false
         }));
       } catch {}
     }
@@ -10287,7 +10378,7 @@ function toggleExercisePreferShorts() {
 
 function shuffleExerciseOutfit() {
   const avoid = activeExerciseOutfit
-    ? [activeExerciseOutfit.top?.id, activeExerciseOutfit.bottom?.id].filter(Boolean)
+    ? [activeExerciseOutfit.top?.id, activeExerciseOutfit.secondLayer?.id, activeExerciseOutfit.bottom?.id].filter(Boolean)
     : [];
   const picked = generateExerciseOutfit(avoid);
   if (!picked) { toast('No alternative exercise pieces found'); return; }
@@ -10295,14 +10386,14 @@ function shuffleExerciseOutfit() {
   activeExerciseOutfit = { date: todayStr, ...picked, logged: false };
   try {
     localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
-      date: todayStr, topId: picked.top.id, bottomId: picked.bottom.id, shoeId: picked.shoe.id, morningTemp: picked.morningTemp, logged: false
+      date: todayStr, topId: picked.top.id, secondLayerId: picked.secondLayer?.id || null, bottomId: picked.bottom.id, shoeId: picked.shoe.id, morningTemp: picked.morningTemp, logged: false
     }));
   } catch {}
   renderExerciseOutfit();
 }
 
-function logExerciseWearToday(topId, bottomId, shoeId) {
-  const ids = [topId, bottomId, shoeId].filter(Boolean);
+function logExerciseWearToday(topId, secondLayerId, bottomId, shoeId) {
+  const ids = [topId, secondLayerId, bottomId, shoeId].filter(Boolean);
   const updated = [];
   ids.forEach(id => {
     const it = wardrobe.find(w => w.id === id);
