@@ -20195,9 +20195,13 @@ function getFeedbackLog() {
 function mergeFeedbackLogs(localLog, remoteLog, clearedAt = 0) {
   const map = new Map();
   [...(localLog || []), ...(remoteLog || [])].forEach(e => {
-    if (e && e.id && e.id > clearedAt) map.set(e.id, e);
+    if (!e || !e.id || e.id <= clearedAt) return;
+    const prev = map.get(e.id);
+    if (!prev || (e.updatedAt || e.id) >= (prev.updatedAt || prev.id)) {
+      map.set(e.id, e);
+    }
   });
-  return Array.from(map.values()).sort((a, b) => b.id - a.id).slice(0, 15);
+  return Array.from(map.values()).sort((a, b) => b.id - a.id).slice(0, 30);
 }
 
 async function syncFeedbackLogToCloud() {
@@ -20244,6 +20248,9 @@ async function submitFeedbackBox(copyToClipboard = true) {
   }
   const entry = {
     id: Date.now(),
+    updatedAt: Date.now(),
+    done: false,
+    doneAt: null,
     kind: kindEl?.value || 'Bug / Issue',
     device: /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? '📱 Phone' : '💻 PC',
     text,
@@ -20252,7 +20259,7 @@ async function submitFeedbackBox(copyToClipboard = true) {
   };
   const log = getFeedbackLog();
   log.unshift(entry);
-  try { localStorage.setItem('wtw_feedback_log', JSON.stringify(log.slice(0, 15))); } catch {}
+  try { localStorage.setItem('wtw_feedback_log', JSON.stringify(log.slice(0, 30))); } catch {}
   if (textEl) textEl.value = '';
   renderFeedbackHistory();
   syncFeedbackLogToCloud();
@@ -20291,6 +20298,19 @@ function clearFeedbackLog() {
   toast('Feedback log cleared');
 }
 
+function toggleFeedbackDone(id) {
+  const log = getFeedbackLog();
+  const entry = log.find(e => e.id === id);
+  if (!entry) return;
+  entry.done = !entry.done;
+  entry.doneAt = entry.done ? new Date().toLocaleString() : null;
+  entry.updatedAt = Date.now();
+  try { localStorage.setItem('wtw_feedback_log', JSON.stringify(log)); } catch {}
+  renderFeedbackHistory();
+  syncFeedbackLogToCloud();
+  toast(entry.done ? '✓ Marked request as done (kept in history)' : 'Reopened request');
+}
+
 function renderFeedbackHistory() {
   const listEl = document.getElementById('wtw-feedback-history');
   if (!listEl) return;
@@ -20299,15 +20319,21 @@ function renderFeedbackHistory() {
     listEl.innerHTML = `<div style="font-size:0.74rem; color:#64748b;">No saved requests yet.</div>`;
     return;
   }
-  listEl.innerHTML = log.slice(0, 8).map(e => `
-    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 8px; background:rgba(15,23,42,0.7); border:1px solid rgba(148,163,184,0.2); border-radius:8px; font-size:0.74rem;">
+  const ordered = [...log].sort((a, b) => (Boolean(a.done) - Boolean(b.done)) || (b.id - a.id));
+  listEl.innerHTML = ordered.slice(0, 20).map(e => {
+    const isDone = Boolean(e.done);
+    return `
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 8px; background:${isDone ? 'rgba(15,23,42,0.42)' : 'rgba(15,23,42,0.78)'}; border:1px solid ${isDone ? 'rgba(52,211,153,0.25)' : 'rgba(148,163,184,0.25)'}; border-radius:8px; font-size:0.74rem; opacity:${isDone ? '0.72' : '1'};">
+      <input type="checkbox" ${isDone ? 'checked' : ''} onchange="toggleFeedbackDone(${e.id})" title="Mark as done (keeps history)" style="cursor:pointer; accent-color:#10b981; flex-shrink:0;">
       <div style="min-width:0; flex:1;">
-        <div style="color:#5eead4; font-weight:700;">${escapeHtml(e.kind)}${e.device ? ` · ${escapeHtml(e.device)}` : ''} · <span style="color:#94a3b8; font-weight:400;">${escapeHtml(e.createdAt)}</span></div>
-        <div style="color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(e.text)}</div>
+        <div style="color:${isDone ? '#6ee7b7' : '#5eead4'}; font-weight:700;">
+          ${isDone ? '✓ Done · ' : ''}${escapeHtml(e.kind)}${e.device ? ` · ${escapeHtml(e.device)}` : ''} · <span style="color:#94a3b8; font-weight:400;">${escapeHtml(e.createdAt)}</span>
+        </div>
+        <div style="color:#e2e8f0; ${isDone ? 'text-decoration:line-through; color:#94a3b8;' : ''} white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(e.text)}</div>
       </div>
-      <button type="button" class="btn btn-secondary btn-sm" style="padding:3px 8px; font-size:0.68rem;" onclick="recopyFeedbackEntry(${e.id})">📋 Copy</button>
-    </div>
-  `).join('');
+      <button type="button" class="btn btn-secondary btn-sm" style="padding:3px 8px; font-size:0.68rem; flex-shrink:0;" onclick="recopyFeedbackEntry(${e.id})">📋 Copy</button>
+    </div>`;
+  }).join('');
 }
 
 init();
