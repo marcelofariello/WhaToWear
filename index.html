@@ -9779,6 +9779,7 @@ function renderOutfit() {
   }
 
   const outfit = generateOutfit();
+  window.lastRenderedMainOutfit = outfit;
 
   if (!outfit || !outfit.top) {
     section.innerHTML = `
@@ -19904,7 +19905,197 @@ function init() {
   fetchWeather();
 }
 
+/* ================================================================
+   IN-APP FEEDBACK / BUG REPORT BOX (COPY-READY FOR ANTIGRAVITY)
+   ================================================================ */
+const wtwRuntimeErrors = [];
+window.addEventListener('error', (e) => {
+  try {
+    wtwRuntimeErrors.push({ msg: e.message || 'Error', line: e.lineno || 0, time: new Date().toLocaleTimeString() });
+    if (wtwRuntimeErrors.length > 5) wtwRuntimeErrors.shift();
+  } catch {}
+});
+window.addEventListener('unhandledrejection', (e) => {
+  try {
+    wtwRuntimeErrors.push({ msg: String(e.reason?.message || e.reason || 'Promise rejection'), line: 0, time: new Date().toLocaleTimeString() });
+    if (wtwRuntimeErrors.length > 5) wtwRuntimeErrors.shift();
+  } catch {}
+});
+
+function buildAntigravityContextSnapshot() {
+  const activeTabEl = document.querySelector('.tab-content.active');
+  const activeTab = activeTabEl ? activeTabEl.id : 'unknown';
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const now = new Date();
+  const o = window.lastRenderedMainOutfit || null;
+  const ex = typeof activeExerciseOutfit !== 'undefined' ? activeExerciseOutfit : null;
+  const describeItem = (it) => it ? `${it.name} (${it.subType}, ${it.formality}, ${it.colorName || it.color || ''})` : null;
+
+  return {
+    day: `${dayNames[now.getDay()]} ${now.toISOString().slice(0, 10)}`,
+    activeTab,
+    formality: typeof getDayFormality === 'function' ? getDayFormality() : 'unknown',
+    season: typeof getLocationSeasonInfo === 'function' ? getLocationSeasonInfo().name : 'unknown',
+    weather: weather ? `${weather.temp}°C ${weather.desc || weather.main || ''}` : 'unavailable',
+    mainOutfit: o ? {
+      top: describeItem(o.top),
+      midLayer: describeItem(o.midLayer),
+      outerwear: describeItem(o.outerwear),
+      belt: o.beltRec?.beltItem ? describeItem(o.beltRec.beltItem) : (o.beltRec?.status || null),
+      bottom: describeItem(o.bottom),
+      shoe: describeItem(o.shoe)
+    } : null,
+    exerciseOutfit: ex ? {
+      top: describeItem(ex.top),
+      bottom: describeItem(ex.bottom),
+      shoe: describeItem(ex.shoe)
+    } : null,
+    recentErrors: wtwRuntimeErrors.slice()
+  };
+}
+
+function toggleFeedbackModal(open) {
+  const modal = document.getElementById('wtw-feedback-modal');
+  if (!modal) return;
+  const show = typeof open === 'boolean' ? open : modal.style.display === 'none';
+  modal.style.display = show ? 'flex' : 'none';
+  if (show) {
+    const preview = document.getElementById('wtw-feedback-context-preview');
+    if (preview) {
+      const ctx = buildAntigravityContextSnapshot();
+      preview.textContent = `${ctx.day} · Tab: ${ctx.activeTab} · Formality: ${ctx.formality} · Weather: ${ctx.weather}` +
+        (ctx.recentErrors.length ? ` · ${ctx.recentErrors.length} JS error(s)` : '');
+    }
+    renderFeedbackHistory();
+  }
+}
+
+function getFeedbackLog() {
+  return safeJSON('wtw_feedback_log', []) || [];
+}
+
+function formatAntigravityPrompt(entry) {
+  const ctx = entry.context || buildAntigravityContextSnapshot();
+  return [
+    `[WhaToWear ${entry.kind || 'Feedback'}]`,
+    `Request: ${entry.text}`,
+    ``,
+    `App Context Snapshot:`,
+    `- Day/Tab: ${ctx.day} | ${ctx.activeTab}`,
+    `- Formality/Season/Weather: ${ctx.formality} | ${ctx.season} | ${ctx.weather}`,
+    ctx.mainOutfit ? `- Current Main Outfit: ${JSON.stringify(ctx.mainOutfit)}` : '',
+    ctx.exerciseOutfit ? `- Morning Exercise Outfit: ${JSON.stringify(ctx.exerciseOutfit)}` : '',
+    ctx.recentErrors && ctx.recentErrors.length ? `- Recent JS Errors: ${JSON.stringify(ctx.recentErrors)}` : ''
+  ].filter(Boolean).join('\n');
+}
+
+async function submitFeedbackBox(copyToClipboard = true) {
+  const kindEl = document.getElementById('wtw-feedback-kind');
+  const textEl = document.getElementById('wtw-feedback-text');
+  const text = (textEl?.value || '').trim();
+  if (!text) {
+    toast('Describe the issue or improvement first');
+    return;
+  }
+  const entry = {
+    id: Date.now(),
+    kind: kindEl?.value || 'Bug / Issue',
+    text,
+    createdAt: new Date().toLocaleString(),
+    context: buildAntigravityContextSnapshot()
+  };
+  const log = getFeedbackLog();
+  log.unshift(entry);
+  try { localStorage.setItem('wtw_feedback_log', JSON.stringify(log.slice(0, 15))); } catch {}
+  if (textEl) textEl.value = '';
+  renderFeedbackHistory();
+
+  if (copyToClipboard) {
+    const promptText = formatAntigravityPrompt(entry);
+    try {
+      await navigator.clipboard.writeText(promptText);
+      toast('📋 Copied with app context! Paste into Antigravity chat to apply.');
+    } catch {
+      toast('Saved to log (clipboard blocked by browser)');
+    }
+  } else {
+    toast('💾 Saved to feedback log');
+  }
+}
+
+async function recopyFeedbackEntry(id) {
+  const entry = getFeedbackLog().find(e => e.id === id);
+  if (!entry) return;
+  try {
+    await navigator.clipboard.writeText(formatAntigravityPrompt(entry));
+    toast('📋 Copied prompt for Antigravity!');
+  } catch {
+    toast('Clipboard copy failed');
+  }
+}
+
+function clearFeedbackLog() {
+  try { localStorage.removeItem('wtw_feedback_log'); } catch {}
+  renderFeedbackHistory();
+  toast('Feedback log cleared');
+}
+
+function renderFeedbackHistory() {
+  const listEl = document.getElementById('wtw-feedback-history');
+  if (!listEl) return;
+  const log = getFeedbackLog();
+  if (!log.length) {
+    listEl.innerHTML = `<div style="font-size:0.74rem; color:#64748b;">No saved requests yet.</div>`;
+    return;
+  }
+  listEl.innerHTML = log.slice(0, 5).map(e => `
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 8px; background:rgba(15,23,42,0.7); border:1px solid rgba(148,163,184,0.2); border-radius:8px; font-size:0.74rem;">
+      <div style="min-width:0; flex:1;">
+        <div style="color:#5eead4; font-weight:700;">${escapeHtml(e.kind)} · <span style="color:#94a3b8; font-weight:400;">${escapeHtml(e.createdAt)}</span></div>
+        <div style="color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(e.text)}</div>
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm" style="padding:3px 8px; font-size:0.68rem;" onclick="recopyFeedbackEntry(${e.id})">📋 Copy</button>
+    </div>
+  `).join('');
+}
+
 init();
 </script>
+
+<!-- Floating Feedback / Fix Request Button & Modal -->
+<button type="button" id="wtw-feedback-fab" onclick="toggleFeedbackModal(true)"
+  title="Report a bug or suggest an improvement for Antigravity"
+  style="position:fixed; right:18px; bottom:18px; z-index:950; background:#0f172a; color:#5eead4; border:1px solid rgba(0,229,192,0.45); border-radius:999px; padding:9px 14px; font-size:0.78rem; font-weight:700; cursor:pointer; box-shadow:0 8px 24px rgba(0,0,0,0.45);">
+  💬 Fix / Suggest
+</button>
+
+<div id="wtw-feedback-modal" onclick="if(event.target===this)toggleFeedbackModal(false)"
+  style="display:none; position:fixed; inset:0; z-index:1200; background:rgba(2,6,23,0.72); backdrop-filter:blur(4px); align-items:center; justify-content:center; padding:16px;">
+  <div style="width:100%; max-width:520px; background:#0b1220; border:1px solid rgba(0,229,192,0.35); border-radius:16px; padding:18px; color:#f1f5f9; box-shadow:0 20px 50px rgba(0,0,0,0.6);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <div style="font-size:1rem; font-weight:700; color:#5eead4;">💬 Report Issue or Suggest Improvement</div>
+      <button type="button" onclick="toggleFeedbackModal(false)" style="background:none; border:none; color:#94a3b8; font-size:1.1rem; cursor:pointer;">✕</button>
+    </div>
+    <div id="wtw-feedback-context-preview" style="font-size:0.72rem; color:#94a3b8; background:rgba(15,23,42,0.8); padding:6px 10px; border-radius:8px; margin-bottom:10px;"></div>
+    <label style="display:block; font-size:0.76rem; color:#cbd5e1; margin-bottom:4px;">Category</label>
+    <select id="wtw-feedback-kind" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid rgba(148,163,184,0.3); background:#0f172a; color:#f1f5f9; margin-bottom:10px; font-size:0.82rem;">
+      <option value="Bug / Absurd Outfit">🐛 Bug / Absurd Outfit</option>
+      <option value="Improvement / Feature">✨ Improvement / Feature</option>
+      <option value="Style / AI Quality">🎨 Style / AI Quality</option>
+    </select>
+    <label style="display:block; font-size:0.76rem; color:#cbd5e1; margin-bottom:4px;">What happened or what should be improved?</label>
+    <textarea id="wtw-feedback-text" rows="4" placeholder="e.g. Today's outfit paired X with Y, or I want the Morning Exercise card to also..."
+      style="width:100%; box-sizing:border-box; padding:9px 10px; border-radius:8px; border:1px solid rgba(148,163,184,0.3); background:#0f172a; color:#f1f5f9; font-size:0.84rem; resize:vertical; margin-bottom:10px;"></textarea>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+      <button type="button" class="btn btn-primary btn-sm" style="flex:1;" onclick="submitFeedbackBox(true)">📋 Copy Prompt for Antigravity</button>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="submitFeedbackBox(false)">💾 Save Only</button>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+      <span style="font-size:0.74rem; font-weight:700; color:#94a3b8;">Recent Requests</span>
+      <button type="button" onclick="clearFeedbackLog()" style="background:none; border:none; color:#94a3b8; font-size:0.7rem; cursor:pointer;">Clear</button>
+    </div>
+    <div id="wtw-feedback-history" style="display:flex; flex-direction:column; gap:6px; max-height:150px; overflow-y:auto;"></div>
+  </div>
+</div>
 </body>
 </html>
