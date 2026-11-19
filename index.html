@@ -8011,10 +8011,59 @@ function incrementItemWear(itemId) {
   toast(`👕 "${item.name}" worn count updated to ${item.wearCount}×`);
 }
 
-function logWearToday(topId, bottomId, outerId, midLayerId, beltId, shoeId, accessoryId) {
-  const log = getWearLog();
+function isOutfitLoggedToday(outfit) {
+  if (!outfit || !outfit.top || !outfit.bottom) return false;
   const todayStr = new Date().toISOString().split('T')[0];
-  log.unshift({
+  const log = getWearLog();
+  return log.some(e => e && e.date === todayStr && e.topId === outfit.top.id && e.bottomId === outfit.bottom.id);
+}
+
+function applyWearDelta(itemIds, delta, logEntry = null) {
+  const uniqueIds = Array.from(new Set((itemIds || []).filter(Boolean)));
+  const updatedItems = [];
+  uniqueIds.forEach(id => {
+    const it = wardrobe.find(w => w.id === id);
+    if (it) {
+      const current = getItemWearCount(it);
+      it.wearCount = Math.max(0, current + delta);
+      updatedItems.push(it);
+    }
+  });
+  if (logEntry) {
+    const log = getWearLog();
+    if (delta > 0) {
+      log.unshift({ ...logEntry, timestamp: Date.now() });
+      if (log.length > 40) log.pop();
+    } else if (delta < 0) {
+      const idx = log.findIndex(e =>
+        e && e.date === logEntry.date &&
+        e.topId === logEntry.topId &&
+        e.bottomId === logEntry.bottomId
+      );
+      if (idx !== -1) log.splice(idx, 1);
+    }
+    try { localStorage.setItem('wtw_wear_log', JSON.stringify(log)); } catch {}
+  }
+  if (updatedItems.length > 0) {
+    saveLocalDataOnly();
+    if (typeof syncWardrobeItemsToCloud === 'function') {
+      syncWardrobeItemsToCloud(updatedItems).catch(() => {});
+    }
+  }
+  return updatedItems;
+}
+
+function logWearToday(topId, bottomId, outerId, midLayerId, beltId, shoeId, accessoryId) {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const log = getWearLog();
+  const alreadyLogged = log.some(e => e && e.date === todayStr && e.topId === topId && e.bottomId === bottomId);
+  if (alreadyLogged) {
+    toast('✓ Today’s outfit is already counted in your wear history.');
+    return;
+  }
+
+  const wornIds = [topId, midLayerId, bottomId, outerId, beltId, shoeId, accessoryId].filter(Boolean);
+  const updatedItems = applyWearDelta(wornIds, 1, {
     date: todayStr,
     topId,
     midLayerId: midLayerId || null,
@@ -8022,33 +8071,15 @@ function logWearToday(topId, bottomId, outerId, midLayerId, beltId, shoeId, acce
     outerId: outerId || null,
     beltId: beltId || null,
     shoeId: shoeId || null,
-    accessoryId: accessoryId || null,
-    timestamp: Date.now()
+    accessoryId: accessoryId || null
   });
-  if (log.length > 40) log.pop();
-  localStorage.setItem('wtw_wear_log', JSON.stringify(log));
-
-  const wornIds = [topId, midLayerId, bottomId, outerId, beltId, shoeId, accessoryId].filter(Boolean);
-  const updatedItems = [];
-  wornIds.forEach(id => {
-    const it = wardrobe.find(w => w.id === id);
-    if (it) {
-      it.wearCount = (typeof it.wearCount === 'number' ? it.wearCount : Math.max(0, getItemWearCount(it) - 1)) + 1;
-      updatedItems.push(it);
-    }
-  });
-  if (updatedItems.length > 0) {
-    saveLocalDataOnly();
-    if (typeof syncWardrobeItemsToCloud === 'function') {
-      syncWardrobeItemsToCloud(updatedItems).catch(() => {});
-    }
-  }
 
   const countLabel = updatedItems.length === 1 ? '1 item worn' : `${updatedItems.length} items worn`;
   if (typeof getActiveTripContext === 'function') {
     const tripCtx = getActiveTripContext();
-    if (tripCtx && tripCtx.planEntry && !tripCtx.planEntry.worn) {
+    if (tripCtx && tripCtx.planEntry) {
       tripCtx.planEntry.worn = true;
+      tripCtx.planEntry.wearLogged = true;
       saveTrip();
       if (typeof renderTrip === 'function' && document.getElementById('tab-trip')?.classList.contains('active')) {
         renderTrip();
@@ -9074,6 +9105,13 @@ function evaluateOutfitScore(top, bottom, shoe, outer, accessory, opts = {}) {
   }
   if (isNeverWorn && !opts.skipWearLog) {
     score += 28;
+  }
+  if (!opts.skipWearLog) {
+    [top, midLayer, outer, bottom].filter(Boolean).forEach(it => {
+      const wcCount = getItemWearCount(it);
+      if (wcCount === 0) score += 8;
+      else score -= Math.min(20, wcCount * 2.5);
+    });
   }
 
   // Astral & Natal Chart transit alignment
@@ -10242,8 +10280,8 @@ function renderOutfit() {
     <div class="outfit-display">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
         <h2 style="margin:0; text-align:left;">✨ WhaToWear — What to Wear Today</h2>
-        <button id="btn-wear-today" class="btn-wear-today" onclick="logWearToday('${outfit.top.id}', '${outfit.bottom.id}', ${outerIdArg}, ${midIdArg}, ${beltIdArg}, ${shoeIdArg}, ${accIdArg})">
-          📌 I'm Wearing This Today!
+        <button id="btn-wear-today" class="btn-wear-today ${isOutfitLoggedToday(outfit) ? 'logged' : ''}" onclick="logWearToday('${outfit.top.id}', '${outfit.bottom.id}', ${outerIdArg}, ${midIdArg}, ${beltIdArg}, ${shoeIdArg}, ${accIdArg})">
+          ${isOutfitLoggedToday(outfit) ? '✓ Logged Today' : "📌 I'm Wearing This Today!"}
         </button>
       </div>
       <div class="outfit-items">${items}</div>
@@ -18395,6 +18433,9 @@ function selectTripItems(items, dayInfos, count, opts) {
       if (locationWornIds.has(x.it.id)) {
         s -= (x.it.category === 'tops' || x.it.category === 'outerwear') ? 14 : 5;
       }
+      if (x.it.category === 'tops' || x.it.category === 'outerwear') {
+        s -= Math.min(6, getItemWearCount(x.it) * 0.8);
+      }
       if (opts && opts.bias) s += opts.bias(x.it);
       s += Math.random();
       if (s > bs) { bs = s; best = x; }
@@ -19244,12 +19285,54 @@ function tripSubmitPacking() {
 
 function tripToggleWorn(i) {
   const p = trip.plan[i];
+  const d = trip.days && trip.days[i];
   if (!p) return;
   p.worn = !p.worn;
+  if (p.items) {
+    const ids = [p.items.top, p.items.mid, p.items.outer, p.items.bottom, p.items.belt, p.items.shoe, p.items.acc].filter(Boolean);
+    const logMeta = {
+      date: (d && d.date) || isoDate(new Date()),
+      topId: p.items.top,
+      midLayerId: p.items.mid || null,
+      bottomId: p.items.bottom,
+      outerId: p.items.outer || null,
+      beltId: p.items.belt || null,
+      shoeId: p.items.shoe || null,
+      accessoryId: p.items.acc || null
+    };
+    if (p.worn && !p.wearLogged) {
+      applyWearDelta(ids, 1, logMeta);
+      p.wearLogged = true;
+    } else if (!p.worn && p.wearLogged) {
+      applyWearDelta(ids, -1, logMeta);
+      p.wearLogged = false;
+    }
+  }
   saveTrip();
   rerenderTrip();
   renderTripBanner();
-  toast(p.worn ? '✓ Marked as worn — those pieces count as used' : 'Unmarked');
+  if (typeof renderWardrobe === 'function') renderWardrobe();
+  if (typeof renderWardrobeIllusionSection === 'function') renderWardrobeIllusionSection();
+  toast(p.worn ? '✓ Marked as worn — wardrobe wear counts updated!' : '↩ Unmarked & wear counts reverted');
+}
+
+function tripToggleExerciseWorn(i) {
+  const p = trip.plan[i];
+  if (!p || !p.exercise) return;
+  const ex = p.exercise;
+  const ids = [ex.top, ex.secondLayer, ex.bottom, ex.shoe].filter(Boolean);
+  p.exWorn = !p.exWorn;
+  if (p.exWorn && !p.exWearLogged) {
+    applyWearDelta(ids, 1);
+    p.exWearLogged = true;
+  } else if (!p.exWorn && p.exWearLogged) {
+    applyWearDelta(ids, -1);
+    p.exWearLogged = false;
+  }
+  saveTrip();
+  rerenderTrip();
+  if (typeof renderWardrobe === 'function') renderWardrobe();
+  toast(p.exWorn ? '🏃 Workout marked as worn — wear counts updated!' : '↩ Workout unmarked');
 }
 
 function tripSwapDay(i) {
@@ -19352,7 +19435,10 @@ function renderPlanDay(d, p, i) {
     if (exParts) {
       exHtml = `
         <div style="margin-top:10px; padding-top:8px; border-top:1px dashed var(--border);">
-          <div style="font-size:0.78rem; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">🏃 Exercise / Workout Outfit</div>
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;">
+            <span style="font-size:0.78rem; font-weight:700; color:var(--text-secondary);">🏃 Exercise / Workout Outfit</span>
+            <button type="button" class="btn ${p.exWorn ? 'btn-secondary' : 'btn-primary'} btn-sm" style="font-size:0.72rem; padding:3px 9px;" onclick="tripToggleExerciseWorn(${i})">${p.exWorn ? '✓ Workout worn (Undo)' : '✓ Wore workout'}</button>
+          </div>
           ${exParts}
         </div>`;
     }
@@ -19505,6 +19591,25 @@ function resumeTripMode() {
 
 function closeActiveTrip() {
   if (!trip || !Array.isArray(trip.days)) return;
+  const today = isoDate(new Date());
+  (trip.days || []).forEach((d, i) => {
+    const p = trip.plan && trip.plan[i];
+    if (p && p.items && !p.wearLogged && d.date <= today) {
+      const ids = [p.items.top, p.items.mid, p.items.outer, p.items.bottom, p.items.belt, p.items.shoe, p.items.acc].filter(Boolean);
+      applyWearDelta(ids, 1, {
+        date: d.date,
+        topId: p.items.top,
+        midLayerId: p.items.mid || null,
+        bottomId: p.items.bottom,
+        outerId: p.items.outer || null,
+        beltId: p.items.belt || null,
+        shoeId: p.items.shoe || null,
+        accessoryId: p.items.acc || null
+      });
+      p.worn = true;
+      p.wearLogged = true;
+    }
+  });
   const savedLocs = recordTripLocationHistory(trip);
   trip = null;
   ensureTrip();
