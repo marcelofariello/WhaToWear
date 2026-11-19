@@ -8706,6 +8706,23 @@ function getTargetTopLayers(wxOverride) {
 function setLayerOverride(mode) {
   layerOverride = mode || 'auto';
   try { localStorage.setItem('wtw_layer_override', layerOverride); } catch (e) {}
+  if (typeof activeAIDailyOutfit !== 'undefined') activeAIDailyOutfit = null;
+  if (typeof getActiveTripContext === 'function') {
+    const tripCtx = getActiveTripContext();
+    if (tripCtx && tripCtx.planEntry && !tripCtx.planEntry.worn && typeof pickTripOutfit === 'function') {
+      const i = tripCtx.dayIndex;
+      const usage = {};
+      (trip.plan || []).forEach((p, j) => { if (j !== i) bumpUsage(usage, p); });
+      const prev = i > 0 ? trip.plan[i - 1] : null;
+      const out = pickTripOutfit(tripCtx.day, packedWardrobeItems(), usage, prev);
+      if (out) {
+        tripCtx.planEntry.items = out;
+        saveTrip();
+        if (typeof renderTripBanner === 'function') renderTripBanner();
+        if (typeof renderTrip === 'function' && document.getElementById('tab-trip')?.classList.contains('active')) renderTrip();
+      }
+    }
+  }
   renderDayContext();
   renderOutfit();
   const label = layerOverride === '3' ? '3 Top Layers locked (Base + Mid-Layer + Outer)'
@@ -10279,11 +10296,18 @@ function renderOutfit() {
 
   section.innerHTML = `
     <div class="outfit-display">
-      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
         <h2 style="margin:0; text-align:left;">✨ WhaToWear — What to Wear Today</h2>
         <button id="btn-wear-today" class="btn-wear-today ${isOutfitLoggedToday(outfit) ? 'logged' : ''}" onclick="logWearToday('${outfit.top.id}', '${outfit.bottom.id}', ${outerIdArg}, ${midIdArg}, ${beltIdArg}, ${shoeIdArg}, ${accIdArg})">
           ${isOutfitLoggedToday(outfit) ? '✓ Logged Today' : "📌 I'm Wearing This Today!"}
         </button>
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:12px; padding:8px 10px; border-radius:10px; background:rgba(15,23,42,0.28); border:1px solid rgba(148,163,184,0.2);">
+        <span style="font-size:0.74rem; font-weight:700; color:var(--text-secondary); margin-right:2px;">🧥 Layers:</span>
+        <button type="button" class="filter-chip ${layerOverride === 'auto' ? 'active' : ''}" style="padding:4px 10px; font-size:0.72rem;" onclick="setLayerOverride('auto')">🌡️ Auto (${autoTempInfo.count})</button>
+        <button type="button" class="filter-chip ${layerOverride === '1' ? 'active' : ''}" style="padding:4px 10px; font-size:0.72rem;" onclick="setLayerOverride('1')">☀️ 1 Layer</button>
+        <button type="button" class="filter-chip ${layerOverride === '2' ? 'active' : ''}" style="padding:4px 10px; font-size:0.72rem;" onclick="setLayerOverride('2')">🌤️ 2 Layers</button>
+        <button type="button" class="filter-chip ${layerOverride === '3' ? 'active' : ''}" style="padding:4px 10px; font-size:0.72rem;" onclick="setLayerOverride('3')">🧥 3 Layers</button>
       </div>
       <div class="outfit-items">${items}</div>
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-top:12px; margin-bottom:10px;">
