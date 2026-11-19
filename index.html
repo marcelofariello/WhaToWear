@@ -9175,6 +9175,7 @@ function generateOutfit() {
   if (!activeSpecialOccasion && typeof getActiveTripContext === 'function') {
     const tripCtx = getActiveTripContext();
     if (tripCtx && tripCtx.planEntry && tripCtx.planEntry.items) {
+      activeAIDailyOutfit = null;
       const ids = tripCtx.planEntry.items;
       const findById = (id) => id ? wardrobe.find(w => w.id === id) || null : null;
       const tTop = findById(ids.top);
@@ -10461,8 +10462,9 @@ function renderExerciseOutfit() {
   const section = document.getElementById('exercise-outfit-section');
   if (!section) return;
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = (typeof isoDate === 'function') ? isoDate(new Date()) : new Date().toISOString().slice(0, 10);
   const tripCtx = (typeof getActiveTripContext === 'function') ? getActiveTripContext() : null;
+  let lockedFromTrip = false;
   if (tripCtx && tripCtx.planEntry && tripCtx.planEntry.exercise) {
     const tex = tripCtx.planEntry.exercise;
     const tTop = wardrobe.find(w => w.id === tex.top);
@@ -10470,6 +10472,7 @@ function renderExerciseOutfit() {
     const tBot = wardrobe.find(w => w.id === tex.bottom);
     const tShoe = wardrobe.find(w => w.id === tex.shoe);
     if (tTop && tBot && tShoe) {
+      lockedFromTrip = true;
       activeExerciseOutfit = {
         date: todayStr,
         top: tTop,
@@ -10477,11 +10480,11 @@ function renderExerciseOutfit() {
         bottom: tBot,
         shoe: tShoe,
         morningTemp: tex.morningTemp ?? tripCtx.day.tmin ?? 18,
-        logged: !!(activeExerciseOutfit && activeExerciseOutfit.date === todayStr && activeExerciseOutfit.logged && activeExerciseOutfit.top?.id === tTop.id)
+        logged: !!(tripCtx.planEntry.exWorn || (activeExerciseOutfit && activeExerciseOutfit.date === todayStr && activeExerciseOutfit.logged && activeExerciseOutfit.top?.id === tTop.id))
       };
     }
   }
-  if (!activeExerciseOutfit || activeExerciseOutfit.date !== todayStr) {
+  if (!lockedFromTrip && (!activeExerciseOutfit || activeExerciseOutfit.date !== todayStr)) {
     try {
       const saved = safeJSON('wtw_exercise_outfit_today', null);
       if (saved && saved.date === todayStr) {
@@ -10496,12 +10499,12 @@ function renderExerciseOutfit() {
     } catch {}
   }
 
-  const needsRefresh = !activeExerciseOutfit
+  const needsRefresh = !lockedFromTrip && (!activeExerciseOutfit
     || activeExerciseOutfit.date !== todayStr
     || isNonExerciseStreetBottom(activeExerciseOutfit.bottom)
     || (exercisePreferShorts && !isShortsBottom(activeExerciseOutfit.bottom))
     || (exerciseSecondLayer && !activeExerciseOutfit.secondLayer)
-    || (!exerciseSecondLayer && activeExerciseOutfit.secondLayer);
+    || (!exerciseSecondLayer && activeExerciseOutfit.secondLayer));
 
   if (needsRefresh) {
     const picked = generateExerciseOutfit();
@@ -19311,6 +19314,7 @@ function tripToggleWorn(i) {
   saveTrip();
   rerenderTrip();
   renderTripBanner();
+  if (typeof renderOutfit === 'function') renderOutfit();
   if (typeof renderWardrobe === 'function') renderWardrobe();
   if (typeof renderWardrobeIllusionSection === 'function') renderWardrobeIllusionSection();
   toast(p.worn ? '✓ Marked as worn — wardrobe wear counts updated!' : '↩ Unmarked & wear counts reverted');
@@ -19331,6 +19335,7 @@ function tripToggleExerciseWorn(i) {
   }
   saveTrip();
   rerenderTrip();
+  if (typeof renderExerciseOutfit === 'function') renderExerciseOutfit();
   if (typeof renderWardrobe === 'function') renderWardrobe();
   toast(p.exWorn ? '🏃 Workout marked as worn — wear counts updated!' : '↩ Workout unmarked');
 }
@@ -19348,6 +19353,7 @@ function tripSwapDay(i) {
     saveTrip();
     rerenderTrip();
     renderTripBanner();
+    if (typeof renderOutfit === 'function') renderOutfit();
     toast('🔀 New combination for that day');
   }
 }
@@ -19357,6 +19363,7 @@ function tripRemix() {
   saveTrip();
   rerenderTrip();
   renderTripBanner();
+  if (typeof renderOutfit === 'function') renderOutfit();
   toast('🔄 Remaining days re-mixed (worn days kept)');
 }
 
