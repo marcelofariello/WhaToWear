@@ -3652,6 +3652,108 @@ input[type="text"]:focus, select:focus, textarea:focus {
 .api-status-err { background: rgba(239,68,68,0.18); color: #fca5a5; border: 1px solid rgba(239,68,68,0.35); }
 .api-status-idle { background: rgba(148,163,184,0.15); color: #cbd5e1; border: 1px solid rgba(148,163,184,0.28); }
 
+/* Tomorrow Evening Preview Card (visible from 8:00 PM local device time) */
+.tomorrow-preview-card {
+  margin: 18px 0 6px;
+  padding: 18px 20px;
+  border-radius: var(--radius-lg, 18px);
+  background: linear-gradient(135deg, rgba(17, 36, 28, 0.92) 0%, rgba(22, 34, 48, 0.94) 100%);
+  border: 1px solid rgba(200, 148, 84, 0.35);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.38);
+}
+.tomorrow-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.tomorrow-preview-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #f3c87a;
+  background: rgba(200, 148, 84, 0.14);
+  border: 1px solid rgba(200, 148, 84, 0.3);
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.tomorrow-preview-weather {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+.tomorrow-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+.tomorrow-preview-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.tomorrow-preview-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 9px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+}
+.tomorrow-preview-meta {
+  min-width: 0;
+}
+.tomorrow-preview-role {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #34d399;
+}
+.tomorrow-preview-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tomorrow-preview-sub {
+  font-size: 0.71rem;
+  color: var(--text-secondary);
+}
+.tomorrow-preview-footer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
 </style>
 </head>
 <body>
@@ -3709,6 +3811,7 @@ input[type="text"]:focus, select:focus, textarea:focus {
   <div class="tab-content active" id="tab-today">
     <div id="exercise-outfit-section"></div>
     <div id="outfit-section"></div>
+    <div id="tomorrow-preview-section"></div>
     <div id="trip-banner-section"></div>
     <div class="day-context" id="day-context"></div>
     <div id="weather-section"></div>
@@ -7069,7 +7172,7 @@ async function fetchWeather() {
     if (geoData) {
       const loc = geoData && geoData.results && geoData.results[0];
       if (loc) {
-        const wxUrl = `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code&hourly=temperature_2m,precipitation_probability&forecast_days=1&timezone=auto`;
+        const wxUrl = `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code&hourly=temperature_2m,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&forecast_days=2&timezone=auto`;
         const wxRes = await fetch(wxUrl);
         if (wxRes.ok) {
           const wxData = await wxRes.json();
@@ -7091,6 +7194,46 @@ async function fetchWeather() {
             }));
           }
 
+          let tomorrowWeather = null;
+          const dly = wxData.daily || {};
+          if (Array.isArray(dly.temperature_2m_max) && dly.temperature_2m_max.length > 1) {
+            const tmMax = Number(dly.temperature_2m_max[1] ?? cur.temperature_2m ?? 21);
+            const tmMin = Number(dly.temperature_2m_min?.[1] ?? tmMax - 6);
+            const tmCode = Number(dly.weather_code?.[1] ?? 0);
+            const tmRainProb = Number(dly.precipitation_probability_max?.[1] ?? 0);
+            const tmIsRain = (tmCode >= 51 && tmCode <= 67) || (tmCode >= 80 && tmCode <= 99) || tmRainProb >= 55;
+            const tmIsSnow = (tmCode >= 71 && tmCode <= 77);
+            const tmMain = tmIsSnow ? 'snow' : tmIsRain ? 'rain' : (tmCode >= 1 && tmCode <= 3 ? 'clouds' : 'clear');
+            const tmTemp = Math.round(tmMax * 0.65 + tmMin * 0.35);
+            let tmHourly = null;
+            if (wxData.hourly && Array.isArray(wxData.hourly.temperature_2m) && wxData.hourly.temperature_2m.length >= 48) {
+              tmHourly = targetSlots.map(hr => {
+                const idx = 24 + hr;
+                return {
+                  time: hr === 12 ? '12 PM' : (hr > 12 ? `${hr - 12} PM` : `${hr} AM`),
+                  hour: hr,
+                  temp: Math.round(wxData.hourly.temperature_2m[idx] ?? tmTemp),
+                  rain: Math.round(wxData.hourly.precipitation_probability ? (wxData.hourly.precipitation_probability[idx] ?? tmRainProb) : (tmIsRain ? 65 : 10))
+                };
+              });
+            }
+            tomorrowWeather = {
+              temp: tmTemp,
+              feels: tmTemp,
+              tmax: Math.round(tmMax),
+              tmin: Math.round(tmMin),
+              rainProb: Math.round(tmRainProb),
+              desc: descMap[tmMain] || 'pleasant conditions',
+              description: descMap[tmMain] || 'pleasant conditions',
+              main: tmMain,
+              city: loc.name + (loc.country_code ? `, ${loc.country_code.toUpperCase()}` : ''),
+              latitude: typeof loc.latitude === 'number' ? loc.latitude : null,
+              countryCode: loc.country_code ? loc.country_code.toUpperCase() : '',
+              humidity: cur.relative_humidity_2m ?? 55,
+              hourly: tmHourly
+            };
+          }
+
           if (!loaded) {
             weather = {
               temp: Math.round(cur.temperature_2m ?? 21),
@@ -7102,11 +7245,13 @@ async function fetchWeather() {
               latitude: typeof loc.latitude === 'number' ? loc.latitude : null,
               countryCode: loc.country_code ? loc.country_code.toUpperCase() : '',
               humidity: cur.relative_humidity_2m ?? 55,
-              hourly: hourlySlots
+              hourly: hourlySlots,
+              tomorrow: tomorrowWeather
             };
             loaded = true;
-          } else if (weather && hourlySlots) {
-            weather.hourly = hourlySlots;
+          } else if (weather) {
+            if (hourlySlots) weather.hourly = hourlySlots;
+            if (tomorrowWeather) weather.tomorrow = tomorrowWeather;
             if (typeof loc.latitude === 'number') weather.latitude = loc.latitude;
             if (loc.country_code) weather.countryCode = loc.country_code.toUpperCase();
           }
@@ -7765,9 +7910,10 @@ function outfitColorsHarmonious(items) {
    OUTFIT GENERATION
    ================================================================ */
 
-function getDayFormality() {
+function getDayFormality(dateInput = new Date()) {
   if (occasionOverride && occasionOverride !== 'auto') return occasionOverride;
-  const day = new Date().getDay();
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  const day = d.getDay();
   if (formalOverride) return 'formal';
   // 0=Sun, 6=Sat
   return (day === 0 || day === 6) ? 'casual' : 'smart-casual';
@@ -9168,10 +9314,12 @@ function pickItem(candidates) {
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
-function generateOutfit() {
+function generateOutfit(options = {}) {
   if (wardrobe.length === 0) return null;
 
-  const targetFormality = getDayFormality();
+  const previewOnly = !!(options && options.previewOnly);
+  const targetDate = (options && options.targetDate) ? options.targetDate : null;
+  const targetFormality = getDayFormality(targetDate || new Date());
   const sInfo = getLocationSeasonInfo();
   const blueprint = buildPersonalStyleBlueprint();
   const byCategory = { tops: [], bottoms: [], shoes: [], outerwear: [], accessories: [] };
@@ -9189,10 +9337,10 @@ function generateOutfit() {
   }
 
   // If Trip Mode is active for today (confirmed & within selected dates), planned trip outfit takes preference
-  if (!activeSpecialOccasion && typeof getActiveTripContext === 'function') {
-    const tripCtx = getActiveTripContext();
+  if ((!activeSpecialOccasion || previewOnly) && typeof getActiveTripContext === 'function') {
+    const tripCtx = getActiveTripContext(false, targetDate);
     if (tripCtx && tripCtx.planEntry && tripCtx.planEntry.items) {
-      activeAIDailyOutfit = null;
+      if (!previewOnly) activeAIDailyOutfit = null;
       const ids = tripCtx.planEntry.items;
       const findById = (id) => id ? wardrobe.find(w => w.id === id) || null : null;
       const tTop = findById(ids.top);
@@ -9234,13 +9382,13 @@ function generateOutfit() {
   }
 
   // If an AI Daily Stylist outfit is cached for today's weather/settings, lock & return it
-  if (!activeSpecialOccasion && typeof activeAIDailyOutfit === 'object' && activeAIDailyOutfit && activeAIDailyOutfit.cacheKey === getAIDailyOutfitCacheKey() && activeAIDailyOutfit.outfit) {
+  if (!previewOnly && !activeSpecialOccasion && typeof activeAIDailyOutfit === 'object' && activeAIDailyOutfit && activeAIDailyOutfit.cacheKey === getAIDailyOutfitCacheKey() && activeAIDailyOutfit.outfit) {
     saveDailyMainLock(activeAIDailyOutfit.outfit);
     return activeAIDailyOutfit.outfit;
   }
 
   // If a Special Occasion AI assignment is active, return those reassigned pieces
-  if (typeof activeSpecialOccasion === 'object' && activeSpecialOccasion && activeSpecialOccasion.outfitIds) {
+  if (!previewOnly && typeof activeSpecialOccasion === 'object' && activeSpecialOccasion && activeSpecialOccasion.outfitIds) {
     const ids = activeSpecialOccasion.outfitIds;
     const findById = (id) => id ? wardrobe.find(w => w.id === id) || null : null;
     const aiTop = findById(ids.topId);
@@ -9310,7 +9458,7 @@ function generateOutfit() {
 
   const layerInfo = getTargetTopLayers();
   // If today's outfit is already locked (from morning first login or synced from another device), return it unchanged
-  if (!activeSpecialOccasion) {
+  if (!previewOnly && !activeSpecialOccasion) {
     const lockedOutfit = hydrateDailyMainLock(getDailyMainLock(), {
       targetFormality,
       sInfo,
@@ -9481,7 +9629,7 @@ function generateOutfit() {
   }
 
   if (bestOutfit) {
-    saveDailyMainLock(bestOutfit);
+    if (!previewOnly) saveDailyMainLock(bestOutfit);
     return bestOutfit;
   }
 
@@ -9523,7 +9671,7 @@ function generateOutfit() {
     blueprint
   };
   fallbackOutfit.decisionProfile = generateHowToWearGuide(fallbackOutfit, blueprint);
-  saveDailyMainLock(fallbackOutfit);
+  if (!previewOnly) saveDailyMainLock(fallbackOutfit);
   return fallbackOutfit;
 }
 
@@ -10342,8 +10490,108 @@ function renderOutfit() {
     </div>`;
 
   renderWardrobeIllusionSection();
+  if (typeof renderTomorrowPreview === 'function') renderTomorrowPreview();
   if (typeof renderExerciseOutfit === 'function') renderExerciseOutfit();
   maybeTriggerAIDailyOutfit();
+}
+
+function getTomorrowWeatherContext() {
+  if (weather && weather.tomorrow) return weather.tomorrow;
+  if (weather) {
+    return {
+      ...weather,
+      tmax: weather.temp,
+      tmin: typeof weather.temp === 'number' ? weather.temp - 4 : 17,
+      rainProb: weather.main === 'rain' ? 60 : 10
+    };
+  }
+  return { temp: 21, feels: 21, tmax: 23, tmin: 17, rainProb: 10, main: 'clear', desc: 'forecast pending', city: getSettings().city || 'Your location', hourly: null };
+}
+
+function renderTomorrowPreview() {
+  const section = document.getElementById('tomorrow-preview-section');
+  if (!section) return;
+  if (typeof isEveningPreviewWindow !== 'function' || !isEveningPreviewWindow() || wardrobe.length === 0) {
+    section.innerHTML = '';
+    return;
+  }
+
+  const tomorrowKey = addDays(getOutfitDayKey(), 1);
+  const tomorrowDate = parseISO(tomorrowKey);
+  const tomorrowLabel = fmtDate(tomorrowKey);
+  const tomorrowWx = getTomorrowWeatherContext();
+  const tomorrowFormality = getDayFormality(tomorrowDate);
+  const previewOutfit = withWeather(tomorrowWx, () => generateOutfit({ previewOnly: true, targetDate: tomorrowDate }));
+
+  if (!previewOutfit || !previewOutfit.top) {
+    section.innerHTML = '';
+    return;
+  }
+
+  const previewEx = (typeof generateExerciseOutfit === 'function')
+    ? withWeather(tomorrowWx, () => generateExerciseOutfit())
+    : null;
+
+  const wxIcon = tomorrowWx.main === 'rain' ? '🌧️' : tomorrowWx.main === 'snow' ? '❄️' : tomorrowWx.main === 'clouds' ? '⛅' : '☀️';
+  const tempRange = (typeof tomorrowWx.tmin === 'number' && typeof tomorrowWx.tmax === 'number')
+    ? `${tomorrowWx.tmin}°–${tomorrowWx.tmax}°C`
+    : `${tomorrowWx.temp}°C`;
+  const rainNote = (typeof tomorrowWx.rainProb === 'number' && tomorrowWx.rainProb >= 25)
+    ? ` · ☔ ${tomorrowWx.rainProb}% rain`
+    : '';
+  const formalityLabel = tomorrowFormality.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+  const pieces = [
+    { role: 'Base Top', item: previewOutfit.top },
+    previewOutfit.midLayer ? { role: 'Mid Layer', item: previewOutfit.midLayer } : null,
+    previewOutfit.outerwear ? { role: 'Outerwear', item: previewOutfit.outerwear } : null,
+    { role: 'Bottom', item: previewOutfit.bottom },
+    previewOutfit.beltRec?.beltItem ? { role: 'Belt', item: previewOutfit.beltRec.beltItem } : null,
+    { role: 'Shoes', item: previewOutfit.shoe },
+    previewOutfit.accessory ? { role: 'Accessory', item: previewOutfit.accessory } : null
+  ].filter(p => p && p.item);
+
+  const cardsHtml = pieces.map(({ role, item }) => {
+    const thumb = item.photo
+      ? `<img class="tomorrow-preview-thumb" src="${escapeHtml(item.photo)}" alt="${escapeHtml(item.name)}">`
+      : `<div class="tomorrow-preview-thumb">${getCategoryEmoji ? getCategoryEmoji(item.category) : '👕'}</div>`;
+    return `
+      <div class="tomorrow-preview-item">
+        ${thumb}
+        <div class="tomorrow-preview-meta">
+          <div class="tomorrow-preview-role">${escapeHtml(role)}</div>
+          <div class="tomorrow-preview-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
+          <div class="tomorrow-preview-sub">${escapeHtml(item.subType || item.category || '')}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  const exNote = previewEx && previewEx.top && previewEx.bottom
+    ? `<span>🏃 <strong>Morning Exercise:</strong> ${escapeHtml(previewEx.top.name)}${previewEx.secondLayer ? ` + ${escapeHtml(previewEx.secondLayer.name)}` : ''} + ${escapeHtml(previewEx.bottom.name)}</span>`
+    : '';
+
+  section.innerHTML = `
+    <div class="tomorrow-preview-card">
+      <div class="tomorrow-preview-header">
+        <div>
+          <span class="tomorrow-preview-badge">🌙 Evening Preview · ${escapeHtml(tomorrowLabel)}</span>
+          <h3 style="margin:8px 0 2px; font-size:1.05rem; color:var(--text);">Plan Ahead for Tomorrow (${escapeHtml(formalityLabel)})</h3>
+          <div style="font-size:0.77rem; color:var(--text-secondary);">Shown from 8:00 PM local time so you can prep clothes the night before.</div>
+        </div>
+        <div class="tomorrow-preview-weather">
+          <span>${wxIcon}</span>
+          <strong>${escapeHtml(tempRange)}</strong>
+          <span>${escapeHtml(tomorrowWx.desc || tomorrowWx.main || '')}${escapeHtml(rainNote)}</span>
+        </div>
+      </div>
+      <div class="tomorrow-preview-grid">
+        ${cardsHtml}
+      </div>
+      <div class="tomorrow-preview-footer">
+        ${exNote || '<span>✨ Ready to lay out tonight</span>'}
+        <span>Locks in as Today’s Look at 4:00 AM</span>
+      </div>
+    </div>`;
 }
 
 let activeExerciseOutfit = null;
@@ -17679,6 +17927,7 @@ function escapeHtml(s) {
 }
 
 const OUTFIT_DAY_RESET_HOUR = 4;
+const EVENING_PREVIEW_HOUR = 20;
 
 function isoDate(d) {
   const z = d.getTimezoneOffset();
@@ -17689,6 +17938,11 @@ function getOutfitDayKey(dateInput = new Date()) {
   // Shift back by OUTFIT_DAY_RESET_HOUR in local calendar time so the daily outfit rolls over at 04:00 AM device time regardless of timezone or DST.
   const shifted = new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours() - OUTFIT_DAY_RESET_HOUR, d.getMinutes(), d.getSeconds());
   return isoDate(shifted);
+}
+function isEveningPreviewWindow(dateInput = new Date()) {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  const h = d.getHours();
+  return h >= EVENING_PREVIEW_HOUR || h < OUTFIT_DAY_RESET_HOUR;
 }
 function parseISO(s) { return new Date(s + 'T12:00:00'); }
 function addDays(s, n) { const d = parseISO(s); d.setDate(d.getDate() + n); return isoDate(d); }
@@ -19578,9 +19832,9 @@ function renderTrip() {
     ${body}`;
 }
 
-function getActiveTripContext(includeEscaped = false) {
+function getActiveTripContext(includeEscaped = false, targetDate = null) {
   if (!trip || trip.stage !== 'active' || !Array.isArray(trip.days) || !trip.days.length) return null;
-  const today = getOutfitDayKey();
+  const today = targetDate ? isoDate(targetDate) : getOutfitDayKey();
   const dayIndex = trip.days.findIndex(d => d.date === today);
   if (dayIndex === -1) return null;
   const checkedItems = (trip.pack || [])
@@ -20961,30 +21215,45 @@ function setupIosPwa() {
 /* ===== Init ===== */
 
 let lastKnownOutfitDayKey = null;
+let lastKnownEveningPreview = null;
 let dailyRolloverTimer = null;
+let eveningPreviewTimer = null;
 
 function checkDailyRollover() {
   const currentDayKey = getOutfitDayKey();
+  const currentEveningPreview = isEveningPreviewWindow();
   if (!lastKnownOutfitDayKey) {
     lastKnownOutfitDayKey = currentDayKey;
+    lastKnownEveningPreview = currentEveningPreview;
     return false;
   }
-  if (currentDayKey === lastKnownOutfitDayKey) return false;
-  lastKnownOutfitDayKey = currentDayKey;
-  if (typeof activeAIDailyOutfit !== 'undefined') activeAIDailyOutfit = null;
-  if (typeof activeExerciseOutfit !== 'undefined') activeExerciseOutfit = null;
-  try {
-    applyPlanetaryPreselectedMood();
-    renderAstralSection();
-    renderMoodSection();
-    renderDayContext();
-    renderTripBanner();
-    fetchWeather();
-    renderOutfit();
-  } catch (err) {
-    console.error('[dailyRollover]', err);
+  if (currentDayKey !== lastKnownOutfitDayKey) {
+    lastKnownOutfitDayKey = currentDayKey;
+    lastKnownEveningPreview = currentEveningPreview;
+    if (typeof activeAIDailyOutfit !== 'undefined') activeAIDailyOutfit = null;
+    if (typeof activeExerciseOutfit !== 'undefined') activeExerciseOutfit = null;
+    try {
+      applyPlanetaryPreselectedMood();
+      renderAstralSection();
+      renderMoodSection();
+      renderDayContext();
+      renderTripBanner();
+      fetchWeather();
+      renderOutfit();
+    } catch (err) {
+      console.error('[dailyRollover]', err);
+    }
+    return true;
   }
-  return true;
+  if (currentEveningPreview !== lastKnownEveningPreview) {
+    lastKnownEveningPreview = currentEveningPreview;
+    try {
+      if (typeof renderTomorrowPreview === 'function') renderTomorrowPreview();
+    } catch (err) {
+      console.error('[eveningPreview]', err);
+    }
+  }
+  return false;
 }
 
 function scheduleNextDailyRollover() {
@@ -21001,18 +21270,36 @@ function scheduleNextDailyRollover() {
   }, delayMs);
 }
 
+function scheduleNextEveningPreview() {
+  if (eveningPreviewTimer) clearTimeout(eveningPreviewTimer);
+  const now = new Date();
+  const nextPreview = new Date(now.getFullYear(), now.getMonth(), now.getDate(), EVENING_PREVIEW_HOUR, 0, 1, 0);
+  if (now >= nextPreview) {
+    nextPreview.setDate(nextPreview.getDate() + 1);
+  }
+  const delayMs = Math.max(1000, nextPreview.getTime() - now.getTime());
+  eveningPreviewTimer = setTimeout(() => {
+    checkDailyRollover();
+    scheduleNextEveningPreview();
+  }, delayMs);
+}
+
 function setupDailyRolloverWatcher() {
   lastKnownOutfitDayKey = getOutfitDayKey();
+  lastKnownEveningPreview = isEveningPreviewWindow();
   scheduleNextDailyRollover();
+  scheduleNextEveningPreview();
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
       checkDailyRollover();
       scheduleNextDailyRollover();
+      scheduleNextEveningPreview();
     }
   });
   window.addEventListener('focus', () => {
     checkDailyRollover();
     scheduleNextDailyRollover();
+    scheduleNextEveningPreview();
   });
 }
 
