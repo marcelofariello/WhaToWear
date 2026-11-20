@@ -5994,7 +5994,7 @@ function setupCloudRealtimeListener() {
       if (!data) return;
 
       const localUpdatedAt = parseInt(localStorage.getItem('wtw_cloud_updated_at') || '0', 10);
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = getOutfitDayKey();
       const hasNewerTrip = data.trip && Number(data.tripUpdatedAt || 0) > parseInt(localStorage.getItem('wtw_trip_updated_at') || '0', 10);
       const localFeedbackIds = new Set((typeof getFeedbackLog === 'function' ? getFeedbackLog() : []).map(e => e.id));
       const hasUnseenFeedback = Array.isArray(data.feedbackLog) && data.feedbackLog.some(e => e && e.id && !localFeedbackIds.has(e.id));
@@ -6097,7 +6097,7 @@ function applyRemoteCloudData(data, opts = {}) {
       }
     }
 
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getOutfitDayKey();
     if (data.dailyMainLock && data.dailyMainLock.date === todayStr) {
       const localMain = safeJSON('wtw_daily_main_lock', null);
       if (!localMain || localMain.date !== todayStr || Number(data.dailyMainLock.updatedAt || 0) > Number(localMain.updatedAt || 0)) {
@@ -8013,7 +8013,7 @@ function incrementItemWear(itemId) {
 
 function isOutfitLoggedToday(outfit) {
   if (!outfit || !outfit.top || !outfit.bottom) return false;
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getOutfitDayKey();
   const log = getWearLog();
   return log.some(e => e && e.date === todayStr && e.topId === outfit.top.id && e.bottomId === outfit.bottom.id);
 }
@@ -8054,7 +8054,7 @@ function applyWearDelta(itemIds, delta, logEntry = null) {
 }
 
 function logWearToday(topId, bottomId, outerId, midLayerId, beltId, shoeId, accessoryId) {
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getOutfitDayKey();
   const log = getWearLog();
   const alreadyLogged = log.some(e => e && e.date === todayStr && e.topId === topId && e.bottomId === bottomId);
   if (alreadyLogged) {
@@ -9533,7 +9533,7 @@ function getDailyMainLock() {
 
 function saveDailyMainLock(outfit, forceNewTimestamp = false) {
   if (!outfit || !outfit.top || !outfit.bottom || !outfit.shoe) return;
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getOutfitDayKey();
   const targetFormality = typeof getDayFormality === 'function' ? getDayFormality() : 'casual';
   const existing = getDailyMainLock();
   if (!forceNewTimestamp && existing && existing.date === todayStr &&
@@ -9565,7 +9565,7 @@ function saveDailyMainLock(outfit, forceNewTimestamp = false) {
 
 function hydrateDailyMainLock(lock, ctx) {
   if (!lock || !ctx) return null;
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getOutfitDayKey();
   if (lock.date !== todayStr) return null;
   if (lock.formality !== ctx.targetFormality || lock.layerOverride !== layerOverride) return null;
   const findById = (id) => id ? wardrobe.find(w => w.id === id) || null : null;
@@ -10486,7 +10486,7 @@ function renderExerciseOutfit() {
   const section = document.getElementById('exercise-outfit-section');
   if (!section) return;
 
-  const todayStr = (typeof isoDate === 'function') ? isoDate(new Date()) : new Date().toISOString().slice(0, 10);
+  const todayStr = getOutfitDayKey();
   const tripCtx = (typeof getActiveTripContext === 'function') ? getActiveTripContext() : null;
   let lockedFromTrip = false;
   if (tripCtx && tripCtx.planEntry && tripCtx.planEntry.exercise) {
@@ -10596,7 +10596,7 @@ function renderExerciseOutfit() {
 function toggleExerciseSecondLayer() {
   exerciseSecondLayer = !exerciseSecondLayer;
   try { localStorage.setItem('wtw_exercise_second_layer', exerciseSecondLayer ? 'true' : 'false'); } catch {}
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getOutfitDayKey();
   const picked = generateExerciseOutfit();
   if (picked) {
     if (activeExerciseOutfit && activeExerciseOutfit.date === todayStr) {
@@ -10631,7 +10631,7 @@ function toggleExerciseSecondLayer() {
 function toggleExercisePreferShorts() {
   exercisePreferShorts = !exercisePreferShorts;
   try { localStorage.setItem('wtw_exercise_prefer_shorts', exercisePreferShorts ? 'true' : 'false'); } catch {}
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getOutfitDayKey();
   if (exercisePreferShorts && activeExerciseOutfit && activeExerciseOutfit.date === todayStr && !isShortsBottom(activeExerciseOutfit.bottom)) {
     const picked = generateExerciseOutfit();
     if (picked && picked.bottom) {
@@ -10665,7 +10665,7 @@ function shuffleExerciseOutfit() {
     : [];
   const picked = generateExerciseOutfit(avoid);
   if (!picked) { toast('No alternative exercise pieces found'); return; }
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getOutfitDayKey();
   activeExerciseOutfit = { date: todayStr, ...picked, logged: false };
   try {
     localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
@@ -10793,7 +10793,7 @@ function hydrateAIDailyOutfitFromPicked(picked, currentTemp) {
 }
 
 function getAIDailyOutfitCacheKey() {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getOutfitDayKey();
   const tempBand = weather && typeof weather.temp === 'number' ? Math.round(weather.temp / 3) * 3 : 21;
   const mainCond = (weather && weather.main) ? weather.main : 'clear';
   const cityKey = (weather && weather.city) || getSettings().city || '';
@@ -17678,9 +17678,17 @@ function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+const OUTFIT_DAY_RESET_HOUR = 4;
+
 function isoDate(d) {
   const z = d.getTimezoneOffset();
   return new Date(d.getTime() - z * 60000).toISOString().slice(0, 10);
+}
+function getOutfitDayKey(dateInput = new Date()) {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  // Shift back by OUTFIT_DAY_RESET_HOUR in local calendar time so the daily outfit rolls over at 04:00 AM device time regardless of timezone or DST.
+  const shifted = new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours() - OUTFIT_DAY_RESET_HOUR, d.getMinutes(), d.getSeconds());
+  return isoDate(shifted);
 }
 function parseISO(s) { return new Date(s + 'T12:00:00'); }
 function addDays(s, n) { const d = parseISO(s); d.setDate(d.getDate() + n); return isoDate(d); }
@@ -19572,7 +19580,7 @@ function renderTrip() {
 
 function getActiveTripContext(includeEscaped = false) {
   if (!trip || trip.stage !== 'active' || !Array.isArray(trip.days) || !trip.days.length) return null;
-  const today = isoDate(new Date());
+  const today = getOutfitDayKey();
   const dayIndex = trip.days.findIndex(d => d.date === today);
   if (dayIndex === -1) return null;
   const checkedItems = (trip.pack || [])
@@ -20952,6 +20960,62 @@ function setupIosPwa() {
 
 /* ===== Init ===== */
 
+let lastKnownOutfitDayKey = null;
+let dailyRolloverTimer = null;
+
+function checkDailyRollover() {
+  const currentDayKey = getOutfitDayKey();
+  if (!lastKnownOutfitDayKey) {
+    lastKnownOutfitDayKey = currentDayKey;
+    return false;
+  }
+  if (currentDayKey === lastKnownOutfitDayKey) return false;
+  lastKnownOutfitDayKey = currentDayKey;
+  if (typeof activeAIDailyOutfit !== 'undefined') activeAIDailyOutfit = null;
+  if (typeof activeExerciseOutfit !== 'undefined') activeExerciseOutfit = null;
+  try {
+    applyPlanetaryPreselectedMood();
+    renderAstralSection();
+    renderMoodSection();
+    renderDayContext();
+    renderTripBanner();
+    fetchWeather();
+    renderOutfit();
+  } catch (err) {
+    console.error('[dailyRollover]', err);
+  }
+  return true;
+}
+
+function scheduleNextDailyRollover() {
+  if (dailyRolloverTimer) clearTimeout(dailyRolloverTimer);
+  const now = new Date();
+  const nextReset = new Date(now.getFullYear(), now.getMonth(), now.getDate(), OUTFIT_DAY_RESET_HOUR, 0, 1, 0);
+  if (now >= nextReset) {
+    nextReset.setDate(nextReset.getDate() + 1);
+  }
+  const delayMs = Math.max(1000, nextReset.getTime() - now.getTime());
+  dailyRolloverTimer = setTimeout(() => {
+    checkDailyRollover();
+    scheduleNextDailyRollover();
+  }, delayMs);
+}
+
+function setupDailyRolloverWatcher() {
+  lastKnownOutfitDayKey = getOutfitDayKey();
+  scheduleNextDailyRollover();
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      checkDailyRollover();
+      scheduleNextDailyRollover();
+    }
+  });
+  window.addEventListener('focus', () => {
+    checkDailyRollover();
+    scheduleNextDailyRollover();
+  });
+}
+
 function init() {
   renderFloatingPersonaCard();
 
@@ -21040,6 +21104,7 @@ function init() {
   safeStep('hydrateUnlimitedPhotosFromIdb', hydrateUnlimitedPhotosFromIdb);
   safeStep('initFirebaseSync', initFirebaseSync);
   safeStep('fetchWeather', fetchWeather);
+  safeStep('setupDailyRolloverWatcher', setupDailyRolloverWatcher);
 }
 
 /* ================================================================
@@ -21069,7 +21134,7 @@ function buildAntigravityContextSnapshot() {
   const describeItem = (it) => it ? `${it.name} (${it.subType}, ${it.formality}, ${it.colorName || it.color || ''})` : null;
 
   return {
-    day: `${dayNames[now.getDay()]} ${now.toISOString().slice(0, 10)}`,
+    day: `${dayNames[now.getDay()]} ${isoDate(now)}`,
     activeTab,
     formality: typeof getDayFormality === 'function' ? getDayFormality() : 'unknown',
     season: typeof getLocationSeasonInfo === 'function' ? getLocationSeasonInfo().name : 'unknown',
@@ -21115,7 +21180,7 @@ async function pullFeedbackLogFromCloud() {
     const snap = await db.collection('wardrobes').doc(syncVaultKey).get();
     if (!snap.exists) return;
     const data = snap.data() || {};
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getOutfitDayKey();
     if (data.dailyMainLock && data.dailyMainLock.date === todayStr) {
       const localMain = safeJSON('wtw_daily_main_lock', null);
       if (!localMain || localMain.date !== todayStr || Number(data.dailyMainLock.updatedAt || 0) > Number(localMain.updatedAt || 0)) {
