@@ -11046,7 +11046,7 @@ function generateExerciseOutfit(avoidIds = []) {
   if (!topsPool.length || !bottomsPool.length || !shoesPool.length) return null;
 
   const todaySkipped = (typeof getTodayDislikedIds === 'function') ? getTodayDislikedIds() : new Set();
-  const avoidSet = new Set(avoidIds || []);
+  const avoidSet = new Set(typeof avoidIds !== 'undefined' && Array.isArray(avoidIds) ? avoidIds : []);
   const isAvailable = (x) => x && !avoidSet.has(x.id) && !todaySkipped.has(x.id);
   const preferSport = (list, cat) => {
     const strict = list.filter(isStrictSportPiece);
@@ -11100,7 +11100,7 @@ function generateExerciseOutfit(avoidIds = []) {
   const dayNum = Math.floor(Date.now() / 86400000);
   const todaySkipped = (typeof getTodayDislikedIds === 'function') ? getTodayDislikedIds() : new Set();
   const pickBest = (list, scorer) => {
-    const avoidSet = new Set(avoidIds || []);
+    const avoidSet = new Set(typeof avoidIds !== 'undefined' && Array.isArray(avoidIds) ? avoidIds : []);
     let filtered = list.filter(x => !avoidSet.has(x.id) && !todaySkipped.has(x.id));
     if (!filtered.length && avoidSet.size) {
       filtered = list.filter(x => !avoidSet.has(x.id));
@@ -20367,7 +20367,7 @@ function pickTripExerciseOutfit(day, items, exUsage, prevEx) {
   const bottomsBase = comfBottoms.length ? comfBottoms : bottomsRaw;
 
   const todaySkipped = (typeof getTodayDislikedIds === 'function') ? getTodayDislikedIds() : new Set();
-  const avoidSet = new Set(avoidIds || []);
+  const avoidSet = new Set(typeof avoidIds !== 'undefined' && Array.isArray(avoidIds) ? avoidIds : []);
   const isAvailable = (x) => x && !avoidSet.has(x.id) && !todaySkipped.has(x.id);
   const preferSport = (list, cat) => {
     const strict = list.filter(isStrictSportPiece);
