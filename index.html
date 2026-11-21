@@ -11045,15 +11045,21 @@ function generateExerciseOutfit(avoidIds = []) {
   const shoesPool = exValidShoes.length ? exValidShoes : rawShoesPool;
   if (!topsPool.length || !bottomsPool.length || !shoesPool.length) return null;
 
+  const todaySkipped = (typeof getTodayDislikedIds === 'function') ? getTodayDislikedIds() : new Set();
+  const avoidSet = new Set(avoidIds || []);
+  const isAvailable = (x) => x && !avoidSet.has(x.id) && !todaySkipped.has(x.id);
   const preferSport = (list, cat) => {
     const strict = list.filter(isStrictSportPiece);
-    if (strict.length) return strict;
+    if (strict.some(isAvailable)) return strict;
     const broader = list.filter(isExerciseCandidate);
-    if (broader.length) return broader;
+    if (broader.some(isAvailable)) return broader;
     if (cat === 'shoes') {
       const casualShoes = list.filter(s => /\b(sneaker|trainer|runner|slip-on)\b/i.test((s.subType || '') + ' ' + (s.name || '')));
-      if (casualShoes.length) return casualShoes;
+      if (casualShoes.some(isAvailable)) return casualShoes;
     }
+    if (list.some(isAvailable)) return list;
+    if (strict.length) return strict;
+    if (broader.length) return broader;
     return list;
   };
 
@@ -20360,15 +20366,21 @@ function pickTripExerciseOutfit(day, items, exUsage, prevEx) {
   const comfBottoms = bottomsRaw.filter(i => !isNonExerciseStreetBottom(i));
   const bottomsBase = comfBottoms.length ? comfBottoms : bottomsRaw;
 
+  const todaySkipped = (typeof getTodayDislikedIds === 'function') ? getTodayDislikedIds() : new Set();
+  const avoidSet = new Set(avoidIds || []);
+  const isAvailable = (x) => x && !avoidSet.has(x.id) && !todaySkipped.has(x.id);
   const preferSport = (list, cat) => {
     const strict = list.filter(isStrictSportPiece);
-    if (strict.length) return strict;
+    if (strict.some(isAvailable)) return strict;
     const broader = list.filter(isExerciseCandidate);
-    if (broader.length) return broader;
+    if (broader.some(isAvailable)) return broader;
     if (cat === 'shoes') {
       const casualShoes = list.filter(s => /\b(sneaker|trainer|runner|slip-on)\b/i.test((s.subType || '') + ' ' + (s.name || '')));
-      if (casualShoes.length) return casualShoes;
+      if (casualShoes.some(isAvailable)) return casualShoes;
     }
+    if (list.some(isAvailable)) return list;
+    if (strict.length) return strict;
+    if (broader.length) return broader;
     return list;
   };
 
