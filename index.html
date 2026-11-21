@@ -11069,7 +11069,23 @@ function generateExerciseOutfit(avoidIds = []) {
   exTops = nonFormal(exTops);
   exBottoms = nonFormal(exBottoms);
   if (exercisePreferShorts) {
-    const shortsOnly = exBottoms.filter(b => isShortsBottom(b) || getItemLength(b) === 'shorts');
+    let shortsOnly = exBottoms.filter(b => isShortsBottom(b) || getItemLength(b) === 'shorts');
+    if (!shortsOnly.length) {
+      shortsOnly = bottomsPool.filter(b => isShortsBottom(b) || getItemLength(b) === 'shorts');
+    }
+    if (!shortsOnly.length && pool !== wardrobe) {
+      const wShorts = wardrobe.filter(i =>
+        i.category === 'bottoms' &&
+        !isItemDisliked(i) &&
+        !isSwimwearItem(i) &&
+        !isNonExerciseStreetBottom(i) &&
+        (isShortsBottom(i) || getItemLength(i) === 'shorts')
+      );
+      if (wShorts.length) {
+        const sportShorts = wShorts.filter(isExerciseCandidate);
+        shortsOnly = sportShorts.length ? sportShorts : wShorts;
+      }
+    }
     if (shortsOnly.length) exBottoms = shortsOnly;
   }
   exShoes = nonFormal(exShoes);
@@ -11248,6 +11264,23 @@ function renderExerciseOutfit() {
           activeExerciseOutfit.shoe = pickedEx.shoe;
           saveExerciseOutfitState(activeExerciseOutfit);
         }
+      }
+      if (exercisePreferShorts && !isShortsBottom(activeExerciseOutfit.bottom)) {
+        const pickedEx = generateExerciseOutfit();
+        if (pickedEx && pickedEx.bottom && isShortsBottom(pickedEx.bottom)) {
+          activeExerciseOutfit.bottom = pickedEx.bottom;
+          saveExerciseOutfitState(activeExerciseOutfit);
+        }
+      }
+      if (exerciseSecondLayer && !activeExerciseOutfit.secondLayer) {
+        const pickedEx = generateExerciseOutfit();
+        if (pickedEx && pickedEx.secondLayer) {
+          activeExerciseOutfit.secondLayer = pickedEx.secondLayer;
+          saveExerciseOutfitState(activeExerciseOutfit);
+        }
+      } else if (!exerciseSecondLayer && activeExerciseOutfit.secondLayer) {
+        activeExerciseOutfit.secondLayer = null;
+        saveExerciseOutfitState(activeExerciseOutfit);
       }
     }
   }
