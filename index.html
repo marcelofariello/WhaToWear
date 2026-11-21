@@ -8343,7 +8343,7 @@ function weatherSuitable(item) {
   if (item.category === 'shoes') {
     if (isRain && /\b(sandal|slide|flip-flop|espadrille|suede|mule)\b/.test(sub)) return false;
     if ((cat === 'very-cold' || cat === 'cold' || sInfo.id === 'winter') && /\b(sandal|slide|flip-flop|espadrille)\b/.test(sub)) return false;
-    if (cat === 'hot' && sInfo.id === 'summer' && /\b(snow boot|knee-high boot|shearling|winter boot)\b/.test(sub)) return false;
+    if (cat === 'hot' && !isRain && /\b(boot|boots|snow boot|knee-high boot|shearling|winter boot)\b/.test(sub)) return false;
   }
 
   if (item.category === 'accessories') {
@@ -9680,8 +9680,11 @@ function generateOutfit(options = {}) {
   const allowGymInMain = (targetFormality === 'athleisure' || targetFormality === 'lounge');
   const allowShortsInMain = areShortsAllowedToday(targetFormality, targetDate);
   const allowSandalsInMain = areSandalsAllowedToday(targetFormality, targetDate);
+  const todaySkippedIds = (!previewOnly && typeof getTodayDislikedIds === 'function') ? getTodayDislikedIds() : new Set();
   const filter = (items) => {
-    const allowed = items.filter(it => !isItemDisliked(it));
+    const allowedAll = items.filter(it => !isItemDisliked(it));
+    const allowedToday = allowedAll.filter(it => !todaySkippedIds.has(it.id));
+    const allowed = allowedToday.length > 0 ? allowedToday : allowedAll;
     const dayFiltered = allowed.filter(it =>
       (allowGymInMain || !isGymOrLoungeItem(it)) &&
       (allowShortsInMain || !isShortsBottom(it)) &&
@@ -19783,7 +19786,7 @@ function pickTripOutfit(day, items, usage, prev, avoidKey) {
     const tops = suit('tops'), bottoms = suit('bottoms'), shoes = suit('shoes');
     if (!tops.length || !bottoms.length || !shoes.length) return null;
 
-    const baseTops = tripTargetLayers >= 2 && tops.some(isBaseTop) ? tops.filter(isBaseTop) : tops;
+    const baseTops = tops.some(isBaseTop) ? tops.filter(isBaseTop) : tops;
     const rawMidAll = items.filter(isMidLayerCandidate);
     const workMidAll = isWorkDay ? rawMidAll.filter(i => !isWorkDisallowedItem(i, target)) : rawMidAll;
     const midAll = workMidAll.length ? workMidAll : rawMidAll;
