@@ -4958,6 +4958,7 @@ function getSlotCandidatesForOutfit(slot, outfitState, excludedIds) {
   const baseFilter = (items) => {
     const allowed = items.filter(it => it && !excludedIds.has(it.id) && !isItemDisliked(it));
     const dayOk = allowed.filter(it =>
+      !isSwimwearItem(it) &&
       (allowGym || !isGymOrLoungeItem(it)) &&
       (allowShorts || !isShortsBottom(it)) &&
       (allowSandals || !isOpenToeOrSandalShoe(it)) &&
@@ -8220,6 +8221,18 @@ function isGymOrLoungeItem(it) {
   return /\b(athleisure|athletic|soccer|football|running|gym|workout|training|track|sweatpants|joggers|pajama|sleepwear|swim|swimming|trunks|board\s*shorts?|beachwear)\b/.test(text);
 }
 
+function isSwimwearItem(it) {
+  if (!it) return false;
+  const text = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''}`.toLowerCase();
+  return /\b(swim|swimwear|swimsuit|swim\s*trunks?|swim\s*shorts?|swim\s*jammers?|jammers?|board\s*shorts?|boardshorts?|speedo|bikini|one-piece|rash\s*guard|wetsuit|bathing\s*suit)\b/.test(text);
+}
+
+function isNonExerciseShoe(it) {
+  if (!it || it.category !== 'shoes') return false;
+  const text = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''}`.toLowerCase();
+  return /\b(boot|boots|heel|heels|loafer|loafers|oxford|oxfords|derby|brogue|monk|sandal|sandals|slide|slides|flip-flop|flip-flops|clog|clogs|mule|mules|espadrille|dress shoe)\b/.test(text);
+}
+
 function isShortsBottom(it) {
   if (!it || it.category !== 'bottoms') return false;
   if (getItemLength(it) === 'shorts') return true;
@@ -9714,6 +9727,7 @@ function generateOutfit(options = {}) {
     const allowedToday = allowedAll.filter(it => !todaySkippedIds.has(it.id));
     const allowed = allowedToday.length > 0 ? allowedToday : allowedAll;
     const dayFiltered = allowed.filter(it =>
+      !isSwimwearItem(it) &&
       (allowGymInMain || !isGymOrLoungeItem(it)) &&
       (allowShortsInMain || !isShortsBottom(it)) &&
       (allowSandalsInMain || !isOpenToeOrSandalShoe(it)) &&
@@ -10928,11 +10942,18 @@ function generateExerciseOutfit(avoidIds = []) {
     ? weather.hourly[0].temp
     : (weather && typeof weather.temp === 'number' ? weather.temp : 18);
 
-  const topsPool = pool.filter(i => i.category === 'tops' && !isItemDisliked(i));
+  const rawTopsPool = pool.filter(i => i.category === 'tops' && !isItemDisliked(i));
+  const nonSwimTops = rawTopsPool.filter(i => !isSwimwearItem(i));
+  const topsPool = nonSwimTops.length ? nonSwimTops : rawTopsPool;
+
   const rawBottomsPool = pool.filter(i => i.category === 'bottoms' && !isItemDisliked(i));
-  const comfBottoms = rawBottomsPool.filter(i => !isNonExerciseStreetBottom(i));
-  const bottomsPool = comfBottoms.length ? comfBottoms : rawBottomsPool;
-  const shoesPool = pool.filter(i => i.category === 'shoes' && !isItemDisliked(i));
+  const comfBottoms = rawBottomsPool.filter(i => !isNonExerciseStreetBottom(i) && !isSwimwearItem(i));
+  const nonSwimBottoms = rawBottomsPool.filter(i => !isSwimwearItem(i));
+  const bottomsPool = comfBottoms.length ? comfBottoms : (nonSwimBottoms.length ? nonSwimBottoms : rawBottomsPool);
+
+  const rawShoesPool = pool.filter(i => i.category === 'shoes' && !isItemDisliked(i));
+  const exValidShoes = rawShoesPool.filter(i => !isNonExerciseShoe(i));
+  const shoesPool = exValidShoes.length ? exValidShoes : rawShoesPool;
   if (!topsPool.length || !bottomsPool.length || !shoesPool.length) return null;
 
   const preferSport = (list, cat) => {
@@ -11067,6 +11088,9 @@ function renderExerciseOutfit() {
   const needsRefresh = !lockedFromTrip && (!activeExerciseOutfit
     || activeExerciseOutfit.date !== todayStr
     || isNonExerciseStreetBottom(activeExerciseOutfit.bottom)
+    || isSwimwearItem(activeExerciseOutfit.bottom)
+    || isSwimwearItem(activeExerciseOutfit.top)
+    || isNonExerciseShoe(activeExerciseOutfit.shoe)
     || (exercisePreferShorts && !isShortsBottom(activeExerciseOutfit.bottom))
     || (exerciseSecondLayer && !activeExerciseOutfit.secondLayer)
     || (!exerciseSecondLayer && activeExerciseOutfit.secondLayer));
@@ -11074,7 +11098,11 @@ function renderExerciseOutfit() {
   if (needsRefresh) {
     const picked = generateExerciseOutfit();
     if (!picked) { section.innerHTML = ''; return; }
-    const keepBase = activeExerciseOutfit && activeExerciseOutfit.date === todayStr && !isNonExerciseStreetBottom(activeExerciseOutfit.bottom);
+    const keepBase = activeExerciseOutfit && activeExerciseOutfit.date === todayStr
+      && !isNonExerciseStreetBottom(activeExerciseOutfit.bottom)
+      && !isSwimwearItem(activeExerciseOutfit.bottom)
+      && !isSwimwearItem(activeExerciseOutfit.top)
+      && !isNonExerciseShoe(activeExerciseOutfit.shoe);
     activeExerciseOutfit = keepBase
       ? {
           ...activeExerciseOutfit,
