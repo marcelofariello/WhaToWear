@@ -5120,8 +5120,56 @@ function swapDislikedPieceMinimal(slot, prevOutfit, excludedIds, dislikedItemId 
       const basePool = nonGymPool.length > 0 ? nonGymPool : directFallbackPool;
       const tierPool = slot === 'top' ? basePool.filter(w => typeof isBaseTop === 'function' && isBaseTop(w)) : [];
       const pickPool = tierPool.length > 0 ? tierPool : basePool;
-      bestState = { ...prevOutfit, [slot]: pickPool[0] };
+
+      // Pick the highest-scoring replacement from pickPool
+      let chosenCand = pickPool[0];
+      let chosenScore = -Infinity;
+      const allowedBelts = wardrobe.filter(a => isBeltItem(a) && !isItemDisliked(a));
+      pickPool.forEach(cand => {
+        const trial = { ...prevOutfit, [slot]: cand };
+        trial.beltRec = proposeBeltForOutfit(trial.shoe, trial.bottom, trial.top, trial.outerwear || trial.midLayer, allowedBelts);
+        const ev = typeof evaluateOutfitScore === 'function'
+          ? evaluateOutfitScore(trial.top, trial.bottom, trial.shoe, trial.outerwear || trial.midLayer, trial.accessory, {
+              midLayer: trial.midLayer,
+              beltItem: trial.beltRec?.beltItem,
+              blueprint: bp
+            })
+          : { score: 100 };
+        const sc = (ev && typeof ev.score === 'number') ? ev.score : 100;
+        if (sc > chosenScore) {
+          chosenScore = sc;
+          chosenCand = cand;
+        }
+      });
+
+      bestState = { ...prevOutfit, [slot]: chosenCand };
       changedSlots = [slot];
+
+      // Worst-case adaptation: if score is still below threshold, adapt other pieces (bottom/top/layers) to fit the new piece
+      if (chosenScore < goodThreshold) {
+        const adaptSlots = ['bottom', 'top', 'midLayer', 'outerwear'].filter(s => s !== slot && bestState[s]);
+        for (const aSlot of adaptSlots) {
+          const aCands = getSlotCandidatesForOutfit(aSlot, bestState, new Set([dislikedItemId]));
+          let bestAdapt = bestState[aSlot];
+          let bestAdaptScore = chosenScore;
+          for (const ac of aCands.slice(0, 15)) {
+            const trial = { ...bestState, [aSlot]: ac };
+            trial.beltRec = proposeBeltForOutfit(trial.shoe, trial.bottom, trial.top, trial.outerwear || trial.midLayer, allowedBelts);
+            const sc = scoreOutfitCandidate(trial, bp);
+            if (sc > bestAdaptScore) {
+              bestAdaptScore = sc;
+              bestAdapt = ac;
+            }
+          }
+          if (bestAdapt && bestAdapt.id !== bestState[aSlot]?.id) {
+            bestState = { ...bestState, [aSlot]: bestAdapt };
+            chosenScore = bestAdaptScore;
+            if (!changedSlots.includes(aSlot)) changedSlots.push(aSlot);
+          }
+          if (chosenScore >= goodThreshold) break;
+        }
+      }
+      bestState.beltRec = proposeBeltForOutfit(bestState.shoe, bestState.bottom, bestState.top, bestState.outerwear || bestState.midLayer, allowedBelts);
     } else {
       if (typeof activeAIDailyOutfit !== 'undefined') activeAIDailyOutfit = null;
       try { localStorage.removeItem('wtw_ai_daily_outfit'); } catch {}
