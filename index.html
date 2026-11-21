@@ -5107,7 +5107,30 @@ function swapDislikedPieceMinimal(slot, prevOutfit, excludedIds) {
     if (typeof saveTrip === 'function') saveTrip();
   }
 
-  if (typeof activeAIDailyOutfit !== 'undefined') activeAIDailyOutfit = null;
+  if (typeof generateHowToWearGuide === 'function') {
+    bestState.decisionProfile = generateHowToWearGuide(bestState, bp);
+  }
+
+  if (typeof activeSpecialOccasion === 'object' && activeSpecialOccasion && activeSpecialOccasion.outfitIds) {
+    activeSpecialOccasion.outfitIds = {
+      ...activeSpecialOccasion.outfitIds,
+      topId: bestState.top?.id || null,
+      midLayerId: bestState.midLayer?.id || null,
+      outerwearId: bestState.outerwear?.id || null,
+      bottomId: bestState.bottom?.id || null,
+      shoeId: bestState.shoe?.id || null,
+      beltId: bestState.beltRec?.beltItem?.id || null,
+      accessoryId: bestState.accessory?.id || null
+    };
+  }
+
+  const aiKey = typeof getAIDailyOutfitCacheKey === 'function' ? getAIDailyOutfitCacheKey() : null;
+  if (typeof lastAIDailyAttemptKey !== 'undefined' && aiKey) {
+    lastAIDailyAttemptKey = aiKey;
+  }
+  if (typeof activeAIDailyOutfit !== 'undefined' && activeAIDailyOutfit && aiKey) {
+    activeAIDailyOutfit = { cacheKey: aiKey, outfit: bestState };
+  }
   try { localStorage.removeItem('wtw_ai_daily_outfit'); } catch {}
   if (typeof saveDailyMainLock === 'function') {
     saveDailyMainLock(bestState, true);
@@ -5117,7 +5140,9 @@ function swapDislikedPieceMinimal(slot, prevOutfit, excludedIds) {
 
 function dislikeOutfitPieceForToday(itemId) {
   if (!itemId) return;
-  const prevOutfit = (typeof window !== 'undefined' && window.lastRenderedMainOutfit) ? window.lastRenderedMainOutfit : null;
+  const prevOutfit = (typeof window !== 'undefined' && window.lastRenderedMainOutfit)
+    ? window.lastRenderedMainOutfit
+    : (typeof generateOutfit === 'function' ? generateOutfit() : null);
   const matchedSlot = findDislikedOutfitSlot(prevOutfit, itemId);
   const oldItem = wardrobe.find(w => w.id === itemId);
   const oldName = oldItem ? oldItem.name : 'that piece';
@@ -5125,6 +5150,9 @@ function dislikeOutfitPieceForToday(itemId) {
   const excludedIds = addTodayDislikedId(itemId);
   const res = matchedSlot ? swapDislikedPieceMinimal(matchedSlot, prevOutfit, excludedIds) : { ok: false, changedSlots: [] };
 
+  if (res.ok && res.updated && typeof window !== 'undefined') {
+    window.lastRenderedMainOutfit = res.updated;
+  }
   renderOutfit();
   if (res.ok) {
     const newItem = res.updated && matchedSlot !== 'belt' ? res.updated[matchedSlot] : null;
