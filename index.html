@@ -11038,7 +11038,10 @@ function generateExerciseOutfit(avoidIds = []) {
   const bottomsPool = comfBottoms.length ? comfBottoms : (nonSwimBottoms.length ? nonSwimBottoms : rawBottomsPool);
 
   const rawShoesPool = pool.filter(i => i.category === 'shoes' && !isItemDisliked(i));
-  const exValidShoes = rawShoesPool.filter(i => !isNonExerciseShoe(i));
+  let exValidShoes = rawShoesPool.filter(i => !isNonExerciseShoe(i));
+  if (!exValidShoes.length && pool !== wardrobe) {
+    exValidShoes = wardrobe.filter(i => i.category === 'shoes' && !isItemDisliked(i) && !isNonExerciseShoe(i));
+  }
   const shoesPool = exValidShoes.length ? exValidShoes : rawShoesPool;
   if (!topsPool.length || !bottomsPool.length || !shoesPool.length) return null;
 
@@ -11202,8 +11205,9 @@ function swapDislikedExercisePiece(itemId, excludedIds) {
     const slotCatMap = { top: 'tops', bottom: 'bottoms', shoe: 'shoes' };
     const cat = slotCatMap[slot];
     if (cat) {
-      const alt = pool.find(w => w.category === cat && w.id !== itemId && !isItemDisliked(w) && !isSwimwearItem(w) && (slot !== 'shoe' || !isNonExerciseShoe(w)));
-      if (alt) replacement = alt;
+      const findAlt = (src) => src.find(w => w.category === cat && w.id !== itemId && !isItemDisliked(w) && !isSwimwearItem(w) && (slot !== 'shoe' || !isNonExerciseShoe(w)))
+        || src.find(w => w.category === cat && w.id !== itemId && !isItemDisliked(w) && !isSwimwearItem(w));
+      replacement = findAlt(pool) || (pool !== wardrobe ? findAlt(wardrobe) : null);
     }
   }
   if (!replacement) return { ok: false };
@@ -11238,6 +11242,13 @@ function renderExerciseOutfit() {
         morningTemp: tex.morningTemp ?? tripCtx.day.tmin ?? 18,
         logged: !!(tripCtx.planEntry.exWorn || (activeExerciseOutfit && activeExerciseOutfit.date === todayStr && activeExerciseOutfit.logged && activeExerciseOutfit.top?.id === tTop.id))
       };
+      if (isNonExerciseShoe(activeExerciseOutfit.shoe)) {
+        const pickedEx = generateExerciseOutfit([activeExerciseOutfit.shoe.id]);
+        if (pickedEx && pickedEx.shoe && !isNonExerciseShoe(pickedEx.shoe)) {
+          activeExerciseOutfit.shoe = pickedEx.shoe;
+          saveExerciseOutfitState(activeExerciseOutfit);
+        }
+      }
     }
   }
   if (!lockedFromTrip && (!activeExerciseOutfit || activeExerciseOutfit.date !== todayStr)) {
@@ -20304,7 +20315,13 @@ function pickTripExerciseOutfit(day, items, exUsage, prevEx) {
   const morningTemp = typeof day.tmin === 'number' ? day.tmin : 18;
   const topsRaw = items.filter(i => i.category === 'tops' && !isItemDisliked(i));
   const bottomsRaw = items.filter(i => i.category === 'bottoms' && !isItemDisliked(i));
-  const shoesRaw = items.filter(i => i.category === 'shoes' && !isItemDisliked(i));
+  const shoesRawAll = items.filter(i => i.category === 'shoes' && !isItemDisliked(i));
+  const shoesExValid = shoesRawAll.filter(i => !isNonExerciseShoe(i));
+  const shoesRaw = shoesExValid.length
+    ? shoesExValid
+    : (wardrobe.filter(i => i.category === 'shoes' && !isItemDisliked(i) && !isNonExerciseShoe(i)).length
+        ? wardrobe.filter(i => i.category === 'shoes' && !isItemDisliked(i) && !isNonExerciseShoe(i))
+        : shoesRawAll);
   if (!topsRaw.length || !bottomsRaw.length || !shoesRaw.length) return null;
 
   const comfBottoms = bottomsRaw.filter(i => !isNonExerciseStreetBottom(i));
