@@ -5117,7 +5117,9 @@ function swapDislikedPieceMinimal(slot, prevOutfit, excludedIds, dislikedItemId 
       : [];
     if (directFallbackPool.length > 0 && prevOutfit && prevOutfit.top && prevOutfit.bottom && prevOutfit.shoe) {
       const nonGymPool = directFallbackPool.filter(w => !isGymOrLoungeItem(w) && !isSwimwearItem(w));
-      const pickPool = nonGymPool.length > 0 ? nonGymPool : directFallbackPool;
+      const basePool = nonGymPool.length > 0 ? nonGymPool : directFallbackPool;
+      const tierPool = slot === 'top' ? basePool.filter(w => typeof isBaseTop === 'function' && isBaseTop(w)) : [];
+      const pickPool = tierPool.length > 0 ? tierPool : basePool;
       bestState = { ...prevOutfit, [slot]: pickPool[0] };
       changedSlots = [slot];
     } else {
@@ -10605,12 +10607,14 @@ function renderOutfit() {
 
   const outfit = generateOutfit();
   if (outfit && outfit.top && typeof getTopLayerTier === 'function' && getTopLayerTier(outfit.top) !== 'base') {
+    const todayDisliked = typeof getTodayDislikedIds === 'function' ? getTodayDislikedIds() : new Set();
     let baseCands = typeof getSlotCandidatesForOutfit === 'function'
-      ? getSlotCandidatesForOutfit('top', outfit, typeof getTodayDislikedIds === 'function' ? getTodayDislikedIds() : new Set())
-          .filter(t => getTopLayerTier(t) === 'base')
+      ? getSlotCandidatesForOutfit('top', outfit, todayDisliked).filter(t => getTopLayerTier(t) === 'base')
       : [];
     if (baseCands.length === 0) {
-      baseCands = wardrobe.filter(w => w.category === 'tops' && getTopLayerTier(w) === 'base' && !isItemDisliked(w));
+      const allBases = wardrobe.filter(w => w.category === 'tops' && getTopLayerTier(w) === 'base' && !isItemDisliked(w));
+      const nonDislikedBases = allBases.filter(w => !todayDisliked.has(w.id));
+      baseCands = nonDislikedBases.length > 0 ? nonDislikedBases : allBases;
     }
     if (baseCands.length > 0) {
       outfit.top = baseCands[0];
