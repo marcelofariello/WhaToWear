@@ -4845,6 +4845,7 @@ function getFormalityDisplayLabel(fId) {
 
 function isItemDisliked(itemOrSpec) {
   if (!itemOrSpec) return false;
+  if (itemOrSpec.disabled === true) return true;
   const sub = (itemOrSpec.subType || '').toLowerCase().trim();
   const nm = (itemOrSpec.name || '').toLowerCase().trim();
   const dislikedSubs = (userProfile.dislikedSubTypes || []).map(s => String(s).toLowerCase().trim()).filter(Boolean);
@@ -4854,6 +4855,29 @@ function isItemDisliked(itemOrSpec) {
   if (dislikedSubs.some(ds => ds && nm.includes(ds))) return true;
   if (dislikedNames.some(dn => dn && (nm.includes(dn) || sub.includes(dn)))) return true;
   return false;
+}
+
+function toggleWardrobeItemDisabled(itemId) {
+  const it = wardrobe.find(w => w.id === itemId);
+  if (!it) return;
+  it.disabled = !it.disabled;
+  saveData();
+
+  // If just disabled and currently worn in Today's outfit, swap only that piece out
+  if (it.disabled && typeof window !== 'undefined' && window.lastRenderedMainOutfit) {
+    const slot = findDislikedOutfitSlot(window.lastRenderedMainOutfit, itemId);
+    if (slot) {
+      const excluded = typeof getTodayDislikedIds === 'function' ? getTodayDislikedIds() : new Set();
+      excluded.add(itemId);
+      swapDislikedPieceMinimal(slot, window.lastRenderedMainOutfit, excluded);
+    }
+  }
+
+  renderWardrobe();
+  renderOutfit();
+  toast(it.disabled
+    ? `🚫 Disabled "${it.name}" — won't be suggested until you enable it.`
+    : `✅ Enabled "${it.name}" — back in your outfit rotation!`);
 }
 
 function persistDislikes() {
@@ -11918,8 +11942,9 @@ function renderWardrobe() {
       : `<div class="card-color" style="background:${item.color}; position:relative;">${orderedColors.length > 1 ? `<div class="card-color-dots-row" style="bottom:6px; right:6px;">${cardColorDotsHtml}</div>` : ''}</div>
          <div class="card-emoji">${emoji}</div>`;
 
+    const isDisabled = item.disabled === true;
     return `
-      <div class="clothing-card" style="animation-delay:${idx * 0.04}s">
+      <div class="clothing-card" style="animation-delay:${idx * 0.04}s;${isDisabled ? ' opacity:0.62; border:1.5px dashed #fca5a5;' : ''}">
         <div class="card-actions">
           <div class="card-actions-left">
             <span class="card-actions-swatch" style="background:${item.color}" title="Primary Color"></span>
@@ -11927,6 +11952,11 @@ function renderWardrobe() {
             <span class="card-actions-cat">${escapeHtml(getCategoryLabel(item.category))}</span>
           </div>
           <div class="card-actions-btns">
+            <button type="button" class="icon-btn"
+                    style="${isDisabled ? 'background:#dcfce7; color:#15803d; border:1px solid #86efac;' : 'background:#fef2f2; color:#b91c1c; border:1px solid #fecaca;'}"
+                    onclick="event.stopPropagation(); toggleWardrobeItemDisabled('${item.id}')"
+                    title="${isDisabled ? `Enable ${escapeHtml(item.name)} — allow in outfits again` : `Disable ${escapeHtml(item.name)} — never suggest`}"
+                    aria-label="${isDisabled ? 'Enable' : 'Disable'}">${isDisabled ? '✓' : '🚫'}</button>
             <button type="button" class="icon-btn icon-btn-edit" onclick="event.stopPropagation(); openEditModal('${item.id}')" title="Edit ${escapeHtml(item.name)}" aria-label="Edit">✏️</button>
             <button type="button" class="icon-btn icon-btn-delete" onclick="event.stopPropagation(); deleteItem('${item.id}')" title="Delete ${escapeHtml(item.name)}" aria-label="Delete">✕</button>
           </div>
@@ -11936,6 +11966,7 @@ function renderWardrobe() {
         <div class="card-sub">${escapeHtml(item.subType)}</div>
         ${item.aiDescription ? `<div style="font-size:0.72rem; color:var(--text-secondary); margin:-4px 0 8px; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;" title="${escapeHtml(item.aiDescription)}">🤖 ${escapeHtml(item.aiDescription)}</div>` : ''}
         <div class="card-badges">
+          ${isDisabled ? `<span class="badge" onclick="event.stopPropagation(); toggleWardrobeItemDisabled('${item.id}')" style="cursor:pointer; background:#fef2f2; color:#b91c1c; border:1px solid #fecaca;" title="Tap to re-enable">🚫 Disabled (Tap to Enable)</span>` : ''}
           <span class="badge badge-wear-count" onclick="event.stopPropagation(); incrementItemWear('${item.id}')" style="cursor:pointer;" title="Times worn (tap to add +1)">👕 Worn ${wearCount}×</span>
           <span class="badge ${fitBadgeClass}" title="${escapeHtml(fit.reason)}">${fitIcon} ${fit.score}/10 Fit</span>
           <span class="badge badge-category">${escapeHtml(getCategoryLabel(item.category))}</span>
