@@ -5014,29 +5014,34 @@ function scoreOutfitCandidate(state, bp) {
   return (ev && typeof ev.score === 'number') ? ev.score : 100;
 }
 
-function swapDislikedPieceMinimal(slot, prevOutfit, excludedIds) {
+function swapDislikedPieceMinimal(slot, prevOutfit, excludedIds, dislikedItemId = null) {
   if (!slot || !prevOutfit) return { ok: false, changedSlots: [] };
   const bp = prevOutfit.blueprint || (typeof buildPersonalStyleBlueprint === 'function' ? buildPersonalStyleBlueprint() : null);
   const prevScore = scoreOutfitCandidate(prevOutfit, bp);
   const goodThreshold = Math.max(85, (Number.isFinite(prevScore) ? prevScore : 100) - 22);
 
-  let bestState = null;
-  let changedSlots = [slot];
+  const trySwapWithExclusions = (exSet) => {
+    let bestState = null;
+    let changedSlots = [slot];
 
-  if (slot === 'belt') {
-    const updated = { ...prevOutfit };
-    const allowedBelts = wardrobe.filter(a => isBeltItem(a) && !excludedIds.has(a.id) && !isItemDisliked(a));
-    updated.beltRec = proposeBeltForOutfit(updated.shoe, updated.bottom, updated.top, updated.outerwear || updated.midLayer, allowedBelts);
-    bestState = updated;
-  } else {
+    if (slot === 'belt') {
+      const updated = { ...prevOutfit };
+      const allowedBelts = wardrobe.filter(a => isBeltItem(a) && !exSet.has(a.id) && !isItemDisliked(a));
+      updated.beltRec = proposeBeltForOutfit(updated.shoe, updated.bottom, updated.top, updated.outerwear || updated.midLayer, allowedBelts);
+      if (updated.beltRec?.beltItem?.id === dislikedItemId) {
+        updated.beltRec = { status: 'none', beltItem: null };
+      }
+      return { bestState: updated, changedSlots };
+    }
+
     // Pass 1: Try swapping ONLY the disliked slot
-    const cands1 = getSlotCandidatesForOutfit(slot, prevOutfit, excludedIds);
+    const cands1 = getSlotCandidatesForOutfit(slot, prevOutfit, exSet);
     let best1 = null;
     let best1Score = -Infinity;
     cands1.forEach(cand => {
       const trial = { ...prevOutfit, [slot]: cand };
       if (slot === 'shoe' || slot === 'bottom' || slot === 'top') {
-        const allowedBelts = wardrobe.filter(a => isBeltItem(a) && !excludedIds.has(a.id) && !isItemDisliked(a));
+        const allowedBelts = wardrobe.filter(a => isBeltItem(a) && !exSet.has(a.id) && !isItemDisliked(a));
         trial.beltRec = proposeBeltForOutfit(trial.shoe, trial.bottom, trial.top, trial.outerwear || trial.midLayer, allowedBelts);
       }
       const sc = scoreOutfitCandidate(trial, bp);
@@ -5047,53 +5052,74 @@ function swapDislikedPieceMinimal(slot, prevOutfit, excludedIds) {
     });
 
     if (best1 && best1Score >= goodThreshold) {
-      bestState = best1;
-      changedSlots = [slot];
-    } else {
-      // Pass 2: Could not find a good combination with 1 swap -> try swapping 1 companion slot (least disruptive first)
-      const companionOrder = ['midLayer', 'outerwear', 'shoe', 'bottom', 'top']
-        .filter(s => s !== slot && prevOutfit[s]);
-      let best2 = null;
-      let best2Score = -Infinity;
-      let best2Comp = null;
+      return { bestState: best1, changedSlots: [slot] };
+    }
 
-      for (const compSlot of companionOrder) {
-        const compCands = getSlotCandidatesForOutfit(compSlot, prevOutfit, excludedIds);
-        // For optional layers, also allow removing the layer if needed
-        const compOptions = (compSlot === 'midLayer' || compSlot === 'outerwear') ? [...compCands, null] : compCands;
-        for (const compCand of compOptions) {
-          const midState = { ...prevOutfit, [compSlot]: compCand };
-          const slotCands = getSlotCandidatesForOutfit(slot, midState, excludedIds);
-          for (const slotCand of slotCands.slice(0, 12)) {
-            const trial = { ...midState, [slot]: slotCand };
-            const allowedBelts = wardrobe.filter(a => isBeltItem(a) && !excludedIds.has(a.id) && !isItemDisliked(a));
-            trial.beltRec = proposeBeltForOutfit(trial.shoe, trial.bottom, trial.top, trial.outerwear || trial.midLayer, allowedBelts);
-            const sc = scoreOutfitCandidate(trial, bp);
-            if (sc > best2Score) {
-              best2Score = sc;
-              best2 = trial;
-              best2Comp = compSlot;
-            }
+    // Pass 2: Could not find a good combination with 1 swap -> try swapping 1 companion slot (least disruptive first)
+    const companionOrder = ['midLayer', 'outerwear', 'shoe', 'bottom', 'top']
+      .filter(s => s !== slot && prevOutfit[s]);
+    let best2 = null;
+    let best2Score = -Infinity;
+    let best2Comp = null;
+
+    for (const compSlot of companionOrder) {
+      const compCands = getSlotCandidatesForOutfit(compSlot, prevOutfit, exSet);
+      const compOptions = (compSlot === 'midLayer' || compSlot === 'outerwear') ? [...compCands, null] : compCands;
+      for (const compCand of compOptions) {
+        const midState = { ...prevOutfit, [compSlot]: compCand };
+        const slotCands = getSlotCandidatesForOutfit(slot, midState, exSet);
+        for (const slotCand of slotCands.slice(0, 12)) {
+          const trial = { ...midState, [slot]: slotCand };
+          const allowedBelts = wardrobe.filter(a => isBeltItem(a) && !exSet.has(a.id) && !isItemDisliked(a));
+          trial.beltRec = proposeBeltForOutfit(trial.shoe, trial.bottom, trial.top, trial.outerwear || trial.midLayer, allowedBelts);
+          const sc = scoreOutfitCandidate(trial, bp);
+          if (sc > best2Score) {
+            best2Score = sc;
+            best2 = trial;
+            best2Comp = compSlot;
           }
         }
-        if (best2 && best2Score >= goodThreshold) break;
       }
+      if (best2 && best2Score >= goodThreshold) break;
+    }
 
-      if (best2 && (!best1 || best2Score >= goodThreshold || best2Score > best1Score + 18)) {
-        bestState = best2;
-        changedSlots = [slot, best2Comp];
-      } else if (best1) {
-        bestState = best1;
-        changedSlots = [slot];
-      } else if (slot === 'midLayer' || slot === 'outerwear' || slot === 'accessory') {
-        bestState = { ...prevOutfit, [slot]: null };
-        changedSlots = [slot];
-      }
+    if (best2 && (!best1 || best2Score >= goodThreshold || best2Score > best1Score + 18)) {
+      bestState = best2;
+      changedSlots = [slot, best2Comp];
+    } else if (best1) {
+      bestState = best1;
+      changedSlots = [slot];
+    } else if (slot === 'midLayer' || slot === 'outerwear' || slot === 'accessory') {
+      bestState = { ...prevOutfit, [slot]: null };
+      changedSlots = [slot];
+    }
+    return { bestState, changedSlots };
+  };
+
+  let { bestState, changedSlots } = trySwapWithExclusions(excludedIds);
+
+  // Pass 3: If user has already cycled through all items in this slot today, wrap around excluding ONLY the just-disliked item
+  if ((!bestState || !bestState.top || !bestState.bottom || !bestState.shoe) && dislikedItemId && excludedIds.size > 1) {
+    const minimalExclude = new Set([dislikedItemId]);
+    const retry = trySwapWithExclusions(minimalExclude);
+    if (retry.bestState && retry.bestState.top && retry.bestState.bottom && retry.bestState.shoe) {
+      bestState = retry.bestState;
+      changedSlots = retry.changedSlots;
     }
   }
 
+  // Pass 4 (Worst case): Regenerate the whole outfit so the disliked item is MANDATORILY removed
   if (!bestState || !bestState.top || !bestState.bottom || !bestState.shoe) {
-    return { ok: false, changedSlots: [] };
+    if (typeof activeAIDailyOutfit !== 'undefined') activeAIDailyOutfit = null;
+    try { localStorage.removeItem('wtw_ai_daily_outfit'); } catch {}
+    try { localStorage.removeItem('wtw_daily_main_lock'); } catch {}
+    const regen = typeof generateOutfit === 'function' ? generateOutfit() : null;
+    if (regen && regen.top && regen.bottom && regen.shoe && regen[slot]?.id !== dislikedItemId) {
+      bestState = regen;
+      changedSlots = ['top', 'bottom', 'shoe'];
+    } else {
+      return { ok: false, changedSlots: [] };
+    }
   }
 
   if (prevOutfit.tripContext && prevOutfit.tripContext.planEntry && prevOutfit.tripContext.planEntry.items) {
@@ -5150,7 +5176,7 @@ function dislikeOutfitPieceForToday(itemId) {
   const oldName = oldItem ? oldItem.name : 'that piece';
 
   const excludedIds = addTodayDislikedId(itemId);
-  const res = matchedSlot ? swapDislikedPieceMinimal(matchedSlot, prevOutfit, excludedIds) : { ok: false, changedSlots: [] };
+  const res = matchedSlot ? swapDislikedPieceMinimal(matchedSlot, prevOutfit, excludedIds, itemId) : { ok: false, changedSlots: [] };
 
   if (res.ok && res.updated && typeof window !== 'undefined') {
     window.lastRenderedMainOutfit = res.updated;
@@ -5158,7 +5184,9 @@ function dislikeOutfitPieceForToday(itemId) {
   renderOutfit();
   if (res.ok) {
     const newItem = res.updated && matchedSlot !== 'belt' ? res.updated[matchedSlot] : null;
-    if (res.changedSlots.length > 1) {
+    if (res.changedSlots.length >= 3) {
+      toast(`🔄 Removed ${oldName} & built a fresh outfit without it`);
+    } else if (res.changedSlots.length > 1) {
       toast(`🔄 Swapped ${oldName} + ${res.changedSlots[1]} to keep a great combination (rest stayed the same)`);
     } else if (newItem) {
       toast(`🔄 Swapped only ${oldName} → ${newItem.name}`);
@@ -5166,7 +5194,7 @@ function dislikeOutfitPieceForToday(itemId) {
       toast(`🔄 Removed ${oldName} from today's look (kept the rest!)`);
     }
   } else {
-    toast(`⚠️ No other alternative available for ${oldName} right now.`);
+    toast(`⚠️ Only 1 item in this category in your wardrobe — add more ${oldItem?.category || 'items'} to swap.`);
   }
 }
 
