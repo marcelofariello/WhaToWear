@@ -4973,9 +4973,10 @@ function getSlotCandidatesForOutfit(slot, outfitState, excludedIds) {
   };
 
   if (slot === 'top') {
-    const topsPool = baseFilter(wardrobe.filter(it => it.category === 'tops'));
+    const allBaseTops = wardrobe.filter(it => it.category === 'tops' && isBaseTop(it) && !isItemDisliked(it));
+    const topsPool = baseFilter(allBaseTops.length > 0 ? allBaseTops : wardrobe.filter(it => it.category === 'tops'));
     const trueBases = topsPool.filter(it => isBaseTop(it));
-    const pool = trueBases.length > 0 ? trueBases : topsPool;
+    const pool = allBaseTops.length > 0 ? trueBases : topsPool;
     const compat = pool.filter(t => isLayerPairCompatible(t, outfitState.midLayer, outfitState.outerwear));
     return compat.length > 0 ? compat : pool;
   }
@@ -5116,10 +5117,13 @@ function swapDislikedPieceMinimal(slot, prevOutfit, excludedIds, dislikedItemId 
       ? wardrobe.filter(w => w.category === cat && w.id !== dislikedItemId && !isItemDisliked(w) && (slot !== 'accessory' || !isBeltItem(w)))
       : [];
     if (directFallbackPool.length > 0 && prevOutfit && prevOutfit.top && prevOutfit.bottom && prevOutfit.shoe) {
-      const nonGymPool = directFallbackPool.filter(w => !isGymOrLoungeItem(w) && !isSwimwearItem(w));
-      const basePool = nonGymPool.length > 0 ? nonGymPool : directFallbackPool;
-      const tierPool = slot === 'top' ? basePool.filter(w => typeof isBaseTop === 'function' && isBaseTop(w)) : [];
-      const pickPool = tierPool.length > 0 ? tierPool : basePool;
+      const slotPool = slot === 'top'
+        ? (directFallbackPool.some(w => typeof isBaseTop === 'function' && isBaseTop(w))
+            ? directFallbackPool.filter(w => typeof isBaseTop === 'function' && isBaseTop(w))
+            : directFallbackPool)
+        : directFallbackPool;
+      const nonGymPool = slotPool.filter(w => !isGymOrLoungeItem(w) && !isSwimwearItem(w));
+      const pickPool = nonGymPool.length > 0 ? nonGymPool : slotPool;
 
       // Pick the highest-scoring replacement from pickPool
       let chosenCand = pickPool[0];
