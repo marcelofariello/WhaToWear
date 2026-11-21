@@ -10811,6 +10811,7 @@ function renderOutfit() {
   if (typeof renderTomorrowPreview === 'function') renderTomorrowPreview();
   if (typeof renderExerciseOutfit === 'function') renderExerciseOutfit();
   maybeTriggerAIDailyOutfit();
+  if (typeof maybeRunAIOutfitSanityCheck === 'function') maybeRunAIOutfitSanityCheck(outfit);
 }
 
 function getTomorrowWeatherContext() {
@@ -11171,6 +11172,7 @@ function renderExerciseOutfit() {
       </div>
       <div class="outfit-items">${itemsHtml}</div>
     </div>`;
+  if (typeof maybeRunAIExerciseSanityCheck === 'function') maybeRunAIExerciseSanityCheck(ex);
 }
 
 function toggleExerciseSecondLayer() {
@@ -11490,6 +11492,226 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [] }) 
     console.warn('AI daily outfit error:', e);
   } finally {
     aiDailyOutfitInFlight = false;
+  }
+}
+
+let aiSanityCheckSig = '';
+let aiSanityCheckInFlight = false;
+let aiExSanityCheckSig = '';
+let aiExSanityCheckInFlight = false;
+
+async function aiTagWardrobeSmartAttributes() {
+  if (!wardrobe || wardrobe.length === 0) { toast('Add wardrobe items first.'); return; }
+  const geminiKey = (localStorage.getItem('wtw_gemini_apikey') || '').trim();
+  if (!geminiKey) {
+    toast('🔑 Add your Gemini API key in Settings / Profile first to run AI Smart-Tag Rules.');
+    return;
+  }
+  const btn = document.getElementById('btn-ai-tag-wardrobe');
+  const origLabel = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Tagging…'; }
+
+  let updatedCount = 0;
+  try {
+    const batchSize = 35;
+    for (let i = 0; i < wardrobe.length; i += batchSize) {
+      const batch = wardrobe.slice(i, i + batchSize).map(it => ({
+        id: it.id,
+        category: it.category,
+        name: it.name,
+        subType: it.subType,
+        formality: it.formality,
+        season: it.season,
+        aiDescription: it.aiDescription || ''
+      }));
+      if (btn) btn.innerHTML = `⏳ Tagging ${Math.min(i + batchSize, wardrobe.length)}/${wardrobe.length}…`;
+
+      const prompt = [
+        `You are a wardrobe metadata classifier. For each item in the JSON array, return strict JSON array of objects with:`,
+        `- id: exact item id`,
+        `- layerTier: for tops/outerwear ONLY: "base" (t-shirt, henley, polo, dress shirt, tank, blouse), "mid" (sweater, quarter-zip, pullover, hoodie, sweatshirt, cardigan, blazer, overshirt, vest — NEVER "base"), or "outer" (jacket, coat, trench, puffer, windbreaker); for bottoms/shoes/accessories return null`,
+        `- activity: one of "everyday" | "work" | "exercise" | "swim" | "lounge" (swim jammers/trunks/boardshorts/bikini MUST be "swim"; gym/running/soccer gear MUST be "exercise")`,
+        `- minTempC: integer minimum comfortable °C (e.g. 18 for shorts/tees, 5 for sweaters/jackets, -5 for heavy coats)`,
+        `- maxTempC: integer maximum comfortable °C (e.g. 20 for chunky sweaters, 24 for boots, 38 for t-shirts/shorts/sneakers)`,
+        `Items: ${JSON.stringify(batch)}`,
+        `Return ONLY a valid JSON array.`
+      ].join('\n');
+
+      const data = await callGeminiGenerateContent(geminiKey, {
+        parts: [{ text: prompt }],
+        temperature: 0.1,
+        responseMimeType: 'application/json'
+      });
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const arrMatch = raw.match(/\[[\s\S]*\]/);
+      if (!arrMatch) continue;
+      const tags = JSON.parse(arrMatch[0]);
+      if (!Array.isArray(tags)) continue;
+      tags.forEach(tag => {
+        if (!tag || !tag.id) return;
+        const item = wardrobe.find(w => w.id === tag.id);
+        if (!item) return;
+        if (tag.layerTier === 'base' || tag.layerTier === 'mid' || tag.layerTier === 'outer') {
+          item.aiLayerTier = tag.layerTier;
+        }
+        if (['everyday', 'work', 'exercise', 'swim', 'lounge'].includes(tag.activity)) {
+          item.aiActivity = tag.activity;
+        }
+        if (typeof tag.minTempC === 'number' && Number.isFinite(tag.minTempC)) {
+          item.aiMinTempC = Math.round(tag.minTempC);
+        }
+        if (typeof tag.maxTempC === 'number' && Number.isFinite(tag.maxTempC)) {
+          item.aiMaxTempC = Math.round(tag.maxTempC);
+        }
+        updatedCount++;
+      });
+    }
+    saveData();
+    try { localStorage.removeItem('wtw_daily_main_lock'); } catch {}
+    try { localStorage.removeItem('wtw_exercise_outfit_today'); } catch {}
+    activeAIDailyOutfit = null;
+    aiSanityCheckSig = '';
+    aiExSanityCheckSig = '';
+    renderWardrobe();
+    renderOutfit();
+    toast(`🧠 AI Smart-Tagged ${updatedCount} wardrobe items! Refreshed outfits with new rules.`);
+  } catch (e) {
+    console.warn('AI Smart-Tag error:', e);
+    toast('⚠️ AI Smart-Tagging failed — check your Gemini API key or try again.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = origLabel || '🧠 AI Smart-Tag Rules'; }
+  }
+}
+
+async function maybeRunAIOutfitSanityCheck(outfit) {
+  if (!outfit || !outfit.top || !outfit.bottom || !outfit.shoe) return;
+  const geminiKey = (localStorage.getItem('wtw_gemini_apikey') || '').trim();
+  if (!geminiKey || aiSanityCheckInFlight) return;
+  const today = typeof getOutfitDayKey === 'function' ? getOutfitDayKey() : new Date().toISOString().slice(0, 10);
+  const temp = weather && typeof weather.temp === 'number' ? Math.round(weather.temp) : 20;
+  const form = typeof getDayFormality === 'function' ? getDayFormality() : 'casual';
+  const sig = `${today}|${temp}|${form}|${outfit.top.id}|${outfit.midLayer?.id || ''}|${outfit.outerwear?.id || ''}|${outfit.bottom.id}|${outfit.shoe.id}`;
+  if (aiSanityCheckSig === sig) return;
+  aiSanityCheckSig = sig;
+  aiSanityCheckInFlight = true;
+  try {
+    const dayName = new Date().toLocaleDateString('en-US', { weekday: 'short' });
+    const sInfo = typeof getLocationSeasonInfo === 'function' ? getLocationSeasonInfo() : { name: 'Spring' };
+    const summary = {
+      top: `${outfit.top.name} (${outfit.top.subType}, ${outfit.top.formality}, ${outfit.top.season || ''})`,
+      midLayer: outfit.midLayer ? `${outfit.midLayer.name} (${outfit.midLayer.subType})` : null,
+      outerwear: outfit.outerwear ? `${outfit.outerwear.name} (${outfit.outerwear.subType})` : null,
+      bottom: `${outfit.bottom.name} (${outfit.bottom.subType}, ${outfit.bottom.formality})`,
+      shoe: `${outfit.shoe.name} (${outfit.shoe.subType}, ${outfit.shoe.season || ''})`
+    };
+    const prompt = [
+      `You are a strict fashion sanity-check critic. Check if ANY piece in this outfit is absurd or weather/context inappropriate.`,
+      `Context: ${dayName}, ${temp}°C, ${sInfo.name}, target formality="${form}".`,
+      `Rules: NEVER allow a sweater/hoodie/heavy knit in "top" (Layer 1) or in >24°C weather; NEVER allow winter boots in >25°C; NEVER allow sandals/slides Mon-Fri work; NEVER allow swimwear in daily outfits.`,
+      `Outfit: ${JSON.stringify(summary)}`,
+      `Return ONLY valid JSON: {"ok": boolean, "badSlots": array of slot keys from ["top","midLayer","outerwear","bottom","shoe"], "reason": "short reason"}`
+    ].join('\n');
+
+    const data = await callGeminiGenerateContent(geminiKey, {
+      parts: [{ text: prompt }],
+      temperature: 0.1,
+      responseMimeType: 'application/json'
+    });
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jm = raw.match(/\{[\s\S]*\}/);
+    if (!jm) return;
+    const verdict = JSON.parse(jm[0]);
+    if (verdict && verdict.ok === false && Array.isArray(verdict.badSlots) && verdict.badSlots.length > 0) {
+      let current = outfit;
+      let anyFixed = false;
+      for (const slot of verdict.badSlots) {
+        if (!['top', 'midLayer', 'outerwear', 'bottom', 'shoe'].includes(slot)) continue;
+        const badItem = current[slot];
+        if (!badItem) continue;
+        const excluded = typeof addTodayDislikedId === 'function' ? addTodayDislikedId(badItem.id) : new Set([badItem.id]);
+        if (typeof swapDislikedPieceMinimal === 'function') {
+          const res = swapDislikedPieceMinimal(slot, current, excluded);
+          if (res.ok && res.updated) {
+            current = res.updated;
+            anyFixed = true;
+          }
+        }
+      }
+      if (anyFixed) {
+        aiSanityCheckSig = `${today}|${temp}|${form}|${current.top?.id}|${current.midLayer?.id || ''}|${current.outerwear?.id || ''}|${current.bottom?.id}|${current.shoe?.id}`;
+        if (typeof window !== 'undefined') window.lastRenderedMainOutfit = current;
+        renderOutfit();
+        toast(`🧠 AI Critic fixed ${verdict.badSlots.join(', ')}: ${verdict.reason || 'improved weather/style fit'}`);
+      }
+    }
+  } catch (e) {
+    console.warn('AI outfit sanity check error:', e);
+  } finally {
+    aiSanityCheckInFlight = false;
+  }
+}
+
+async function maybeRunAIExerciseSanityCheck(exOutfit) {
+  if (!exOutfit || !exOutfit.top || !exOutfit.bottom || !exOutfit.shoe) return;
+  const geminiKey = (localStorage.getItem('wtw_gemini_apikey') || '').trim();
+  if (!geminiKey || aiExSanityCheckInFlight) return;
+  const today = typeof getOutfitDayKey === 'function' ? getOutfitDayKey() : new Date().toISOString().slice(0, 10);
+  const temp = typeof exOutfit.morningTemp === 'number' ? Math.round(exOutfit.morningTemp) : 18;
+  const sig = `${today}|${temp}|${exOutfit.top.id}|${exOutfit.secondLayer?.id || ''}|${exOutfit.bottom.id}|${exOutfit.shoe.id}`;
+  if (aiExSanityCheckSig === sig) return;
+  aiExSanityCheckSig = sig;
+  aiExSanityCheckInFlight = true;
+  try {
+    const summary = {
+      top: `${exOutfit.top.name} (${exOutfit.top.subType})`,
+      secondLayer: exOutfit.secondLayer ? `${exOutfit.secondLayer.name} (${exOutfit.secondLayer.subType})` : null,
+      bottom: `${exOutfit.bottom.name} (${exOutfit.bottom.subType})`,
+      shoe: `${exOutfit.shoe.name} (${exOutfit.shoe.subType})`
+    };
+    const prompt = [
+      `You are a strict fitness outfit sanity-check critic. Check if ANY piece in this Morning Exercise Outfit is absurd.`,
+      `Rules: NEVER allow swimwear (swim jammers, swim trunks, boardshorts) for dry-land exercise; NEVER allow boots, loafers, dress shoes, or sandals for exercise; NEVER allow jeans or dress pants.`,
+      `Morning temp: ${temp}°C. Outfit: ${JSON.stringify(summary)}`,
+      `Return ONLY valid JSON: {"ok": boolean, "badSlots": array from ["top","secondLayer","bottom","shoe"], "reason": "short reason"}`
+    ].join('\n');
+
+    const data = await callGeminiGenerateContent(geminiKey, {
+      parts: [{ text: prompt }],
+      temperature: 0.1,
+      responseMimeType: 'application/json'
+    });
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jm = raw.match(/\{[\s\S]*\}/);
+    if (!jm) return;
+    const verdict = JSON.parse(jm[0]);
+    if (verdict && verdict.ok === false && Array.isArray(verdict.badSlots) && verdict.badSlots.length > 0) {
+      const avoid = verdict.badSlots.map(s => exOutfit[s]?.id).filter(Boolean);
+      if (avoid.length > 0 && typeof generateExerciseOutfit === 'function') {
+        const replacement = generateExerciseOutfit(avoid);
+        if (replacement) {
+          activeExerciseOutfit = { date: today, ...replacement, logged: false };
+          aiExSanityCheckSig = `${today}|${temp}|${replacement.top?.id}|${replacement.secondLayer?.id || ''}|${replacement.bottom?.id}|${replacement.shoe?.id}`;
+          try {
+            localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
+              date: today,
+              updatedAt: Date.now(),
+              topId: replacement.top.id,
+              secondLayerId: replacement.secondLayer ? replacement.secondLayer.id : null,
+              bottomId: replacement.bottom.id,
+              shoeId: replacement.shoe.id,
+              morningTemp: replacement.morningTemp,
+              logged: false
+            }));
+          } catch {}
+          renderExerciseOutfit();
+          toast(`🧠 AI Exercise Critic fixed ${verdict.badSlots.join(', ')}: ${verdict.reason || 'removed unsuitable gear'}`);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('AI exercise sanity check error:', e);
+  } finally {
+    aiExSanityCheckInFlight = false;
   }
 }
 
@@ -12054,6 +12276,8 @@ function renderWardrobe() {
           ${patternBadge ? `<span class="badge" style="background:rgba(167,139,250,0.16); color:#c4b5fd; border:1px solid rgba(167,139,250,0.35);">${patternBadge}</span>` : ''}
           ${lenLabel ? `<span class="badge badge-length">${lenLabel}</span>` : ''}
           ${seasonBadge ? `<span class="badge" style="background:#f4efe6; color:#5a4632;">${seasonBadge}</span>` : ''}
+          ${item.aiActivity === 'swim' ? `<span class="badge" style="background:#e0f2fe; color:#0369a1;">🏊 Swimwear</span>` : ''}
+          ${(typeof item.aiMinTempC === 'number' && typeof item.aiMaxTempC === 'number') ? `<span class="badge" style="background:#f1f5f9; color:#334155;" title="AI comfortable temperature range">🌡️ ${item.aiMinTempC}–${item.aiMaxTempC}°C</span>` : ''}
         </div>
       </div>`;
   }).join('');
