@@ -11098,9 +11098,7 @@ function generateExerciseOutfit(avoidIds = []) {
 
   // Date-seeded daily tie-breaker so it proposes a consistent daily look all morning
   const dayNum = Math.floor(Date.now() / 86400000);
-  const todaySkipped = (typeof getTodayDislikedIds === 'function') ? getTodayDislikedIds() : new Set();
   const pickBest = (list, scorer) => {
-    const avoidSet = new Set(typeof avoidIds !== 'undefined' && Array.isArray(avoidIds) ? avoidIds : []);
     let filtered = list.filter(x => !avoidSet.has(x.id) && !todaySkipped.has(x.id));
     if (!filtered.length && avoidSet.size) {
       filtered = list.filter(x => !avoidSet.has(x.id));
@@ -11322,22 +11320,20 @@ function renderExerciseOutfit() {
   if (needsRefresh) {
     const picked = generateExerciseOutfit();
     if (!picked) { section.innerHTML = ''; return; }
-    const keepBase = activeExerciseOutfit && activeExerciseOutfit.date === todayStr
-      && !isItemDisliked(activeExerciseOutfit.top)
-      && !isItemDisliked(activeExerciseOutfit.bottom)
-      && !isItemDisliked(activeExerciseOutfit.shoe)
-      && !isNonExerciseStreetBottom(activeExerciseOutfit.bottom)
-      && !isSwimwearItem(activeExerciseOutfit.bottom)
-      && !isSwimwearItem(activeExerciseOutfit.top)
-      && !isNonExerciseShoe(activeExerciseOutfit.shoe);
-    activeExerciseOutfit = keepBase
-      ? {
-          ...activeExerciseOutfit,
-          bottom: (exercisePreferShorts && !isShortsBottom(activeExerciseOutfit.bottom)) ? picked.bottom : activeExerciseOutfit.bottom,
-          secondLayer: exerciseSecondLayer ? (activeExerciseOutfit.secondLayer && !isItemDisliked(activeExerciseOutfit.secondLayer) ? activeExerciseOutfit.secondLayer : picked.secondLayer) : null,
-          logged: false
-        }
-      : { date: todayStr, ...picked, logged: false };
+    const sameDay = activeExerciseOutfit && activeExerciseOutfit.date === todayStr;
+    const validTop = sameDay && activeExerciseOutfit.top && !isItemDisliked(activeExerciseOutfit.top) && !isSwimwearItem(activeExerciseOutfit.top);
+    const validBottom = sameDay && activeExerciseOutfit.bottom && !isItemDisliked(activeExerciseOutfit.bottom) && !isSwimwearItem(activeExerciseOutfit.bottom) && !isNonExerciseStreetBottom(activeExerciseOutfit.bottom) && (!exercisePreferShorts || isShortsBottom(activeExerciseOutfit.bottom));
+    const validShoe = sameDay && activeExerciseOutfit.shoe && !isItemDisliked(activeExerciseOutfit.shoe) && !isNonExerciseShoe(activeExerciseOutfit.shoe);
+    const validSecond = sameDay && activeExerciseOutfit.secondLayer && !isItemDisliked(activeExerciseOutfit.secondLayer);
+    activeExerciseOutfit = {
+      date: todayStr,
+      top: validTop ? activeExerciseOutfit.top : picked.top,
+      bottom: validBottom ? activeExerciseOutfit.bottom : picked.bottom,
+      shoe: validShoe ? activeExerciseOutfit.shoe : picked.shoe,
+      secondLayer: exerciseSecondLayer ? (validSecond ? activeExerciseOutfit.secondLayer : picked.secondLayer) : null,
+      morningTemp: picked.morningTemp,
+      logged: false
+    };
     saveExerciseOutfitState(activeExerciseOutfit);
   }
 
