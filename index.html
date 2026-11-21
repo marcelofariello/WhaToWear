@@ -8224,6 +8224,7 @@ function isGymOrLoungeItem(it) {
 
 function isSwimwearItem(it) {
   if (!it) return false;
+  if (it.aiActivity === 'swim') return true;
   const text = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''}`.toLowerCase();
   return /\b(swim|swimwear|swimsuit|swim\s*trunks?|swim\s*shorts?|swim\s*jammers?|jammers?|board\s*shorts?|boardshorts?|speedo|bikini|one-piece|rash\s*guard|wetsuit|bathing\s*suit)\b/.test(text);
 }
