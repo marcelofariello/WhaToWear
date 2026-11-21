@@ -5108,17 +5108,29 @@ function swapDislikedPieceMinimal(slot, prevOutfit, excludedIds, dislikedItemId 
     }
   }
 
-  // Pass 4 (Worst case): Regenerate the whole outfit so the disliked item is MANDATORILY removed
-  if (!bestState || !bestState.top || !bestState.bottom || !bestState.shoe) {
-    if (typeof activeAIDailyOutfit !== 'undefined') activeAIDailyOutfit = null;
-    try { localStorage.removeItem('wtw_ai_daily_outfit'); } catch {}
-    try { localStorage.removeItem('wtw_daily_main_lock'); } catch {}
-    const regen = typeof generateOutfit === 'function' ? generateOutfit() : null;
-    if (regen && regen.top && regen.bottom && regen.shoe && regen[slot]?.id !== dislikedItemId) {
-      bestState = regen;
-      changedSlots = ['top', 'bottom', 'shoe'];
+  // Pass 4 (Worst case): Direct category swap on prevOutfit excluding dislikedItemId, or regenerate whole outfit
+  if (!bestState || !bestState.top || !bestState.bottom || !bestState.shoe || (dislikedItemId && slot !== 'belt' && bestState[slot]?.id === dislikedItemId)) {
+    const slotCatMap = { top: 'tops', midLayer: 'tops', outerwear: 'outerwear', bottom: 'bottoms', shoe: 'shoes', accessory: 'accessories' };
+    const cat = slotCatMap[slot];
+    const directFallbackPool = cat
+      ? wardrobe.filter(w => w.category === cat && w.id !== dislikedItemId && !isItemDisliked(w) && (slot !== 'accessory' || !isBeltItem(w)))
+      : [];
+    if (directFallbackPool.length > 0 && prevOutfit && prevOutfit.top && prevOutfit.bottom && prevOutfit.shoe) {
+      const nonGymPool = directFallbackPool.filter(w => !isGymOrLoungeItem(w) && !isSwimwearItem(w));
+      const pickPool = nonGymPool.length > 0 ? nonGymPool : directFallbackPool;
+      bestState = { ...prevOutfit, [slot]: pickPool[0] };
+      changedSlots = [slot];
     } else {
-      return { ok: false, changedSlots: [] };
+      if (typeof activeAIDailyOutfit !== 'undefined') activeAIDailyOutfit = null;
+      try { localStorage.removeItem('wtw_ai_daily_outfit'); } catch {}
+      try { localStorage.removeItem('wtw_daily_main_lock'); } catch {}
+      const regen = typeof generateOutfit === 'function' ? generateOutfit() : null;
+      if (regen && regen.top && regen.bottom && regen.shoe && regen[slot]?.id !== dislikedItemId) {
+        bestState = regen;
+        changedSlots = ['top', 'bottom', 'shoe'];
+      } else {
+        return { ok: false, changedSlots: [] };
+      }
     }
   }
 
@@ -5166,15 +5178,36 @@ function swapDislikedPieceMinimal(slot, prevOutfit, excludedIds, dislikedItemId 
   return { ok: true, changedSlots, updated: bestState };
 }
 
-function dislikeOutfitPieceForToday(itemId) {
+function dislikeOutfitPieceForToday(itemId, context = 'main') {
   if (!itemId) return;
-  const prevOutfit = (typeof window !== 'undefined' && window.lastRenderedMainOutfit)
-    ? window.lastRenderedMainOutfit
-    : (typeof generateOutfit === 'function' ? generateOutfit() : null);
-  const matchedSlot = findDislikedOutfitSlot(prevOutfit, itemId);
   const oldItem = wardrobe.find(w => w.id === itemId);
   const oldName = oldItem ? oldItem.name : 'that piece';
 
+  const exSlots = ['top', 'secondLayer', 'bottom', 'shoe'];
+  const inExercise = typeof activeExerciseOutfit === 'object' && activeExerciseOutfit
+    && exSlots.some(s => activeExerciseOutfit[s]?.id === itemId);
+
+  const prevOutfit = (typeof window !== 'undefined' && window.lastRenderedMainOutfit)
+    ? window.lastRenderedMainOutfit
+    : (typeof generateOutfit === 'function' ? generateOutfit() : null);
+  const matchedMainSlot = findDislikedOutfitSlot(prevOutfit, itemId);
+
+  if ((context === 'exercise' || !matchedMainSlot) && inExercise && typeof swapDislikedExercisePiece === 'function') {
+    const excludedIds = addTodayDislikedId(itemId);
+    const exRes = swapDislikedExercisePiece(itemId, excludedIds);
+    if (exRes.ok) {
+      if (exRes.newItem) {
+        toast(`🔄 Swapped ${oldName} → ${exRes.newItem.name} in Morning Exercise`);
+      } else {
+        toast(`🔄 Removed ${oldName} from Morning Exercise`);
+      }
+    } else {
+      toast(`⚠️ Only 1 suitable exercise piece in this category — add more ${oldItem?.category || 'items'} to swap.`);
+    }
+    return;
+  }
+
+  const matchedSlot = matchedMainSlot;
   const excludedIds = addTodayDislikedId(itemId);
   const res = matchedSlot ? swapDislikedPieceMinimal(matchedSlot, prevOutfit, excludedIds, itemId) : { ok: false, changedSlots: [] };
 
@@ -8585,8 +8618,18 @@ function getTopLayerTier(it) {
   if (/\b(overshirt|shacket|shirt jacket|kimono|vest|gilet|waistcoat)\b/.test(txt)) {
     return 'mid';
   }
-  if (/\b(hoodie|sweatshirt|sweater|cardigan|pullover|fleece|quarter-zip|half-zip|turtleneck|mock-neck|mock neck|poncho|knitted polo|jumper|knitwear|crewneck knit|v-neck knit|cable knit)\b/.test(txt) && !txt.includes('under')) {
+  if (/\b(hoodie|sweatshirt|sweater|cardigan|pullover|fleece|quarter-zip|half-zip|turtleneck|mock-neck|mock neck|poncho|knitted polo|jumper|knitwear|crewneck knit|v-neck knit|cable knit|sweater-vest|sweater vest|shrug|bolero|cape)\b/.test(txt) && !txt.includes('under')) {
     return 'mid';
+  }
+  const isExplicitTeeOrShirt = /\b(t-shirt|tee|dress shirt|oxford|ocbd|poplin|button-up|button-down|camisole|tank|bodysuit)\b/.test(txt);
+  if (!isExplicitTeeOrShirt && /\b(knit|knitted|cashmere|merino)\b/.test(txt) && !txt.includes('under')) {
+    return 'mid';
+  }
+  const aiDesc = (it.aiDescription || '').toLowerCase();
+  if (!isExplicitTeeOrShirt && aiDesc && !/(under|pair with|layer with|wear with)\s+(a\s+)?(sweater|cardigan|hoodie|blazer|jacket)/.test(aiDesc)) {
+    if (/\b(sweater|cardigan|hoodie|sweatshirt|pullover|jumper|knitwear|cable-knit|ribbed knit|fleece|turtleneck|blazer|overshirt)\b/.test(aiDesc)) {
+      return 'mid';
+    }
   }
   if (it.aiLayerTier === 'base' || it.aiLayerTier === 'mid' || it.aiLayerTier === 'outer') {
     return it.aiLayerTier;
@@ -10368,7 +10411,7 @@ function getSeasonBadgeLabel(seasonVal) {
   return map[seasonVal] || '';
 }
 
-function renderOutfitItem(item, label, stepBadge) {
+function renderOutfitItem(item, label, stepBadge, outfitContext = 'main') {
   if (!item) return '';
   const emoji = getCategoryEmoji(item.category);
   const len = getItemLength(item);
@@ -10422,7 +10465,7 @@ function renderOutfitItem(item, label, stepBadge) {
         <button type="button" class="btn btn-secondary btn-sm"
                 style="padding:3px 8px; font-size:0.68rem; color:#b91c1c; border-color:#fecaca; background:#fff5f5;"
                 title="Not feeling ${escapeHtml(item.name || item.subType)} right now — swap just this piece (keeps the rest)"
-                onclick="dislikeOutfitPieceForToday('${safeId}')">
+                onclick="dislikeOutfitPieceForToday('${safeId}', '${outfitContext === 'exercise' ? 'exercise' : 'main'}')">
           👎 Dislike
         </button>
         <span class="item-emoji" title="${escapeHtml(item.subType || item.name)}">${buildGarmentMiniIconSvg(item)}</span>
@@ -10562,10 +10605,13 @@ function renderOutfit() {
 
   const outfit = generateOutfit();
   if (outfit && outfit.top && typeof getTopLayerTier === 'function' && getTopLayerTier(outfit.top) !== 'base') {
-    const baseCands = typeof getSlotCandidatesForOutfit === 'function'
+    let baseCands = typeof getSlotCandidatesForOutfit === 'function'
       ? getSlotCandidatesForOutfit('top', outfit, typeof getTodayDislikedIds === 'function' ? getTodayDislikedIds() : new Set())
           .filter(t => getTopLayerTier(t) === 'base')
-      : wardrobe.filter(w => w.category === 'tops' && getTopLayerTier(w) === 'base' && !isItemDisliked(w));
+      : [];
+    if (baseCands.length === 0) {
+      baseCands = wardrobe.filter(w => w.category === 'tops' && getTopLayerTier(w) === 'base' && !isItemDisliked(w));
+    }
     if (baseCands.length > 0) {
       outfit.top = baseCands[0];
       if (typeof saveDailyMainLock === 'function') saveDailyMainLock(outfit, true);
@@ -11027,10 +11073,17 @@ function generateExerciseOutfit(avoidIds = []) {
 
   // Date-seeded daily tie-breaker so it proposes a consistent daily look all morning
   const dayNum = Math.floor(Date.now() / 86400000);
+  const todaySkipped = (typeof getTodayDislikedIds === 'function') ? getTodayDislikedIds() : new Set();
   const pickBest = (list, scorer) => {
-    const filtered = avoidIds.length && list.some(x => !avoidIds.includes(x.id))
-      ? list.filter(x => !avoidIds.includes(x.id))
-      : list;
+    const avoidSet = new Set(avoidIds || []);
+    let filtered = list.filter(x => !avoidSet.has(x.id) && !todaySkipped.has(x.id));
+    if (!filtered.length && avoidSet.size) {
+      filtered = list.filter(x => !avoidSet.has(x.id));
+    }
+    if (!filtered.length && todaySkipped.size) {
+      filtered = list.filter(x => !todaySkipped.has(x.id));
+    }
+    if (!filtered.length) filtered = list;
     return [...filtered].sort((a, b) => scorer(b) - scorer(a))[0];
   };
 
@@ -11084,6 +11137,83 @@ function generateExerciseOutfit(avoidIds = []) {
   return { top, secondLayer, bottom, shoe, morningTemp };
 }
 
+function saveExerciseOutfitState(ex) {
+  if (!ex || !ex.top || !ex.bottom || !ex.shoe) return;
+  const todayStr = ex.date || getOutfitDayKey();
+  try {
+    localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
+      date: todayStr,
+      updatedAt: Date.now(),
+      topId: ex.top.id,
+      secondLayerId: ex.secondLayer?.id || null,
+      bottomId: ex.bottom.id,
+      shoeId: ex.shoe.id,
+      morningTemp: ex.morningTemp ?? 18,
+      logged: !!ex.logged
+    }));
+  } catch {}
+  const tripCtx = (typeof getActiveTripContext === 'function') ? getActiveTripContext() : null;
+  if (tripCtx && tripCtx.planEntry && tripCtx.planEntry.exercise) {
+    tripCtx.planEntry.exercise = {
+      ...tripCtx.planEntry.exercise,
+      top: ex.top.id,
+      secondLayer: ex.secondLayer?.id || null,
+      bottom: ex.bottom.id,
+      shoe: ex.shoe.id,
+      morningTemp: ex.morningTemp ?? tripCtx.planEntry.exercise.morningTemp ?? 18
+    };
+    if (typeof saveTrip === 'function') saveTrip();
+  }
+  if (!isApplyingRemoteCloudData) syncDailyOutfitsToCloud();
+}
+
+function swapDislikedExercisePiece(itemId, excludedIds) {
+  if (!activeExerciseOutfit || !itemId) return { ok: false };
+  const ex = activeExerciseOutfit;
+  const slot = ['top', 'secondLayer', 'bottom', 'shoe'].find(s => ex[s]?.id === itemId);
+  if (!slot) return { ok: false };
+
+  const exSet = excludedIds instanceof Set ? new Set(excludedIds) : new Set([itemId]);
+  exSet.add(itemId);
+
+  const pickReplacement = (avoidList) => {
+    const candidateOutfit = generateExerciseOutfit(avoidList);
+    if (candidateOutfit && candidateOutfit[slot] && candidateOutfit[slot].id !== itemId) {
+      return candidateOutfit[slot];
+    }
+    return null;
+  };
+
+  let replacement = pickReplacement(Array.from(exSet));
+  if (!replacement && exSet.size > 1) {
+    replacement = pickReplacement([itemId]);
+  }
+  if (!replacement && slot === 'secondLayer') {
+    exerciseSecondLayer = false;
+    try { localStorage.setItem('wtw_exercise_second_layer', 'false'); } catch {}
+    activeExerciseOutfit = { ...ex, secondLayer: null, logged: false };
+    saveExerciseOutfitState(activeExerciseOutfit);
+    renderExerciseOutfit();
+    return { ok: true, slot, newItem: null };
+  }
+  if (!replacement) {
+    const tripCtx = (typeof getActiveTripContext === 'function') ? getActiveTripContext() : null;
+    const pool = (tripCtx && tripCtx.checklistItems.length >= 3) ? tripCtx.checklistItems : wardrobe;
+    const slotCatMap = { top: 'tops', bottom: 'bottoms', shoe: 'shoes' };
+    const cat = slotCatMap[slot];
+    if (cat) {
+      const alt = pool.find(w => w.category === cat && w.id !== itemId && !isItemDisliked(w) && !isSwimwearItem(w) && (slot !== 'shoe' || !isNonExerciseShoe(w)));
+      if (alt) replacement = alt;
+    }
+  }
+  if (!replacement) return { ok: false };
+
+  activeExerciseOutfit = { ...ex, [slot]: replacement, logged: false };
+  saveExerciseOutfitState(activeExerciseOutfit);
+  renderExerciseOutfit();
+  return { ok: true, slot, newItem: replacement };
+}
+
 function renderExerciseOutfit() {
   const section = document.getElementById('exercise-outfit-section');
   if (!section) return;
@@ -11127,6 +11257,10 @@ function renderExerciseOutfit() {
 
   const needsRefresh = !lockedFromTrip && (!activeExerciseOutfit
     || activeExerciseOutfit.date !== todayStr
+    || isItemDisliked(activeExerciseOutfit.top)
+    || (activeExerciseOutfit.secondLayer && isItemDisliked(activeExerciseOutfit.secondLayer))
+    || isItemDisliked(activeExerciseOutfit.bottom)
+    || isItemDisliked(activeExerciseOutfit.shoe)
     || isNonExerciseStreetBottom(activeExerciseOutfit.bottom)
     || isSwimwearItem(activeExerciseOutfit.bottom)
     || isSwimwearItem(activeExerciseOutfit.top)
@@ -11139,6 +11273,9 @@ function renderExerciseOutfit() {
     const picked = generateExerciseOutfit();
     if (!picked) { section.innerHTML = ''; return; }
     const keepBase = activeExerciseOutfit && activeExerciseOutfit.date === todayStr
+      && !isItemDisliked(activeExerciseOutfit.top)
+      && !isItemDisliked(activeExerciseOutfit.bottom)
+      && !isItemDisliked(activeExerciseOutfit.shoe)
       && !isNonExerciseStreetBottom(activeExerciseOutfit.bottom)
       && !isSwimwearItem(activeExerciseOutfit.bottom)
       && !isSwimwearItem(activeExerciseOutfit.top)
@@ -11147,33 +11284,21 @@ function renderExerciseOutfit() {
       ? {
           ...activeExerciseOutfit,
           bottom: (exercisePreferShorts && !isShortsBottom(activeExerciseOutfit.bottom)) ? picked.bottom : activeExerciseOutfit.bottom,
-          secondLayer: exerciseSecondLayer ? (activeExerciseOutfit.secondLayer || picked.secondLayer) : null,
+          secondLayer: exerciseSecondLayer ? (activeExerciseOutfit.secondLayer && !isItemDisliked(activeExerciseOutfit.secondLayer) ? activeExerciseOutfit.secondLayer : picked.secondLayer) : null,
           logged: false
         }
       : { date: todayStr, ...picked, logged: false };
-    try {
-      localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
-        date: todayStr,
-        updatedAt: Date.now(),
-        topId: activeExerciseOutfit.top.id,
-        secondLayerId: activeExerciseOutfit.secondLayer?.id || null,
-        bottomId: activeExerciseOutfit.bottom.id,
-        shoeId: activeExerciseOutfit.shoe.id,
-        morningTemp: activeExerciseOutfit.morningTemp,
-        logged: false
-      }));
-    } catch {}
-    if (!isApplyingRemoteCloudData) syncDailyOutfitsToCloud();
+    saveExerciseOutfitState(activeExerciseOutfit);
   }
 
   const ex = activeExerciseOutfit;
   let step = 1;
-  let itemsHtml = renderOutfitItem(ex.top, 'Exercise Top (Breathable / Performance)', `🏃 #${step++} · Top`);
+  let itemsHtml = renderOutfitItem(ex.top, 'Exercise Top (Breathable / Performance)', `🏃 #${step++} · Top`, 'exercise');
   if (ex.secondLayer) {
-    itemsHtml += renderOutfitItem(ex.secondLayer, 'Exercise 2nd Layer (Hoodie / Windbreaker / Fleece)', `🧥 #${step++} · 2nd Layer`);
+    itemsHtml += renderOutfitItem(ex.secondLayer, 'Exercise 2nd Layer (Hoodie / Windbreaker / Fleece)', `🧥 #${step++} · 2nd Layer`, 'exercise');
   }
-  itemsHtml += renderOutfitItem(ex.bottom, 'Exercise Pants / Shorts', `🩳 #${step++} · Bottom`);
-  itemsHtml += renderOutfitItem(ex.shoe, 'Exercise Shoes / Trainers', `👟 #${step++} · Shoes`);
+  itemsHtml += renderOutfitItem(ex.bottom, 'Exercise Pants / Shorts', `🩳 #${step++} · Bottom`, 'exercise');
+  itemsHtml += renderOutfitItem(ex.shoe, 'Exercise Shoes / Trainers', `👟 #${step++} · Shoes`, 'exercise');
   const itemCount = ex.secondLayer ? 4 : 3;
 
   section.innerHTML = `
@@ -11218,19 +11343,7 @@ function toggleExerciseSecondLayer() {
     } else {
       activeExerciseOutfit = { date: todayStr, ...picked, logged: false };
     }
-    try {
-      localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
-        date: todayStr,
-        updatedAt: Date.now(),
-        topId: activeExerciseOutfit.top.id,
-        secondLayerId: activeExerciseOutfit.secondLayer?.id || null,
-        bottomId: activeExerciseOutfit.bottom.id,
-        shoeId: activeExerciseOutfit.shoe.id,
-        morningTemp: activeExerciseOutfit.morningTemp,
-        logged: false
-      }));
-    } catch {}
-    if (!isApplyingRemoteCloudData) syncDailyOutfitsToCloud();
+    saveExerciseOutfitState(activeExerciseOutfit);
   }
   renderExerciseOutfit();
   toast(exerciseSecondLayer
@@ -11246,23 +11359,13 @@ function toggleExercisePreferShorts() {
     const picked = generateExerciseOutfit();
     if (picked && picked.bottom) {
       activeExerciseOutfit = { ...activeExerciseOutfit, bottom: picked.bottom, logged: false };
-      try {
-        localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
-          date: todayStr, updatedAt: Date.now(), topId: activeExerciseOutfit.top.id, secondLayerId: activeExerciseOutfit.secondLayer?.id || null, bottomId: activeExerciseOutfit.bottom.id, shoeId: activeExerciseOutfit.shoe.id, morningTemp: activeExerciseOutfit.morningTemp, logged: false
-        }));
-      } catch {}
-      if (!isApplyingRemoteCloudData) syncDailyOutfitsToCloud();
+      saveExerciseOutfitState(activeExerciseOutfit);
     }
   } else if (!exercisePreferShorts) {
     const picked = generateExerciseOutfit();
     if (picked) {
       activeExerciseOutfit = { date: todayStr, ...picked, logged: false };
-      try {
-        localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
-          date: todayStr, updatedAt: Date.now(), topId: picked.top.id, secondLayerId: picked.secondLayer?.id || null, bottomId: picked.bottom.id, shoeId: picked.shoe.id, morningTemp: picked.morningTemp, logged: false
-        }));
-      } catch {}
-      if (!isApplyingRemoteCloudData) syncDailyOutfitsToCloud();
+      saveExerciseOutfitState(activeExerciseOutfit);
     }
   }
   renderExerciseOutfit();
@@ -11271,18 +11374,13 @@ function toggleExercisePreferShorts() {
 
 function shuffleExerciseOutfit() {
   const avoid = activeExerciseOutfit
-    ? [activeExerciseOutfit.top?.id, activeExerciseOutfit.secondLayer?.id, activeExerciseOutfit.bottom?.id].filter(Boolean)
+    ? [activeExerciseOutfit.top?.id, activeExerciseOutfit.secondLayer?.id, activeExerciseOutfit.bottom?.id, activeExerciseOutfit.shoe?.id].filter(Boolean)
     : [];
   const picked = generateExerciseOutfit(avoid);
   if (!picked) { toast('No alternative exercise pieces found'); return; }
   const todayStr = getOutfitDayKey();
   activeExerciseOutfit = { date: todayStr, ...picked, logged: false };
-  try {
-    localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
-      date: todayStr, updatedAt: Date.now(), topId: picked.top.id, secondLayerId: picked.secondLayer?.id || null, bottomId: picked.bottom.id, shoeId: picked.shoe.id, morningTemp: picked.morningTemp, logged: false
-    }));
-  } catch {}
-  if (!isApplyingRemoteCloudData) syncDailyOutfitsToCloud();
+  saveExerciseOutfitState(activeExerciseOutfit);
   renderExerciseOutfit();
 }
 
@@ -11719,18 +11817,7 @@ async function maybeRunAIExerciseSanityCheck(exOutfit) {
         if (replacement) {
           activeExerciseOutfit = { date: today, ...replacement, logged: false };
           aiExSanityCheckSig = `${today}|${temp}|${replacement.top?.id}|${replacement.secondLayer?.id || ''}|${replacement.bottom?.id}|${replacement.shoe?.id}`;
-          try {
-            localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
-              date: today,
-              updatedAt: Date.now(),
-              topId: replacement.top.id,
-              secondLayerId: replacement.secondLayer ? replacement.secondLayer.id : null,
-              bottomId: replacement.bottom.id,
-              shoeId: replacement.shoe.id,
-              morningTemp: replacement.morningTemp,
-              logged: false
-            }));
-          } catch {}
+          saveExerciseOutfitState(activeExerciseOutfit);
           renderExerciseOutfit();
           toast(`🧠 AI Exercise Critic fixed ${verdict.badSlots.join(', ')}: ${verdict.reason || 'removed unsuitable gear'}`);
         }
