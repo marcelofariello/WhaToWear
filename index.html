@@ -4893,9 +4893,129 @@ function toggleDislikedSubType(subType) {
   toast(added ? `🚫 Added "${subType}" to Never Suggest list` : `✓ Allowed "${subType}" again`);
 }
 
+function findDislikedOutfitSlot(outfit, itemId) {
+  if (!outfit || !itemId) return null;
+  if (outfit.top && outfit.top.id === itemId) return 'top';
+  if (outfit.midLayer && outfit.midLayer.id === itemId) return 'midLayer';
+  if (outfit.outerwear && outfit.outerwear.id === itemId) return 'outerwear';
+  if (outfit.bottom && outfit.bottom.id === itemId) return 'bottom';
+  if (outfit.shoe && outfit.shoe.id === itemId) return 'shoe';
+  if (outfit.beltRec && outfit.beltRec.beltItem && outfit.beltRec.beltItem.id === itemId) return 'belt';
+  if (outfit.accessory && outfit.accessory.id === itemId) return 'accessory';
+  return null;
+}
+
+function pickSinglePieceReplacement(slot, prevOutfit) {
+  if (!prevOutfit || !slot) return null;
+  const targetFormality = typeof getDayFormality === 'function' ? getDayFormality() : 'casual';
+  const allowGym = (targetFormality === 'athleisure' || targetFormality === 'lounge');
+  const allowShorts = typeof areShortsAllowedToday === 'function' ? areShortsAllowedToday(targetFormality) : true;
+  const allowSandals = typeof areSandalsAllowedToday === 'function' ? areSandalsAllowedToday(targetFormality) : true;
+
+  const baseFilter = (items) => {
+    const allowed = items.filter(it => !isItemDisliked(it));
+    const dayOk = allowed.filter(it =>
+      (allowGym || !isGymOrLoungeItem(it)) &&
+      (allowShorts || !isShortsBottom(it)) &&
+      (allowSandals || !isOpenToeOrSandalShoe(it)) &&
+      !isWorkDisallowedItem(it, targetFormality)
+    );
+    const pool = dayOk.length > 0 ? dayOk : allowed;
+    let suit = pool.filter(it => weatherSuitable(it) && formalityMatch(it.formality, targetFormality));
+    if (suit.length === 0) suit = pool.filter(it => weatherSuitable(it));
+    if (suit.length === 0) suit = pool.filter(it => formalityMatch(it.formality, targetFormality));
+    return suit.length > 0 ? suit : pool;
+  };
+
+  let candidates = [];
+  if (slot === 'top') {
+    const topsPool = baseFilter(wardrobe.filter(it => it.category === 'tops'));
+    const trueBases = topsPool.filter(it => isBaseTop(it));
+    const pool = trueBases.length > 0 ? trueBases : topsPool;
+    candidates = pool.filter(t => isLayerPairCompatible(t, prevOutfit.midLayer, prevOutfit.outerwear));
+    if (candidates.length === 0) candidates = pool;
+  } else if (slot === 'midLayer') {
+    const raw = wardrobe.filter(it => (it.category === 'tops' || it.category === 'outerwear') && isMidLayerCandidate(it));
+    candidates = baseFilter(raw).filter(m => isLayerPairCompatible(prevOutfit.top, m, prevOutfit.outerwear));
+  } else if (slot === 'outerwear') {
+    const raw = wardrobe.filter(it => it.category === 'outerwear' && isOuterShellCandidate(it));
+    candidates = baseFilter(raw).filter(o => isLayerPairCompatible(prevOutfit.top, prevOutfit.midLayer, o));
+  } else if (slot === 'bottom') {
+    candidates = baseFilter(wardrobe.filter(it => it.category === 'bottoms'));
+  } else if (slot === 'shoe') {
+    candidates = baseFilter(wardrobe.filter(it => it.category === 'shoes'));
+  } else if (slot === 'accessory') {
+    candidates = baseFilter(wardrobe.filter(it => it.category === 'accessories' && !isBeltItem(it)));
+  }
+
+  if (candidates.length === 0) return null;
+  const bp = prevOutfit.blueprint || (typeof buildPersonalStyleBlueprint === 'function' ? buildPersonalStyleBlueprint() : null);
+  let best = candidates[0];
+  let bestScore = -Infinity;
+  candidates.forEach(cand => {
+    const t = slot === 'top' ? cand : prevOutfit.top;
+    const m = slot === 'midLayer' ? cand : prevOutfit.midLayer;
+    const o = slot === 'outerwear' ? cand : prevOutfit.outerwear;
+    const b = slot === 'bottom' ? cand : prevOutfit.bottom;
+    const s = slot === 'shoe' ? cand : prevOutfit.shoe;
+    const a = slot === 'accessory' ? cand : prevOutfit.accessory;
+    const ev = (typeof evaluateOutfitScore === 'function' && t && b && s)
+      ? evaluateOutfitScore(t, b, s, o || m, a, { midLayer: m, beltItem: prevOutfit.beltRec?.beltItem, blueprint: bp })
+      : { score: 0 };
+    const sc = (ev && typeof ev.score === 'number' ? ev.score : 0) + Math.random() * 2;
+    if (sc > bestScore) {
+      bestScore = sc;
+      best = cand;
+    }
+  });
+  return best;
+}
+
+function swapDislikedPieceOnly(slot, prevOutfit, removedId) {
+  if (!slot || !prevOutfit) return false;
+  const updated = { ...prevOutfit };
+  if (slot === 'belt') {
+    const allowedBelts = wardrobe.filter(a => isBeltItem(a) && !isItemDisliked(a));
+    updated.beltRec = proposeBeltForOutfit(updated.shoe, updated.bottom, updated.top, updated.outerwear || updated.midLayer, allowedBelts);
+  } else {
+    const replacement = pickSinglePieceReplacement(slot, prevOutfit);
+    if (!replacement && (slot === 'top' || slot === 'bottom' || slot === 'shoe')) {
+      return false;
+    }
+    updated[slot] = replacement || null;
+    if (slot === 'shoe' || slot === 'bottom' || slot === 'top') {
+      const allowedBelts = wardrobe.filter(a => isBeltItem(a) && !isItemDisliked(a));
+      updated.beltRec = proposeBeltForOutfit(updated.shoe, updated.bottom, updated.top, updated.outerwear || updated.midLayer, allowedBelts);
+    }
+  }
+
+  // If this was a Trip Mode day outfit, update that single slot in the trip plan too
+  if (prevOutfit.tripContext && prevOutfit.tripContext.planEntry && prevOutfit.tripContext.planEntry.items) {
+    const tripKeyMap = { top: 'top', midLayer: 'mid', outerwear: 'outer', bottom: 'bottom', shoe: 'shoe', accessory: 'acc', belt: 'belt' };
+    const tk = tripKeyMap[slot];
+    if (tk) {
+      prevOutfit.tripContext.planEntry.items[tk] = slot === 'belt'
+        ? (updated.beltRec?.beltItem?.id || null)
+        : (updated[slot]?.id || null);
+      if (typeof saveTrip === 'function') saveTrip();
+    }
+  }
+
+  // Clear AI daily cache so it doesn't overwrite the single-piece swap, and persist updated lock
+  if (typeof activeAIDailyOutfit !== 'undefined') activeAIDailyOutfit = null;
+  try { localStorage.removeItem('wtw_ai_daily_outfit'); } catch {}
+  if (typeof saveDailyMainLock === 'function' && updated.top && updated.bottom && updated.shoe) {
+    saveDailyMainLock(updated, true);
+  }
+  return true;
+}
+
 function dislikePieceNow(subType, itemName, itemId) {
   if (!Array.isArray(userProfile.dislikedSubTypes)) userProfile.dislikedSubTypes = [];
   if (!Array.isArray(userProfile.dislikedItemNames)) userProfile.dislikedItemNames = [];
+
+  const prevOutfit = (typeof window !== 'undefined' && window.lastRenderedMainOutfit) ? window.lastRenderedMainOutfit : null;
+  const matchedSlot = itemId ? findDislikedOutfitSlot(prevOutfit, itemId) : null;
 
   if (subType && !userProfile.dislikedSubTypes.some(s => s.toLowerCase() === subType.toLowerCase())) {
     userProfile.dislikedSubTypes.push(subType);
@@ -4908,6 +5028,8 @@ function dislikePieceNow(subType, itemName, itemId) {
     saveData();
   }
   persistDislikes();
+  const swappedSingle = matchedSlot ? swapDislikedPieceOnly(matchedSlot, prevOutfit, itemId) : false;
+
   if (typeof aiShopRecommendations !== 'undefined' && Array.isArray(aiShopRecommendations)) {
     aiShopRecommendations = aiShopRecommendations.filter(it => !isItemDisliked(it));
     if (typeof persistSavedShopList === 'function') persistSavedShopList();
@@ -4916,7 +5038,9 @@ function dislikePieceNow(subType, itemName, itemId) {
   renderWardrobe();
   renderOutfit();
   renderShopRecommendations();
-  toast(`🚫 Got it! WhaToWear will never suggest "${subType || itemName}" again.`);
+  toast(swappedSingle
+    ? `🚫 Removed "${subType || itemName}" and swapped only that piece!`
+    : `🚫 Got it! WhaToWear will never suggest "${subType || itemName}" again.`);
 }
 
 function addCustomDislikedTerm() {
@@ -7951,10 +8075,11 @@ function isShortsBottom(it) {
   return /\b(short|shorts|skort|bermuda|boardshort|sweatshorts)\b/.test(text);
 }
 
-function areShortsAllowedToday(targetFormality) {
-  const day = new Date().getDay(); // 0=Sun, 1..5=Mon..Fri, 6=Sat
+function areShortsAllowedToday(targetFormality, targetDate = null) {
+  const refDate = targetDate ? new Date(targetDate) : new Date();
+  const day = refDate.getDay(); // 0=Sun, 1..5=Mon..Fri, 6=Sat
   const isWeekend = (day === 0 || day === 6);
-  const f = String(targetFormality || (typeof getDayFormality === 'function' ? getDayFormality() : 'casual')).toLowerCase();
+  const f = String(targetFormality || (typeof getDayFormality === 'function' ? getDayFormality(refDate) : 'casual')).toLowerCase();
   if (f === 'athleisure' || f === 'lounge') return true;
   return isWeekend && (f === 'casual' || f === 'elevated-casual' || !f);
 }
@@ -7965,10 +8090,11 @@ function isOpenToeOrSandalShoe(it) {
   return /\b(sandal|sandals|slide|slides|flip-flop|flip-flops|thong|thongs|clog|clogs)\b/.test(text);
 }
 
-function areSandalsAllowedToday(targetFormality) {
-  const day = new Date().getDay(); // 0=Sun, 1..5=Mon..Fri, 6=Sat
+function areSandalsAllowedToday(targetFormality, targetDate = null) {
+  const refDate = targetDate ? new Date(targetDate) : new Date();
+  const day = refDate.getDay(); // 0=Sun, 1..5=Mon..Fri, 6=Sat
   const isWeekend = (day === 0 || day === 6);
-  const f = String(targetFormality || (typeof getDayFormality === 'function' ? getDayFormality() : 'casual')).toLowerCase();
+  const f = String(targetFormality || (typeof getDayFormality === 'function' ? getDayFormality(refDate) : 'casual')).toLowerCase();
   if (f === 'lounge') return true;
   return isWeekend && (f === 'casual' || f === 'elevated-casual' || !f);
 }
@@ -8258,7 +8384,7 @@ function getTopLayerTier(it) {
   if (/\b(overshirt|shacket|shirt jacket|kimono|vest|gilet|waistcoat)\b/.test(txt)) {
     return 'mid';
   }
-  if (/\b(hoodie|sweatshirt|sweater|cardigan|pullover|fleece|quarter-zip|half-zip|turtleneck|mock-neck|mock neck|poncho|knitted polo)\b/.test(txt) && !txt.includes('under')) {
+  if (/\b(hoodie|sweatshirt|sweater|cardigan|pullover|fleece|quarter-zip|half-zip|turtleneck|mock-neck|mock neck|poncho|knitted polo|jumper|knitwear|crewneck knit|v-neck knit|cable knit)\b/.test(txt) && !txt.includes('under')) {
     return 'mid';
   }
 
@@ -9428,8 +9554,8 @@ function generateOutfit(options = {}) {
   }
 
   const allowGymInMain = (targetFormality === 'athleisure' || targetFormality === 'lounge');
-  const allowShortsInMain = areShortsAllowedToday(targetFormality);
-  const allowSandalsInMain = areSandalsAllowedToday(targetFormality);
+  const allowShortsInMain = areShortsAllowedToday(targetFormality, targetDate);
+  const allowSandalsInMain = areSandalsAllowedToday(targetFormality, targetDate);
   const filter = (items) => {
     const allowed = items.filter(it => !isItemDisliked(it));
     const dayFiltered = allowed.filter(it =>
@@ -9477,9 +9603,9 @@ function generateOutfit(options = {}) {
   const allowedTops = allowedTopsFiltered.length > 0 ? allowedTopsFiltered : allowedTopsRaw;
   const trueBaseTops = tops.filter(isBaseTop);
   const fallbackBaseTops = allowedTops.filter(isBaseTop);
-  const baseTopsPool = targetLayers >= 2
-    ? (trueBaseTops.length > 0 ? trueBaseTops : (fallbackBaseTops.length > 0 ? fallbackBaseTops : tops))
-    : tops;
+  // Layer 1 must ALWAYS be a true base top (never a sweater, quarter-zip, hoodie, or cardigan) unless user owns zero base tops
+  const baseTopsPool = trueBaseTops.length > 0 ? trueBaseTops
+    : (fallbackBaseTops.length > 0 ? fallbackBaseTops : tops);
 
   // Tier 2 (Mid-Layer): Hoodie, Blazer, Sweater, Cardigan, Overshirt, Vest, (Flannel/Chambray over a tee)
   const rawMidCandidates = [
@@ -9733,7 +9859,9 @@ function hydrateDailyMainLock(lock, ctx) {
   }
   if (!areShortsAllowedToday(targetF) && isShortsBottom(bottom)) return null;
   if (!areSandalsAllowedToday(targetF) && isOpenToeOrSandalShoe(shoe)) return null;
-  if (typeof areTopLayersCompatible === 'function' && !areTopLayersCompatible(top, midLayer, outerwear)) return null;
+  const hasBaseTop = wardrobe.some(w => w.category === 'tops' && isBaseTop(w) && !isItemDisliked(w));
+  if (hasBaseTop && getTopLayerTier(top) !== 'base') return null;
+  if (typeof isLayerPairCompatible === 'function' && !isLayerPairCompatible(top, midLayer, outerwear)) return null;
 
   const beltItem = isDrawstringOrAthleticBottom(bottom) ? null : findById(lock.beltId);
   const beltRec = beltItem
@@ -11007,7 +11135,11 @@ function hydrateAIDailyOutfitFromPicked(picked, currentTemp) {
   if (!areSandalsAllowedToday(targetF) && isOpenToeOrSandalShoe(shoe)) {
     return null;
   }
-  if (typeof areTopLayersCompatible === 'function' && !areTopLayersCompatible(top, midLayer, outerwear)) {
+  const hasBaseTop = wardrobe.some(w => w.category === 'tops' && isBaseTop(w) && !isItemDisliked(w));
+  if (hasBaseTop && getTopLayerTier(top) !== 'base') {
+    return null;
+  }
+  if (typeof isLayerPairCompatible === 'function' && !isLayerPairCompatible(top, midLayer, outerwear)) {
     return null;
   }
   const beltItem = isDrawstringOrAthleticBottom(bottom) ? null : findById(picked.beltId);
@@ -11113,6 +11245,7 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [] }) 
       !allowGymInMain ? `Strictly exclude gym, workout, soccer/athletic shorts, athletic tops, and loungewear/pajamas — those belong in the separate Morning Exercise Outfit.` : '',
       !allowShortsInMain ? `Strictly exclude all shorts (Mon–Fri / non-casual days require full-length trousers, chinos, jeans, or skirts).` : '',
       !allowSandalsInMain ? `Strictly exclude sandals, slides, and flip-flops (never suggest open-toe/beach footwear for workdays Mon–Fri or smart-casual/formal outfits).` : '',
+      `Layer 1 Rule: topId MUST be a true Layer 1 base top (T-Shirt, Henley, Shirt, Blouse, Polo, Tank) — NEVER put a sweater, quarter-zip, pullover, hoodie, sweatshirt, or cardigan as topId (those belong in midLayerId over a base top).`,
       `Layering Rule: ${layerRuleText} Never put an athleisure/sport windbreaker over a chunky knit sweater/cardigan or formal shirt, and never put a denim jacket, blazer, or tailored coat over a zip hoodie or gym/fleece hoodie. Keep fabrics, formality, and colors coherent.`,
       avoidIds.length ? `Avoid repeating these item IDs as main pieces so the user gets a fresh alternative: ${JSON.stringify(avoidIds)}.` : '',
       typeof buildMasterPersonalContextForAI === 'function'
@@ -18387,6 +18520,7 @@ function recordTripLocationHistory(tripObj) {
     const prev = Array.isArray(hist[locKey]) ? hist[locKey] : [];
     prev.unshift({
       date: isoDate(new Date()),
+      destName: info.destName || locKey,
       tripName: tripObj.name || info.destName || locKey,
       itemIds: Array.from(info.itemIds),
       outfitKeys: Array.from(info.outfitKeys)
@@ -18398,6 +18532,127 @@ function recordTripLocationHistory(tripObj) {
     localStorage.setItem('wtw_trip_location_history', JSON.stringify(hist));
   } catch (e) { console.warn('Could not save trip location history', e); }
   return savedLocs;
+}
+
+function getTripHistory() {
+  const list = safeJSON('wtw_trip_history', []);
+  return Array.isArray(list) ? list : [];
+}
+
+function saveTripHistory(list) {
+  try {
+    localStorage.setItem('wtw_trip_history', JSON.stringify((list || []).slice(0, 30)));
+  } catch (e) { console.warn('Could not save trip history', e); }
+}
+
+function archiveTripToHistory(tripObj) {
+  if (!tripObj || !Array.isArray(tripObj.days) || tripObj.days.length === 0) return [];
+  const savedLocs = recordTripLocationHistory(tripObj);
+  const hist = getTripHistory();
+  const snapshot = JSON.parse(JSON.stringify(tripObj));
+  snapshot.archivedAt = Date.now();
+  snapshot.endDate = tripObj.days[tripObj.days.length - 1]?.date || tripObj.startDate;
+  const idx = hist.findIndex(h => h && h.id && snapshot.id && h.id === snapshot.id);
+  if (idx >= 0) {
+    hist[idx] = snapshot;
+  } else {
+    hist.unshift(snapshot);
+  }
+  saveTripHistory(hist);
+  return savedLocs;
+}
+
+function getSavedTripLocations() {
+  const byKey = new Map();
+  const addLoc = (rawName, visits = 0) => {
+    const label = String(rawName || '').trim();
+    const key = normalizeTripLocation(label);
+    if (!key) return;
+    const prev = byKey.get(key);
+    const info = getLocationWornInfo(label);
+    if (!prev) {
+      byKey.set(key, { key, label, visits, avoidedCount: info.itemIds.size });
+    } else {
+      if (label.length > prev.label.length) prev.label = label;
+      prev.visits = Math.max(prev.visits, visits);
+      prev.avoidedCount = Math.max(prev.avoidedCount, info.itemIds.size);
+    }
+  };
+  const locHist = getTripLocationHistory();
+  Object.entries(locHist).forEach(([k, entries]) => {
+    const arr = Array.isArray(entries) ? entries : [];
+    const name = arr.find(e => e && e.destName)?.destName || (k.charAt(0).toUpperCase() + k.slice(1));
+    addLoc(name, arr.length);
+  });
+  getTripHistory().forEach(t => {
+    (t?.legs || []).forEach(l => addLoc(l?.destination, 1));
+    (t?.days || []).forEach(d => addLoc(d?.dest, 1));
+  });
+  if (trip && Array.isArray(trip.legs)) {
+    trip.legs.forEach(l => {
+      if (l && l.destination) addLoc(l.destination, 0);
+    });
+  }
+  return Array.from(byKey.values()).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function reopenTripFromHistory(tripId) {
+  const hist = getTripHistory();
+  const found = hist.find(h => h && h.id === tripId);
+  if (!found) { toast('Trip not found in history'); return; }
+  trip = JSON.parse(JSON.stringify(found));
+  trip.escaped = false;
+  if (!trip.stage || trip.stage === 'setup') {
+    trip.stage = (trip.plan && trip.plan.length) ? 'active' : ((trip.pack && trip.pack.length) ? 'packing' : 'setup');
+  }
+  saveTrip();
+  renderTripBanner();
+  renderTrip();
+  renderOutfit();
+  toast(`↩️ Reopened "${trip.name || 'Past Trip'}"`);
+}
+
+function planAgainFromHistory(tripId) {
+  const hist = getTripHistory();
+  const found = hist.find(h => h && h.id === tripId);
+  if (!found) { toast('Trip not found in history'); return; }
+  const legs = (found.legs || []).map(l => ({
+    id: generateId(),
+    destination: l.destination || '',
+    days: l.days || 3,
+    purpose: l.purpose || 'holiday',
+    climate: l.climate || 'auto',
+    rain: !!l.rain,
+    source: ''
+  }));
+  trip = {
+    id: generateId(),
+    name: found.name ? `${found.name} (Return)` : '',
+    startDate: addDays(isoDate(new Date()), 7),
+    stage: 'setup',
+    includeExercise: found.includeExercise !== false,
+    legs: legs.length ? legs : [newLeg('holiday')],
+    days: [],
+    pack: [],
+    plan: []
+  };
+  saveTrip();
+  renderTripBanner();
+  renderTrip();
+  toast('✈️ Pre-filled destinations — previously worn outfits in these locations will be avoided!');
+}
+
+function deleteTripFromHistory(tripId) {
+  if (!confirm('Remove this trip from your history?')) return;
+  const hist = getTripHistory().filter(h => h && h.id !== tripId);
+  saveTripHistory(hist);
+  renderTrip();
+  toast('🗑️ Removed from trip history');
+}
+
+function toggleTripHistoryDetails(tripId) {
+  const el = document.getElementById(`trip-hist-details-${tripId}`);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
 function getSavedPersonalTripItems() {
@@ -18521,9 +18776,73 @@ function refreshTripSummary() {
   }
 }
 
+function tripPickSavedLocation(legIdx, val) {
+  if (!val) return;
+  tripSetLeg(legIdx, 'destination', val);
+  renderTrip();
+}
+
+function renderTripHistorySection() {
+  const hist = getTripHistory();
+  if (!hist.length) return '';
+  const itemById = new Map((wardrobe || []).map(w => [w.id, w]));
+  const cards = hist.map(h => {
+    const dests = Array.from(new Set((h.legs || []).map(l => l.destination).filter(Boolean)));
+    const title = escapeHtml(h.name || dests.join(' → ') || 'Past Trip');
+    const dateRange = h.startDate ? `${fmtDate(h.startDate)}${h.endDate ? ` → ${fmtDate(h.endDate)}` : ''}` : '';
+    const daysCount = (h.days || []).length;
+    const detailsHtml = (h.days || []).map((d, idx) => {
+      const p = (h.plan || [])[idx];
+      const names = p && p.items
+        ? [p.items.top, p.items.mid, p.items.outer, p.items.bottom, p.items.shoe].map(id => id && itemById.get(id)?.name).filter(Boolean)
+        : [];
+      return `<div style="padding:4px 0; border-bottom:1px dashed var(--border); font-size:0.78rem;">
+        <strong>Day ${idx + 1} (${escapeHtml(d.dest || '')})</strong> · ${fmtDate(d.date)}:
+        <span style="color:var(--text-secondary);">${names.length ? escapeHtml(names.join(' + ')) : 'No outfit logged'}</span>
+      </div>`;
+    }).join('');
+    return `
+      <div class="card" style="padding:12px 14px; margin-bottom:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; flex-wrap:wrap;">
+          <div>
+            <strong style="font-size:0.95rem;">✈️ ${title}</strong>
+            <div style="font-size:0.78rem; color:var(--text-secondary); margin-top:2px;">
+              ${dateRange ? `📅 ${dateRange} · ` : ''}${daysCount} day${daysCount === 1 ? '' : 's'}${dests.length ? ` · 📍 ${escapeHtml(dests.join(', '))}` : ''}
+            </div>
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleTripHistoryDetails('${escapeHtml(h.id)}')">👀 View</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="reopenTripFromHistory('${escapeHtml(h.id)}')">↩️ Go Back</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="planAgainFromHistory('${escapeHtml(h.id)}')">🔄 Plan Again (No Repeats)</button>
+            <button type="button" class="btn btn-secondary btn-sm" style="color:#b91c1c;" onclick="deleteTripFromHistory('${escapeHtml(h.id)}')" title="Delete from history">🗑️</button>
+          </div>
+        </div>
+        <div id="trip-hist-details-${escapeHtml(h.id)}" style="display:none; margin-top:10px; padding-top:8px; border-top:1px solid var(--border);">
+          ${detailsHtml || '<div style="font-size:0.78rem; color:var(--text-secondary);">No day details recorded.</div>'}
+        </div>
+      </div>`;
+  }).join('');
+  return `
+    <div style="margin-top:22px;">
+      <h3 style="font-size:0.98rem; margin-bottom:10px; color:var(--primary-dark);">📜 Past Trips &amp; Location Memory</h3>
+      <p style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:10px;">Revisit any past trip or re-plan a destination — WhaToWear automatically avoids repeating outfits you wore in those locations.</p>
+      ${cards}
+    </div>`;
+}
+
 function renderTripSetup() {
   const starts = tripLegStarts();
-  const legs = trip.legs.map((l, i) => `
+  const savedLocs = getSavedTripLocations();
+  const legs = trip.legs.map((l, i) => {
+    const locNorm = normalizeTripLocation(l.destination);
+    const wornInfo = locNorm ? getLocationWornInfo(l.destination) : { itemIds: new Set() };
+    const avoidedCount = wornInfo.itemIds ? wornInfo.itemIds.size : 0;
+    const locDropdown = savedLocs.length ? `
+      <select style="margin-bottom:6px; font-size:0.82rem;" onchange="tripPickSavedLocation(${i}, this.value)">
+        <option value="">📍 Pick a past location…</option>
+        ${savedLocs.map(loc => `<option value="${escapeHtml(loc.label)}" ${normalizeTripLocation(l.destination) === loc.key ? 'selected' : ''}>${escapeHtml(loc.label)}${loc.avoidedCount ? ` (avoiding ${loc.avoidedCount} worn)` : ''}</option>`).join('')}
+      </select>` : '';
+    return `
     <div class="trip-leg-card">
       <div class="trip-leg-head">
         <span class="trip-leg-num">${i + 1}</span>
@@ -18533,7 +18852,9 @@ function renderTripSetup() {
       <div class="form-row">
         <div class="form-group">
           <label>City / destination</label>
-          <input type="text" value="${escapeHtml(l.destination)}" placeholder="e.g. Lisbon, Tokyo, Denver" onchange="tripSetLeg(${i},'destination',this.value.trim())">
+          ${locDropdown}
+          <input type="text" value="${escapeHtml(l.destination)}" placeholder="e.g. Lisbon, Tokyo, Denver" onchange="tripSetLeg(${i},'destination',this.value.trim()); renderTrip();">
+          ${avoidedCount > 0 ? `<div style="margin-top:4px; font-size:0.74rem; color:#0f766e; font-weight:600;">📜 Visited before · avoiding ${avoidedCount} previously worn piece${avoidedCount === 1 ? '' : 's'}</div>` : ''}
         </div>
         <div class="form-group">
           <label>How many days here</label>
@@ -18558,7 +18879,8 @@ function renderTripSetup() {
       <label class="trip-check"><input type="checkbox" ${l.rain ? 'checked' : ''} onchange="tripSetLeg(${i},'rain',this.checked)"> 🌧️ I expect rain here</label>
       <div class="trip-leg-dates" id="leg-dates-${i}">📅 ${fmtDate(starts[i].start)} → ${fmtDate(starts[i].end)} · ${starts[i].days} day${starts[i].days > 1 ? 's' : ''}</div>
       ${l.source ? `<div class="trip-weather-src">${escapeHtml(l.source)}</div>` : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   const n = tripTotalDays();
   return `
@@ -18585,7 +18907,8 @@ function renderTripSetup() {
     <div class="trip-actions">
       <button type="button" class="btn btn-primary" id="trip-generate-btn" onclick="generateTripPacking()">📋 Build my packing checklist</button>
       ${(trip.pack && trip.pack.length) ? `<button type="button" class="btn btn-secondary" onclick="tripGoStage('${trip.plan && trip.plan.length ? 'active' : 'packing'}')">↩ Back to my existing list</button>` : ''}
-    </div>`;
+    </div>
+    ${renderTripHistorySection()}`;
 }
 
 /* ---------- Weather ---------- */
@@ -19903,7 +20226,7 @@ function closeActiveTrip() {
       p.wearLogged = true;
     }
   });
-  const savedLocs = recordTripLocationHistory(trip);
+  const savedLocs = archiveTripToHistory(trip);
   trip = null;
   ensureTrip();
   saveTrip();
