@@ -4858,6 +4858,36 @@ function isItemDisliked(itemOrSpec) {
   return false;
 }
 
+function getItemDislikeReason(itemOrSpec) {
+  if (!itemOrSpec) return '';
+  if (itemOrSpec.disabled === true) return 'Disabled in Wardrobe';
+  const sub = (itemOrSpec.subType || '').toLowerCase().trim();
+  const nm = (itemOrSpec.name || '').toLowerCase().trim();
+  const rawSubs = (userProfile.dislikedSubTypes || []).map(s => String(s).trim()).filter(Boolean);
+  const rawNames = (userProfile.dislikedItemNames || []).map(s => String(s).trim()).filter(Boolean);
+  const hitSub = rawSubs.find(s => {
+    const low = s.toLowerCase();
+    return (sub && sub === low) || (low && nm.includes(low));
+  });
+  if (hitSub) return hitSub;
+  const hitName = rawNames.find(s => {
+    const low = s.toLowerCase();
+    return low && (nm.includes(low) || sub.includes(low));
+  });
+  return hitName || '';
+}
+
+function isShoeCategoryItem(it) {
+  if (!it) return false;
+  const cat = String(it.category || '').toLowerCase().trim();
+  if (cat === 'shoes' || cat === 'shoe' || cat === 'footwear' || cat === 'sneakers' || cat === 'sneaker' || cat === 'trainers') {
+    return true;
+  }
+  if (cat === 'tops' || cat === 'bottoms' || cat === 'outerwear') return false;
+  const sub = String(it.subType || '').toLowerCase().trim();
+  return /\b(sneaker|sneakers|running shoe|running shoes|trainer|trainers|tennis shoe|athletic shoe|cross-trainer|walking shoe|boot|boots|loafer|loafers|oxford|oxfords|derby|brogue|sandal|sandals|heel|heels|pumps|flats)\b/.test(sub);
+}
+
 function toggleWardrobeItemDisabled(itemId) {
   const it = wardrobe.find(w => w.id === itemId);
   if (!it) return;
@@ -4992,7 +5022,7 @@ function getSlotCandidatesForOutfit(slot, outfitState, excludedIds) {
     return baseFilter(wardrobe.filter(it => it.category === 'bottoms'));
   }
   if (slot === 'shoe') {
-    return baseFilter(wardrobe.filter(it => it.category === 'shoes'));
+    return baseFilter(wardrobe.filter(it => isShoeCategoryItem(it)));
   }
   if (slot === 'accessory') {
     return baseFilter(wardrobe.filter(it => it.category === 'accessories' && !isBeltItem(it)));
@@ -5114,7 +5144,7 @@ function swapDislikedPieceMinimal(slot, prevOutfit, excludedIds, dislikedItemId 
     const slotCatMap = { top: 'tops', midLayer: 'tops', outerwear: 'outerwear', bottom: 'bottoms', shoe: 'shoes', accessory: 'accessories' };
     const cat = slotCatMap[slot];
     const directFallbackPool = cat
-      ? wardrobe.filter(w => w.category === cat && w.id !== dislikedItemId && !isItemDisliked(w) && (slot !== 'accessory' || !isBeltItem(w)))
+      ? wardrobe.filter(w => (slot === 'shoe' ? isShoeCategoryItem(w) : w.category === cat) && w.id !== dislikedItemId && !isItemDisliked(w) && (slot !== 'accessory' || !isBeltItem(w)))
       : [];
     if (directFallbackPool.length > 0 && prevOutfit && prevOutfit.top && prevOutfit.bottom && prevOutfit.shoe) {
       const slotPool = slot === 'top'
@@ -5232,6 +5262,19 @@ function swapDislikedPieceMinimal(slot, prevOutfit, excludedIds, dislikedItemId 
   return { ok: true, changedSlots, updated: bestState };
 }
 
+function describeBlockedSwapAlternatives(itemId, oldItem, isShoeSlot) {
+  const sameCat = wardrobe.filter(w =>
+    w.id !== itemId &&
+    (isShoeSlot || (oldItem && isShoeCategoryItem(oldItem)) ? isShoeCategoryItem(w) : (oldItem && w.category === oldItem.category))
+  );
+  if (!sameCat.length) return '';
+  const blocked = sameCat.filter(w => isItemDisliked(w));
+  if (!blocked.length) return '';
+  const sample = blocked[0];
+  const reason = typeof getItemDislikeReason === 'function' ? getItemDislikeReason(sample) : '';
+  return `⚠️ Found ${blocked.length} other ${isShoeSlot ? 'shoe' : 'item'}${blocked.length > 1 ? 's' : ''} (e.g. ${sample.name}), blocked by "${reason || 'Dislike / Disabled filter'}" — check My Wardrobe or Style DNA → Dislikes.`;
+}
+
 function dislikeOutfitPieceForToday(itemId, context = 'main') {
   if (!itemId) return;
   const oldItem = wardrobe.find(w => w.id === itemId);
@@ -5256,7 +5299,8 @@ function dislikeOutfitPieceForToday(itemId, context = 'main') {
         toast(`🔄 Removed ${oldName} from Morning Exercise`);
       }
     } else {
-      toast(`⚠️ Only 1 suitable exercise piece in this category — add more ${oldItem?.category || 'items'} to swap.`);
+      const blockedMsg = describeBlockedSwapAlternatives(itemId, oldItem, activeExerciseOutfit?.shoe?.id === itemId);
+      toast(blockedMsg || `⚠️ Only 1 suitable exercise piece in this category — add more ${oldItem?.category || 'items'} to swap.`);
     }
     return;
   }
@@ -5281,7 +5325,8 @@ function dislikeOutfitPieceForToday(itemId, context = 'main') {
       toast(`🔄 Removed ${oldName} from today's look (kept the rest!)`);
     }
   } else {
-    toast(`⚠️ Only 1 item in this category in your wardrobe — add more ${oldItem?.category || 'items'} to swap.`);
+    const blockedMsg = describeBlockedSwapAlternatives(itemId, oldItem, matchedSlot === 'shoe');
+    toast(blockedMsg || `⚠️ Only 1 item in this category in your wardrobe — add more ${oldItem?.category || 'items'} to swap.`);
   }
 }
 
@@ -5289,7 +5334,8 @@ function dislikePieceNow(subType, itemName, itemId) {
   if (!Array.isArray(userProfile.dislikedSubTypes)) userProfile.dislikedSubTypes = [];
   if (!Array.isArray(userProfile.dislikedItemNames)) userProfile.dislikedItemNames = [];
 
-  if (subType && !userProfile.dislikedSubTypes.some(s => s.toLowerCase() === subType.toLowerCase())) {
+  const ownsSubType = !itemId && subType && wardrobe.some(w => !w.disabled && String(w.subType || '').toLowerCase() === String(subType).toLowerCase());
+  if (subType && !ownsSubType && !userProfile.dislikedSubTypes.some(s => s.toLowerCase() === subType.toLowerCase())) {
     userProfile.dislikedSubTypes.push(subType);
   }
   if (itemName && !userProfile.dislikedItemNames.some(n => n.toLowerCase() === itemName.toLowerCase())) {
@@ -5309,7 +5355,9 @@ function dislikePieceNow(subType, itemName, itemId) {
   renderWardrobe();
   renderOutfit();
   renderShopRecommendations();
-  toast(`🚫 Got it! WhaToWear will never suggest "${subType || itemName}" again.`);
+  toast(ownsSubType
+    ? `🚫 Hid "${itemName}" from shopping suggestions (kept your owned ${subType} items active).`
+    : `🚫 Got it! WhaToWear will never suggest "${subType || itemName}" again.`);
 }
 
 function addCustomDislikedTerm() {
@@ -5341,6 +5389,23 @@ function removeCustomDislikedTerm(term) {
   renderOutfit();
   renderShopRecommendations();
   toast(`✓ Removed "${term}" from exclusions`);
+}
+
+function unblockDislikedTerm(term) {
+  const low = String(term || '').toLowerCase().trim();
+  if (!low) return;
+  if (Array.isArray(userProfile.dislikedSubTypes)) {
+    userProfile.dislikedSubTypes = userProfile.dislikedSubTypes.filter(s => String(s).toLowerCase().trim() !== low);
+  }
+  if (Array.isArray(userProfile.dislikedItemNames)) {
+    userProfile.dislikedItemNames = userProfile.dislikedItemNames.filter(n => String(n).toLowerCase().trim() !== low);
+  }
+  persistDislikes();
+  renderDislikedStylesUI();
+  renderWardrobe();
+  renderOutfit();
+  renderShopRecommendations();
+  toast(`✓ Unblocked "${term}" — matching wardrobe items are back in rotation!`);
 }
 
 function renderDislikedStylesUI() {
@@ -8349,9 +8414,14 @@ function isSwimwearItem(it) {
 }
 
 function isNonExerciseShoe(it) {
-  if (!it || it.category !== 'shoes') return false;
-  const text = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''}`.toLowerCase();
-  return /\b(boot|boots|heel|heels|loafer|loafers|oxford|oxfords|derby|brogue|monk|sandal|sandals|slide|slides|flip-flop|flip-flops|clog|clogs|mule|mules|espadrille|dress shoe)\b/.test(text);
+  if (!isShoeCategoryItem(it)) return false;
+  const nonExRegex = /\b(boot|boots|heel|heels|loafer|loafers|oxford|oxfords|derby|brogue|monk|sandal|sandals|slide|slides|flip-flop|flip-flops|clog|clogs|mule|mules|espadrille|dress shoe)\b/;
+  const titleText = `${it.name || ''} ${it.subType || ''}`.toLowerCase();
+  if (nonExRegex.test(titleText)) return true;
+  if (/\b(sneaker|sneakers|trainer|trainers|running shoe|running shoes|tennis shoe|athletic shoe|cross-trainer|walking shoe|runner|runners)\b/.test(titleText)) {
+    return false;
+  }
+  return nonExRegex.test((it.aiDescription || '').toLowerCase());
 }
 
 function isShortsBottom(it) {
@@ -9758,6 +9828,8 @@ function generateOutfit(options = {}) {
   wardrobe.forEach(item => {
     if (byCategory[item.category]) {
       byCategory[item.category].push(item);
+    } else if (isShoeCategoryItem(item)) {
+      byCategory.shoes.push(item);
     } else {
       byCategory.accessories.push(item);
     }
@@ -11098,10 +11170,10 @@ function generateExerciseOutfit(avoidIds = []) {
   const nonSwimBottoms = rawBottomsPool.filter(i => !isSwimwearItem(i));
   const bottomsPool = comfBottoms.length ? comfBottoms : (nonSwimBottoms.length ? nonSwimBottoms : rawBottomsPool);
 
-  const rawShoesPool = pool.filter(i => i.category === 'shoes' && !isItemDisliked(i));
+  const rawShoesPool = pool.filter(i => isShoeCategoryItem(i) && !isItemDisliked(i));
   let exValidShoes = rawShoesPool.filter(i => !isNonExerciseShoe(i));
   if (!exValidShoes.length && pool !== wardrobe) {
-    exValidShoes = wardrobe.filter(i => i.category === 'shoes' && !isItemDisliked(i) && !isNonExerciseShoe(i));
+    exValidShoes = wardrobe.filter(i => isShoeCategoryItem(i) && !isItemDisliked(i) && !isNonExerciseShoe(i));
   }
   const shoesPool = exValidShoes.length ? exValidShoes : rawShoesPool;
   if (!topsPool.length || !bottomsPool.length || !shoesPool.length) return null;
@@ -11286,8 +11358,9 @@ function swapDislikedExercisePiece(itemId, excludedIds) {
     const slotCatMap = { top: 'tops', bottom: 'bottoms', shoe: 'shoes' };
     const cat = slotCatMap[slot];
     if (cat) {
-      const findAlt = (src) => src.find(w => w.category === cat && w.id !== itemId && !isItemDisliked(w) && !isSwimwearItem(w) && (slot !== 'shoe' || !isNonExerciseShoe(w)))
-        || src.find(w => w.category === cat && w.id !== itemId && !isItemDisliked(w) && !isSwimwearItem(w));
+      const matchesSlotCat = (w) => (slot === 'shoe' ? isShoeCategoryItem(w) : w.category === cat);
+      const findAlt = (src) => src.find(w => matchesSlotCat(w) && w.id !== itemId && !isItemDisliked(w) && !isSwimwearItem(w) && (slot !== 'shoe' || !isNonExerciseShoe(w)))
+        || src.find(w => matchesSlotCat(w) && w.id !== itemId && !isItemDisliked(w) && !isSwimwearItem(w));
       replacement = findAlt(pool) || (pool !== wardrobe ? findAlt(wardrobe) : null);
     }
   }
@@ -12467,8 +12540,10 @@ function renderWardrobe() {
          <div class="card-emoji">${emoji}</div>`;
 
     const isDisabled = item.disabled === true;
+    const dislikeReason = !isDisabled && isItemDisliked(item) && typeof getItemDislikeReason === 'function' ? getItemDislikeReason(item) : '';
+    const safeDislikeReason = dislikeReason.replace(/'/g, "\\'");
     return `
-      <div class="clothing-card" style="animation-delay:${idx * 0.04}s;${isDisabled ? ' opacity:0.62; border:1.5px dashed #fca5a5;' : ''}">
+      <div class="clothing-card" style="animation-delay:${idx * 0.04}s;${(isDisabled || dislikeReason) ? ' opacity:0.62; border:1.5px dashed #fca5a5;' : ''}">
         <div class="card-actions">
           <div class="card-actions-left">
             <span class="card-actions-swatch" style="background:${item.color}" title="Primary Color"></span>
@@ -12491,6 +12566,7 @@ function renderWardrobe() {
         ${item.aiDescription ? `<div style="font-size:0.72rem; color:var(--text-secondary); margin:-4px 0 8px; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;" title="${escapeHtml(item.aiDescription)}">🤖 ${escapeHtml(item.aiDescription)}</div>` : ''}
         <div class="card-badges">
           ${isDisabled ? `<span class="badge" onclick="event.stopPropagation(); toggleWardrobeItemDisabled('${item.id}')" style="cursor:pointer; background:#fef2f2; color:#b91c1c; border:1px solid #fecaca;" title="Tap to re-enable">🚫 Disabled (Tap to Enable)</span>` : ''}
+          ${dislikeReason ? `<span class="badge" onclick="event.stopPropagation(); unblockDislikedTerm('${safeDislikeReason}')" style="cursor:pointer; background:#fef2f2; color:#b91c1c; border:1px solid #fecaca;" title="Blocked by Dislike filter: ${escapeHtml(dislikeReason)}. Tap to unblock.">🚫 Blocked: "${escapeHtml(dislikeReason)}" (Tap to Unblock)</span>` : ''}
           <span class="badge badge-wear-count" onclick="event.stopPropagation(); incrementItemWear('${item.id}')" style="cursor:pointer;" title="Times worn (tap to add +1)">👕 Worn ${wearCount}×</span>
           <span class="badge ${fitBadgeClass}" title="${escapeHtml(fit.reason)}">${fitIcon} ${fit.score}/10 Fit</span>
           <span class="badge badge-category">${escapeHtml(getCategoryLabel(item.category))}</span>
@@ -20411,13 +20487,12 @@ function pickTripExerciseOutfit(day, items, exUsage, prevEx) {
   const morningTemp = typeof day.tmin === 'number' ? day.tmin : 18;
   const topsRaw = items.filter(i => i.category === 'tops' && !isItemDisliked(i));
   const bottomsRaw = items.filter(i => i.category === 'bottoms' && !isItemDisliked(i));
-  const shoesRawAll = items.filter(i => i.category === 'shoes' && !isItemDisliked(i));
+  const shoesRawAll = items.filter(i => isShoeCategoryItem(i) && !isItemDisliked(i));
   const shoesExValid = shoesRawAll.filter(i => !isNonExerciseShoe(i));
+  const wardrobeExShoes = wardrobe.filter(i => isShoeCategoryItem(i) && !isItemDisliked(i) && !isNonExerciseShoe(i));
   const shoesRaw = shoesExValid.length
     ? shoesExValid
-    : (wardrobe.filter(i => i.category === 'shoes' && !isItemDisliked(i) && !isNonExerciseShoe(i)).length
-        ? wardrobe.filter(i => i.category === 'shoes' && !isItemDisliked(i) && !isNonExerciseShoe(i))
-        : shoesRawAll);
+    : (wardrobeExShoes.length ? wardrobeExShoes : shoesRawAll);
   if (!topsRaw.length || !bottomsRaw.length || !shoesRaw.length) return null;
 
   const comfBottoms = bottomsRaw.filter(i => !isNonExerciseStreetBottom(i));
