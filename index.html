@@ -8527,7 +8527,7 @@ function getTopLayerTier(it) {
   if (!it || (it.category !== 'tops' && it.category !== 'outerwear')) return null;
   const sub = (it.subType || '').toLowerCase();
   const nm = (it.name || '').toLowerCase();
-  const txt = sub || nm;
+  const txt = `${sub} ${nm}`.trim();
 
   // Tier 2 (Mid-Layer): Blazers/Sport Coats, Hoodies, Sweaters, Cardigans, Overshirts, Vests (even if stored in outerwear)
   if (/\b(blazer|sport coat|suit jacket|dinner jacket|tuxedo jacket|boucl[eé]|tweed jacket)\b/.test(txt)) {
@@ -10508,6 +10508,16 @@ function renderOutfit() {
   }
 
   const outfit = generateOutfit();
+  if (outfit && outfit.top && typeof getTopLayerTier === 'function' && getTopLayerTier(outfit.top) !== 'base') {
+    const baseCands = typeof getSlotCandidatesForOutfit === 'function'
+      ? getSlotCandidatesForOutfit('top', outfit, typeof getTodayDislikedIds === 'function' ? getTodayDislikedIds() : new Set())
+          .filter(t => getTopLayerTier(t) === 'base')
+      : wardrobe.filter(w => w.category === 'tops' && getTopLayerTier(w) === 'base' && !isItemDisliked(w));
+    if (baseCands.length > 0) {
+      outfit.top = baseCands[0];
+      if (typeof saveDailyMainLock === 'function') saveDailyMainLock(outfit, true);
+    }
+  }
   window.lastRenderedMainOutfit = outfit;
 
   if (!outfit || !outfit.top) {
