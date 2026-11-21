@@ -6579,12 +6579,16 @@ function applyRemoteCloudData(data, opts = {}) {
 
     if (data.trip && typeof data.trip === 'object') {
       const localTripAt = parseInt(localStorage.getItem('wtw_trip_updated_at') || '0', 10);
-      const remoteTripAt = Number(data.tripUpdatedAt || data.updatedAt || 0);
-      if (remoteTripAt >= localTripAt || !trip || trip.stage === 'setup') {
+      const remoteTripAt = Number(data.tripUpdatedAt || 0);
+      const shouldApplyRemoteTrip = !trip || trip.stage === 'setup'
+        || (remoteTripAt > 0 && remoteTripAt > localTripAt)
+        || (localTripAt === 0 && Number(data.updatedAt || 0) > 0);
+      if (shouldApplyRemoteTrip) {
         trip = data.trip;
         try {
           localStorage.setItem('wtw_trip', JSON.stringify(trip));
-          if (remoteTripAt) localStorage.setItem('wtw_trip_updated_at', String(remoteTripAt));
+          const tsToStore = remoteTripAt || Number(data.updatedAt || 0);
+          if (tsToStore) localStorage.setItem('wtw_trip_updated_at', String(tsToStore));
         } catch {}
       }
     }
@@ -11058,8 +11062,9 @@ let exerciseSecondLayer = localStorage.getItem('wtw_exercise_second_layer') === 
 
 function isNonExerciseStreetBottom(it) {
   if (!it || it.category !== 'bottoms') return false;
+  if (it.formality === 'athleisure' || isStrictSportPiece(it)) return false;
   const text = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''}`.toLowerCase();
-  return /\b(jeans|denim|chino|chinos|trouser|trousers|dress pant|slacks|corduroy|suit|khaki)\b/.test(text);
+  return /\b(jeans|denim|chino|chinos|trouser|trousers|dress pant|slacks|corduroy|suit|khaki|cargo|hiking shorts|utility shorts|bermuda|dress shorts|linen shorts|golf shorts|fly front)\b/.test(text);
 }
 
 function isExerciseSecondLayerCandidate(it) {
