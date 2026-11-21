@@ -8343,6 +8343,12 @@ function weatherSuitable(item) {
   const sub = ((item.subType || '') + ' ' + (item.name || '')).toLowerCase();
   const len = getItemLength(item);
 
+  // AI-tagged comfortable temperature bounds (with 1°C tolerance)
+  if (weather && typeof weather.temp === 'number') {
+    if (typeof item.aiMaxTempC === 'number' && weather.temp > item.aiMaxTempC + 1) return false;
+    if (typeof item.aiMinTempC === 'number' && weather.temp < item.aiMinTempC - 1) return false;
+  }
+
   // Check season suitability in location on top of temperature
   if (!isItemSeasonallyCompatible(item, sInfo.id, cat)) {
     return false;
@@ -8553,6 +8559,9 @@ function getTopLayerTier(it) {
   }
   if (/\b(hoodie|sweatshirt|sweater|cardigan|pullover|fleece|quarter-zip|half-zip|turtleneck|mock-neck|mock neck|poncho|knitted polo|jumper|knitwear|crewneck knit|v-neck knit|cable knit)\b/.test(txt) && !txt.includes('under')) {
     return 'mid';
+  }
+  if (it.aiLayerTier === 'base' || it.aiLayerTier === 'mid' || it.aiLayerTier === 'outer') {
+    return it.aiLayerTier;
   }
 
   // Tier 3 (Outer Jacket / Coat / Weather Shell)
