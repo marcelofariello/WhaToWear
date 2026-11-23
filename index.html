@@ -5036,10 +5036,11 @@ function scoreOutfitCandidate(state, bp) {
     return -Infinity;
   }
   const ev = typeof evaluateOutfitScore === 'function'
-    ? evaluateOutfitScore(state.top, state.bottom, state.shoe, state.outerwear || state.midLayer, state.accessory, {
+    ? evaluateOutfitScore(state.top, state.bottom, state.shoe, state.outerwear || null, state.accessory, {
         midLayer: state.midLayer,
         beltItem: state.beltRec?.beltItem,
-        blueprint: bp
+        blueprint: bp,
+        targetFormality: typeof getDayFormality === 'function' ? getDayFormality() : 'casual'
       })
     : { score: 100 };
   return (ev && typeof ev.score === 'number') ? ev.score : 100;
@@ -5152,8 +5153,10 @@ function swapDislikedPieceMinimal(slot, prevOutfit, excludedIds, dislikedItemId 
             ? directFallbackPool.filter(w => typeof isBaseTop === 'function' && isBaseTop(w))
             : directFallbackPool)
         : directFallbackPool;
+      const targetF = typeof getDayFormality === 'function' ? getDayFormality() : 'casual';
       const nonGymPool = slotPool.filter(w => !isGymOrLoungeItem(w) && !isSwimwearItem(w));
-      const pickPool = nonGymPool.length > 0 ? nonGymPool : slotPool;
+      const workSafePool = nonGymPool.filter(w => !isWorkDisallowedItem(w, targetF));
+      const pickPool = workSafePool.length > 0 ? workSafePool : (nonGymPool.length > 0 ? nonGymPool : slotPool);
 
       // Pick the highest-scoring replacement from pickPool
       let chosenCand = pickPool[0];
@@ -5163,10 +5166,11 @@ function swapDislikedPieceMinimal(slot, prevOutfit, excludedIds, dislikedItemId 
         const trial = { ...prevOutfit, [slot]: cand };
         trial.beltRec = proposeBeltForOutfit(trial.shoe, trial.bottom, trial.top, trial.outerwear || trial.midLayer, allowedBelts);
         const ev = typeof evaluateOutfitScore === 'function'
-          ? evaluateOutfitScore(trial.top, trial.bottom, trial.shoe, trial.outerwear || trial.midLayer, trial.accessory, {
+          ? evaluateOutfitScore(trial.top, trial.bottom, trial.shoe, trial.outerwear || null, trial.accessory, {
               midLayer: trial.midLayer,
               beltItem: trial.beltRec?.beltItem,
-              blueprint: bp
+              blueprint: bp,
+              targetFormality: targetF
             })
           : { score: 100 };
         const sc = (ev && typeof ev.score === 'number') ? ev.score : 100;
@@ -6083,6 +6087,12 @@ function runRetroactiveWardrobeCleanup({ silent = false, skipSave = false } = {}
       changed = true;
     }
 
+    if ((!item.pattern || item.pattern === 'solid') && typeof isGraphicOrBrandedItem === 'function' && isGraphicOrBrandedItem(item)) {
+      const hintTxt = `${item.name || ''} ${item.subType || ''} ${item.aiDescription || ''}`.toLowerCase();
+      item.pattern = /\b(logo|brand|branding|wordmark)\b/.test(hintTxt) ? 'logo' : 'graphic';
+      changed = true;
+    }
+
     if (changed) updatedCount++;
   });
 
@@ -6143,6 +6153,9 @@ async function reidentifyAllWardrobePhotos() {
       let length = cv.length || getDefaultLengthForPiece(category, subType);
       let color = cv.hex;
       let colorName = cv.colorName;
+      let pattern = cv.pattern || 'solid';
+      let aiDescription = item.aiDescription || '';
+      let aiPatternVerified = Boolean(item.aiPatternVerified);
       let formality = inferFormalityFromRecognizedPiece(category, subType, length);
       let season = cv.season || inferItemSeasonSuitability({ category, subType, length }, { forceRecalc: true });
 
@@ -6155,6 +6168,9 @@ async function reidentifyAllWardrobePhotos() {
           length = aiResult.length || resolveRecognizedGarmentLength(category, subType, cv.category, cv.length);
           color = aiResult.color_hex || swatch.hex;
           colorName = aiResult.color_name || swatch.colorName;
+          pattern = aiResult.pattern || pattern;
+          if (aiResult.notes) aiDescription = aiResult.notes;
+          aiPatternVerified = true;
           formality = (aiResult.formality && getAllFormalityLevels().some(f => f.id === aiResult.formality))
             ? aiResult.formality
             : inferFormalityFromRecognizedPiece(category, subType, length);
@@ -6168,6 +6184,9 @@ async function reidentifyAllWardrobePhotos() {
       item.length = length;
       item.color = color;
       item.colorName = colorName;
+      if (pattern && (item.pattern === 'solid' || !item.pattern || aiPatternVerified)) item.pattern = pattern;
+      if (aiDescription) item.aiDescription = aiDescription;
+      if (aiPatternVerified) item.aiPatternVerified = true;
       item.formality = formality;
       item.season = season;
       item.name = name;
@@ -6455,6 +6474,15 @@ function normalizeRemoteWardrobeItem(raw, scope) {
     tertiaryColorName: raw.tertiaryColorName || '',
     pattern: raw.pattern || 'solid',
     aiDescription: raw.aiDescription || '',
+    aiPatternVerified: Boolean(raw.aiPatternVerified),
+    aiLayerTier: raw.aiLayerTier || null,
+    aiActivity: raw.aiActivity || null,
+    aiMinTempC: typeof raw.aiMinTempC === 'number' ? raw.aiMinTempC : null,
+    aiMaxTempC: typeof raw.aiMaxTempC === 'number' ? raw.aiMaxTempC : null,
+    aiFitScore: typeof raw.aiFitScore === 'number' ? raw.aiFitScore : null,
+    aiFitReason: raw.aiFitReason || null,
+    aiFitUpdatedAt: typeof raw.aiFitUpdatedAt === 'number' ? raw.aiFitUpdatedAt : null,
+    disabled: Boolean(raw.disabled),
     formality: raw.formality || 'casual',
     wearCount: raw.wearCount || 0,
     image: imgUrl,
@@ -7087,6 +7115,15 @@ function sanitizeWardrobeItemForFirestore(item, scope, timestamp) {
     tertiaryColorName: item.tertiaryColorName || null,
     pattern: item.pattern || 'solid',
     aiDescription: item.aiDescription || '',
+    aiPatternVerified: Boolean(item.aiPatternVerified),
+    aiLayerTier: item.aiLayerTier || null,
+    aiActivity: item.aiActivity || null,
+    aiMinTempC: typeof item.aiMinTempC === 'number' ? item.aiMinTempC : null,
+    aiMaxTempC: typeof item.aiMaxTempC === 'number' ? item.aiMaxTempC : null,
+    aiFitScore: typeof item.aiFitScore === 'number' ? item.aiFitScore : null,
+    aiFitReason: item.aiFitReason || null,
+    aiFitUpdatedAt: typeof item.aiFitUpdatedAt === 'number' ? item.aiFitUpdatedAt : null,
+    disabled: Boolean(item.disabled),
     wearCount: typeof item.wearCount === 'number' ? item.wearCount : 0,
     imageTransform: item.imageTransform || null,
     formality: item.formality,
@@ -7952,9 +7989,12 @@ function inferItemSeasonSuitability(item, { forceRecalc = false } = {}) {
     return 'summer';
   }
 
-  // 2. Spring & Summer (all short sleeves, shorts, lightweight weaves, light footwear)
+  // 2. Spring & Summer (short sleeves, breathable linen, shorts, light footwear)
   if (
-    (cat === 'tops' && (len === 'short' || /\b(t-shirt|tee|polo|linen|camp[- ]collar|cuban|short[- ]sleeve|crop top|baby tee)\b/.test(sub))) ||
+    (cat === 'tops' && (
+      (len === 'short' && !/\b(sweater|knit|cashmere|merino|wool|flannel|corduroy|fleece)\b/.test(sub)) ||
+      /\b(linen|camp[- ]collar|cuban|short[- ]sleeve|crop top|baby tee)\b/.test(sub)
+    )) ||
     (cat === 'bottoms' && (len === 'shorts' || /\b(short|shorts|skort|bermuda|cropped)\b/.test(sub))) ||
     (cat === 'bottoms' && len === 'cropped') ||
     (cat === 'shoes' && /\b(canvas sneaker|boat shoe|deck shoe|ballet flat|mule|sandal)\b/.test(sub)) ||
@@ -7968,9 +8008,9 @@ function inferItemSeasonSuitability(item, { forceRecalc = false } = {}) {
     return 'winter';
   }
 
-  // 4. Autumn & Winter (sweaters, cardigans, long knits, coats, boots)
+  // 4. Autumn & Winter (warm knits, sweaters, cardigans, flannel, hoodies, coats, boots)
   if (
-    (cat === 'tops' && (len === 'long' || /\b(sweater|cardigan|turtleneck|mock-neck|flannel|corduroy|hoodie|sweatshirt|thermal|pullover|henley)\b/.test(sub))) ||
+    (cat === 'tops' && /\b(sweater|cardigan|turtleneck|mock-neck|flannel|corduroy|hoodie|sweatshirt|thermal|pullover|fleece|cashmere|merino|cable[- ]?knit)\b/.test(sub)) ||
     (cat === 'outerwear' && /\b(overcoat|trench coat|wool coat|chesterfield|topcoat|shearling|aviator|leather jacket|leather moto|café racer|cafe racer|barn jacket|quilted|fleece)\b/.test(sub)) ||
     (cat === 'shoes' && /\b(boot|boots|chelsea|chukka|combat|hiking|knee-high)\b/.test(sub)) ||
     (cat === 'accessories' && /\b(scarf)\b/.test(sub))
@@ -7978,7 +8018,7 @@ function inferItemSeasonSuitability(item, { forceRecalc = false } = {}) {
     return 'autumn-winter';
   }
 
-  // 5. All season (classic jeans, regular chinos, dress trousers, button-downs, leather sneakers, belts, watches)
+  // 5. All season (classic jeans, regular chinos, dress trousers, button-downs, dress shirts, blouses, leather sneakers, belts, watches)
   return 'all-season';
 }
 
@@ -7991,6 +8031,7 @@ function isItemSeasonallyCompatible(item, activeSeasonId, wxCat) {
   if ((wxCat === 'cold' || wxCat === 'very-cold') && (itemSeason === 'winter' || itemSeason === 'autumn-winter')) return true;
 
   if (activeSeasonId === 'spring') {
+    if ((wxCat === 'cool' || wxCat === 'mild') && itemSeason === 'autumn-winter') return true;
     return ['all-season', 'spring', 'spring-summer', 'autumn'].includes(itemSeason);
   }
   if (activeSeasonId === 'summer') {
@@ -8321,9 +8362,9 @@ function isNeutralColor(hex) {
   // Very dark or very light
   if (l <= 12 || l >= 92) return true;
   // Navy (dark blue, low-ish sat)
-  if (h >= 200 && h <= 250 && l <= 25) return true;
-  // Beige/khaki area
-  if (h >= 30 && h <= 55 && s <= 40 && l >= 55 && l <= 85) return true;
+  if (h >= 195 && h <= 250 && l <= 30) return true;
+  // Warm earth browns, espresso, cognac, tan, camel & beige/khaki neutrals
+  if (h >= 15 && h <= 55 && s <= 58 && l >= 12 && l <= 85) return true;
   return false;
 }
 
@@ -8339,18 +8380,23 @@ function colorsMatch(hex1, hex2) {
   const c1 = hexToHSL(hex1);
   const c2 = hexToHSL(hex2);
 
+  // Classic dark heritage tone (deep burgundy/oxblood/forest) + crisp light pastel shirt
+  if ((c1.l <= 32 && c1.s <= 70 && c2.l >= 74) || (c2.l <= 32 && c2.s <= 70 && c1.l >= 74)) {
+    return true;
+  }
+
   // Monochromatic: same hue family, different lightness
   const hueDiff = Math.min(Math.abs(c1.h - c2.h), 360 - Math.abs(c1.h - c2.h));
   if (hueDiff <= 20) return true;
 
-  // Analogous: within 40 degrees
+  // Analogous: within 45 degrees
   if (hueDiff <= 45) return true;
 
   // Complementary: opposite side of wheel (150–210 degrees apart)
   if (hueDiff >= 150 && hueDiff <= 210) return true;
 
   // Triadic: ~120 degrees apart
-  if (hueDiff >= 110 && hueDiff <= 130) return true;
+  if (hueDiff >= 110 && hueDiff <= 135) return true;
 
   return false;
 }
@@ -8462,21 +8508,56 @@ function isDrawstringOrAthleticBottom(bottom) {
   return /\b(drawstring|elastic|elasticated|pull-on|sweat\s*shorts?|board\s*shorts?|swim\s*(shorts?|trunks?)|beachwear|track pants|cargo joggers|leggings)\b/.test(text);
 }
 
-function isBigLogoItem(it) {
+function stripNegatedBrandingText(raw) {
+  const nounClause = '(?:visible\\s+|front\\s+|chest\\s+|back\\s+|large\\s+|big\\s+|huge\\s+|prominent\\s+|bold\\s+|printed\\s+|screen[- ]?printed\\s+|any\\s+)*(?:logos?|brand(?:ing|ed)?(?:\\s+(?:marks?|names?))?|wording|words|text|lettering|typography|slogans?|graphics?|prints?|artwork|motifs?|emblems?|crests?|monograms?|patches?|patterns?)';
+  const listRx = new RegExp(
+    `\\b(?:no|without|free of|zero|lacks|absent|non-?)\\s+${nounClause}(?:\\s*(?:,\\s*(?:or|and|nor)?|\\/|or|and|nor)\\s*${nounClause})*`,
+    'g'
+  );
+  return String(raw || '')
+    .toLowerCase()
+    .replace(listRx, ' ')
+    .replace(/\b(?:unbranded|logo[- ]free|print[- ]free|graphic[- ]free|plain\s+front|solid\s+front|no\s+prints?)\b/g, ' ');
+}
+
+function isGraphicOrBrandedItem(it) {
   if (!it) return false;
-  if ((it.pattern || '').toLowerCase() === 'logo') return true;
-  const text = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''}`.toLowerCase();
-  return /\b(big logo|large logo|oversized logo|prominent logo|bold logo|chest logo|logo print|brand logo|giant logo)\b/.test(text);
+  const pat = String(it.pattern || '').toLowerCase().trim();
+  if (pat === 'logo' || pat === 'graphic') return true;
+  const subAndName = `${it.name || ''} ${it.subType || ''}`.toLowerCase();
+  if (/\bgraphic\b/.test(subAndName)) return true;
+
+  const rawText = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''} ${it.notes || ''}`.toLowerCase();
+  const cleaned = stripNegatedBrandingText(rawText)
+    .replace(/\b(?:tiny|micro|minimal|subtle|discreet)\s+(?:[a-z]+\s+){0,2}(?:logo|emblem|crest|monogram|pony|tag)\b/g, ' ')
+    .replace(/\bsmall\s+(?:(?:tonal|embroidered|woven|subtle|discreet|left[- ]?chest)\s+)+(?:logo|emblem|crest|monogram|pony|tag)\b/g, ' ');
+
+  if (/\b(big|large|huge|oversized|prominent|bold|giant|loud|heavy|massive|front|chest|center|centre|across[- ]the[- ]chest|full[- ]front|back)\s+(?:[a-z]+\s+){0,2}(?:logo|logos|brand|branding|wording|text|lettering|print|prints|graphic|graphics|artwork|wordmark|slogan|emblem|crest|monogram|motif|patch|script)\b/.test(cleaned)) {
+    return true;
+  }
+  if (/\b(branding|wording|wordmark|slogan|typography|lettering|screen[- ]?print(?:ed)?|graphic\s+(?:tee|t-?shirt|shirt|top|print|artwork|design)|printed\s+(?:text|wording|words|letters|branding|brand|logo|graphic|slogan|message|on\s+(?:the\s+)?front|across)|(?:text|wording|letters|words|lettering|branding|logo|name|graphic|artwork)\s+(?:printed|written|emblazoned|stamped|across|on\s+(?:the\s+)?(?:front|chest|back))|logo\s+(?:tee|t-?shirt|print|hoodie|sweatshirt)|brand\s+(?:logo|name|print|text)|logo)\b/.test(cleaned)) {
+    return true;
+  }
+  return false;
+}
+
+function isBigLogoItem(it) {
+  return isGraphicOrBrandedItem(it);
 }
 
 function isWorkDisallowedItem(it, targetFormality) {
   if (!it) return false;
   if (formalityScore(targetFormality) < 2) return false;
-  if (isGymOrLoungeItem(it) || isShortsBottom(it) || isOpenToeOrSandalShoe(it) || isStrictSportPiece(it) || isBigLogoItem(it)) {
+  const act = String(it.aiActivity || '').toLowerCase();
+  if (act === 'exercise' || act === 'swim' || act === 'lounge') return true;
+  if (isGymOrLoungeItem(it) || isShortsBottom(it) || isOpenToeOrSandalShoe(it) || isStrictSportPiece(it) || isGraphicOrBrandedItem(it)) {
     return true;
   }
   const text = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''}`.toLowerCase();
   if (it.category === 'tops' && /\b(athletic|sport|gym|training|running|workout|dry-?fit|dri-?fit|performance|jersey|singlet|tank\s*top|sleeveless)\b/.test(text)) {
+    return true;
+  }
+  if (formalityScore(targetFormality) >= 2.5 && it.category === 'tops' && /\b(hoodie|sweatshirt|t-shirt|tee)\b/.test(text)) {
     return true;
   }
   return false;
@@ -8782,7 +8863,7 @@ function isPrimaryBaseTop(it) {
 function isShirtBaseTop(it) {
   if (getTopLayerTier(it) !== 'base') return false;
   const txt = ((it.subType || '') + ' ' + (it.name || '')).toLowerCase();
-  return /\b(dress shirt|oxford|ocbd|poplin|twill|tuxedo shirt|button-up|button-down|blouse|linen shirt|camp-collar|cuban|mandarin|polo)\b/.test(txt);
+  return /\b(dress shirt|oxford|ocbd|poplin|twill|tuxedo shirt|button-up|button-down|blouse|linen shirt|chambray shirt|camp-collar|cuban|mandarin|polo)\b/.test(txt);
 }
 
 function isBaseTop(it) {
@@ -9066,7 +9147,7 @@ function buildPersonalStyleBlueprint() {
   };
 }
 
-function scoreOutfitPersonalAndStyle(top, midLayer, outer, bottom, shoe, beltItem, accessory, blueprint) {
+function scoreOutfitPersonalAndStyle(top, midLayer, outer, bottom, shoe, beltItem, accessory, blueprint, opts = {}) {
   let personalScore = 0;
   const reasons = [];
   const topStack = [top, midLayer, outer].filter(Boolean);
@@ -9132,10 +9213,16 @@ function scoreOutfitPersonalAndStyle(top, midLayer, outer, bottom, shoe, beltIte
   } else if (patternedItems.length === 1 && allItems.some(it => !it.pattern || it.pattern === 'solid' || it.pattern === 'textured')) {
     personalScore += 10; // balanced statement pattern anchored by solids
   }
-  const dayFormality = (typeof getDayFormality === 'function') ? getDayFormality() : 'casual';
-  if (['smart-casual', 'formal', 'business-casual', 'cocktail', 'black-tie'].includes(dayFormality)) {
-    if (allItems.some(it => it.pattern === 'graphic' || it.pattern === 'logo' || isBigLogoItem(it))) {
-      personalScore -= 30;
+  const dayFormality = opts.targetFormality || ((typeof getDayFormality === 'function') ? getDayFormality() : 'casual');
+  const isWorkContext = formalityScore(dayFormality) >= 2;
+  const loudCount = allItems.filter(it => isGraphicOrBrandedItem(it)).length;
+  if (isWorkContext && loudCount > 0) {
+    personalScore -= 180 * loudCount;
+  } else if (loudCount > 0) {
+    const cleanArch = ['quiet-luxury', 'executive', 'minimalist', 'romantic'].includes(blueprint.archKey);
+    const cleanImp = (blueprint.impressions || []).some(im => ['Polished', 'Commanding', 'Sharp', 'Trustworthy', 'Minimalist'].includes(im));
+    if (cleanArch || cleanImp) {
+      personalScore -= 55 * loudCount;
     }
   }
 
@@ -9697,14 +9784,46 @@ function evaluateOutfitScore(top, bottom, shoe, outer, accessory, opts = {}) {
   const locName = (weather && weather.city) ? weather.city.split(',')[0] : (getSettings().city || 'your location');
   const seasonMsg = `${sInfo.icon} ${sInfo.name} in ${locName} (${sInfo.hemisphereLabel}) — ${sInfo.styleSummary}`;
 
+  const targetFormality = opts.targetFormality || (typeof getDayFormality === 'function' ? getDayFormality() : 'casual');
+  const isWorkContext = formalityScore(targetFormality) >= 2;
+
   // Strict 3-Tier Top Layering Hierarchy Enforcement
   // Layer 1 = T-Shirt (short/long) or Base Shirt; Layer 2 = Hoodie / Blazer / Sweater / Cardigan / Overshirt / Vest; Layer 3 = Outer Jacket / Coat
   if (midLayer || outer) {
-    if (isPrimaryBaseTop(top)) score += 28; // Prefer T-shirts (short or long) / henleys as Layer 1
-    else if (isBaseTop(top)) score += 16;
-    else score -= 120; // Heavy mid-layer/coat should not be worn as Layer 1 under another top
+    if (isWorkContext) {
+      if (isShirtBaseTop(top)) score += 36;
+      else if (isPrimaryBaseTop(top)) {
+        const hasStructuredUpper = [midLayer, outer].some(u => u && !isHoodieOrSweatshirt(u) && formalityScore(u.formality || 'casual') >= 1.5);
+        score += hasStructuredUpper ? 8 : -16;
+      } else if (isBaseTop(top)) score += 20;
+      else score -= 120;
+    } else {
+      if (isPrimaryBaseTop(top)) score += 28; // Prefer T-shirts (short or long) / henleys as Layer 1
+      else if (isBaseTop(top)) score += 16;
+      else score -= 120; // Heavy mid-layer/coat should not be worn as Layer 1 under another top
+    }
   } else {
-    if (isBaseTop(top)) score += 12;
+    if (isWorkContext) {
+      if (isShirtBaseTop(top)) score += 32;
+      else if (isPrimaryBaseTop(top)) score -= 18; // Standalone casual tee on workday/smart-casual loses to collared/smart tops
+      else if (isBaseTop(top)) score += 12;
+    } else {
+      if (isBaseTop(top)) score += 12;
+    }
+  }
+
+  if (isWorkContext) {
+    const corePieces = [top, midLayer, outer, bottom, shoe].filter(Boolean);
+    corePieces.forEach(it => {
+      if (isWorkDisallowedItem(it, targetFormality)) {
+        score -= 200;
+        return;
+      }
+      const fs = formalityScore(it.formality || 'casual');
+      if (fs >= 2) score += 12;
+      else if (fs >= 1.5) score += 4;
+      else if (fs <= 1) score -= 6;
+    });
   }
 
   if (midLayer) {
@@ -9726,7 +9845,7 @@ function evaluateOutfitScore(top, bottom, shoe, outer, accessory, opts = {}) {
 
   // PRIMARY DECISION MAKER: Personal Image Blueprint (Best Colors & Cloth Types for Face/Body) + Desired Style
   const blueprint = opts.blueprint || buildPersonalStyleBlueprint();
-  const personalEval = scoreOutfitPersonalAndStyle(top, midLayer, outer, bottom, shoe, beltItem, accessory, blueprint);
+  const personalEval = scoreOutfitPersonalAndStyle(top, midLayer, outer, bottom, shoe, beltItem, accessory, blueprint, { targetFormality });
   score += personalEval.personalScore;
 
   // Mood scoring (subtle secondary tuning behind Personal & Style Decision)
@@ -10031,12 +10150,24 @@ function generateOutfit(options = {}) {
   let bestOutfit = null;
   let highestScore = -Infinity;
 
+  const isWorkContext = formalityScore(targetFormality) >= 2;
+  const shirtBaseTops = baseTopsPool.filter(isShirtBaseTop);
+  const primaryTees = baseTopsPool.filter(isPrimaryBaseTop);
+
   for (let attempt = 0; attempt < 180; attempt++) {
-    // 70% of attempts favor Primary Tees (short or long) when multi-layering; 30% explore collared base shirts too
-    const primaryTees = baseTopsPool.filter(isPrimaryBaseTop);
-    const top = (targetLayers >= 2 && primaryTees.length > 0 && Math.random() < 0.72)
-      ? pickItem(primaryTees)
-      : pickItem(baseTopsPool);
+    let top;
+    if (isWorkContext && shirtBaseTops.length > 0) {
+      if (formalityScore(targetFormality) >= 2.5 || targetLayers === 1) {
+        top = Math.random() < 0.88 ? pickItem(shirtBaseTops) : pickItem(baseTopsPool);
+      } else {
+        top = Math.random() < 0.72 ? pickItem(shirtBaseTops) : pickItem(baseTopsPool);
+      }
+    } else {
+      // On casual/weekend multi-layer days, favor Primary Tees ~72% of attempts; 28% explore collared shirts
+      top = (targetLayers >= 2 && primaryTees.length > 0 && Math.random() < 0.72)
+        ? pickItem(primaryTees)
+        : pickItem(baseTopsPool);
+    }
     const bottom = pickItem(bottoms);
     const shoe = pickItem(shoes);
 
@@ -10106,7 +10237,8 @@ function generateOutfit(options = {}) {
     const evalResult = evaluateOutfitScore(top, bottom, shoe, outer, accessory, {
       midLayer,
       beltItem: beltRec.beltItem,
-      blueprint
+      blueprint,
+      targetFormality
     });
 
     if (evalResult.score > highestScore) {
@@ -10240,6 +10372,23 @@ function hydrateDailyMainLock(lock, ctx) {
   }
   if (!areShortsAllowedToday(targetF) && isShortsBottom(bottom)) return null;
   if (!areSandalsAllowedToday(targetF) && isOpenToeOrSandalShoe(shoe)) return null;
+  if (formalityScore(targetF) >= 2) {
+    const lockedEntries = [
+      { item: top, matchCat: (w) => w.category === 'tops' && isBaseTop(w) },
+      { item: midLayer, matchCat: (w) => (w.category === 'tops' || w.category === 'outerwear') && isMidLayerCandidate(w) },
+      { item: outerwear, matchCat: (w) => w.category === 'outerwear' },
+      { item: bottom, matchCat: (w) => w.category === 'bottoms' },
+      { item: shoe, matchCat: (w) => isShoeCategoryItem(w) }
+    ];
+    for (const entry of lockedEntries) {
+      if (entry.item && isWorkDisallowedItem(entry.item, targetF)) {
+        const hasCompliantAlt = wardrobe.some(w =>
+          w.id !== entry.item.id && !isItemDisliked(w) && entry.matchCat(w) && !isWorkDisallowedItem(w, targetF)
+        );
+        if (hasCompliantAlt) return null;
+      }
+    }
+  }
   const hasBaseTop = wardrobe.some(w => w.category === 'tops' && isBaseTop(w) && !isItemDisliked(w));
   if (hasBaseTop && getTopLayerTier(top) !== 'base') return null;
   if (typeof isLayerPairCompatible === 'function' && !isLayerPairCompatible(top, midLayer, outerwear)) return null;
@@ -10252,7 +10401,8 @@ function hydrateDailyMainLock(lock, ctx) {
   const evalResult = evaluateOutfitScore(top, bottom, shoe, outerwear, accessory, {
     midLayer,
     beltItem: beltRec.beltItem,
-    blueprint: ctx.blueprint
+    blueprint: ctx.blueprint,
+    targetFormality: ctx.targetFormality
   });
   const outfit = {
     top,
@@ -10548,6 +10698,11 @@ function renderOutfitItem(item, label, stepBadge, outfitContext = 'main') {
   const lenLabel = getLengthLabel(len, item.category);
   const itemSeason = item.season || inferItemSeasonSuitability(item);
   const seasonBadge = itemSeason && itemSeason !== 'all-season' ? getSeasonBadgeLabel(itemSeason) : '';
+  const patternLabels = {
+    stripes: '📏 Stripes', check: '🏁 Plaid/Check', dots: '⚪ Dots',
+    graphic: '🎨 Graphic', logo: '🏷️ Brand/Logo', colorblock: '🟨 Colorblock', textured: '🧶 Textured'
+  };
+  const patternBadge = item.pattern && item.pattern !== 'solid' ? (patternLabels[item.pattern] || item.pattern) : '';
   const photoSrc = getItemDisplayPhotoSrc(item);
   const hasRealPhoto = Boolean(item.image);
   const safeSub = (item.subType || '').replace(/'/g, "\\'");
@@ -10580,6 +10735,7 @@ function renderOutfitItem(item, label, stepBadge, outfitContext = 'main') {
         <div class="item-meta">
           ${escapeHtml(item.subType)} · ${escapeHtml(getFormalityDisplayLabel(item.formality))}
           ${lenLabel ? `· <span class="badge badge-length" style="font-size:0.68rem; padding:2px 6px;">${lenLabel}</span>` : ''}
+          ${patternBadge ? `· <span class="badge" style="font-size:0.68rem; padding:2px 6px; background:rgba(167,139,250,0.16); color:#c4b5fd; border:1px solid rgba(167,139,250,0.35);">${patternBadge}</span>` : ''}
           ${seasonBadge ? `· <span class="badge" style="font-size:0.68rem; padding:2px 6px; background:#f4efe6; color:#5a4632;">${seasonBadge}</span>` : ''}
         </div>
         ${item.aiDescription ? `<div style="font-size:0.72rem; color:var(--text-secondary); margin-top:3px; line-height:1.3;">🤖 ${escapeHtml(item.aiDescription)}</div>` : ''}
@@ -11617,9 +11773,9 @@ function compactWardrobeForAI(items) {
     };
     if (it.secondaryColor) obj.secondaryColor = it.secondaryColorName || getColorNameFromHex(it.secondaryColor);
     if (it.tertiaryColor) obj.tertiaryColor = it.tertiaryColorName || getColorNameFromHex(it.tertiaryColor);
-    if (it.pattern && it.pattern !== 'solid') obj.pattern = it.pattern;
+    obj.pattern = it.pattern || 'solid';
     if (it.season && it.season !== 'all-season') obj.season = it.season;
-    if (it.aiDescription) obj.aiDescription = String(it.aiDescription).slice(0, 110);
+    if (it.aiDescription) obj.aiDescription = String(it.aiDescription).slice(0, 220);
     return obj;
   });
 }
@@ -11647,6 +11803,23 @@ function hydrateAIDailyOutfitFromPicked(picked, currentTemp) {
   if (!areSandalsAllowedToday(targetF) && isOpenToeOrSandalShoe(shoe)) {
     return null;
   }
+  if (formalityScore(targetF) >= 2) {
+    const entries = [
+      { item: top, matchCat: (w) => w.category === 'tops' && isBaseTop(w) },
+      { item: midLayer, matchCat: (w) => (w.category === 'tops' || w.category === 'outerwear') && isMidLayerCandidate(w) },
+      { item: outerwear, matchCat: (w) => w.category === 'outerwear' },
+      { item: bottom, matchCat: (w) => w.category === 'bottoms' },
+      { item: shoe, matchCat: (w) => isShoeCategoryItem(w) }
+    ];
+    for (const entry of entries) {
+      if (entry.item && isWorkDisallowedItem(entry.item, targetF)) {
+        const hasCompliantAlt = wardrobe.some(w =>
+          w.id !== entry.item.id && !isItemDisliked(w) && entry.matchCat(w) && !isWorkDisallowedItem(w, targetF)
+        );
+        if (hasCompliantAlt) return null;
+      }
+    }
+  }
   const hasBaseTop = wardrobe.some(w => w.category === 'tops' && isBaseTop(w) && !isItemDisliked(w));
   if (hasBaseTop && getTopLayerTier(top) !== 'base') {
     return null;
@@ -11672,7 +11845,7 @@ function hydrateAIDailyOutfitFromPicked(picked, currentTemp) {
     targetLayers: actualLayers,
     layerInfo: { count: actualLayers, temp: currentTemp, reason: `${currentTemp}°C · AI Stylist chose ${actualLayers} layer(s)` },
     blueprint: bp,
-    personalEval: scoreOutfitPersonalAndStyle(top, midLayer, outerwear, bottom, shoe, beltRec.beltItem, accessory, bp),
+    personalEval: scoreOutfitPersonalAndStyle(top, midLayer, outerwear, bottom, shoe, beltRec.beltItem, accessory, bp, { targetFormality: targetF }),
     freshness: evaluateOutfitFreshness(top, midLayer, outerwear, bottom, shoe),
     aiDailyMeta: {
       alignmentScore: typeof picked.image_alignment_score === 'number' ? picked.image_alignment_score : 85,
@@ -11692,7 +11865,7 @@ function getAIDailyOutfitCacheKey() {
   const sInfo = typeof getLocationSeasonInfo === 'function' ? getLocationSeasonInfo() : { id: 'spring', hemisphere: 'south' };
   const form = (typeof getDayFormality === 'function') ? getDayFormality() : 'casual';
   const arch = (userProfile && userProfile.personaArchetype) || 'quiet-luxury';
-  return `${todayStr}|${cityKey}|${sInfo.id}|${sInfo.hemisphere}|${tempBand}|${mainCond}|${layerOverride}|${form}|${arch}`;
+  return `${todayStr}|${cityKey}|${sInfo.id}|${sInfo.hemisphere}|${tempBand}|${mainCond}|${layerOverride}|${form}|${arch}|w2`;
 }
 
 function restoreCachedAIDailyOutfit(cacheKey) {
@@ -11744,11 +11917,25 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [] }) 
     const allowGymInMain = (targetFormality === 'athleisure' || targetFormality === 'lounge');
     const allowShortsInMain = areShortsAllowedToday(targetFormality);
     const allowSandalsInMain = areSandalsAllowedToday(targetFormality);
-    const mainWardrobePool = wardrobe.filter(it =>
-      (allowGymInMain || !isGymOrLoungeItem(it)) &&
-      (allowShortsInMain || !isShortsBottom(it)) &&
-      (allowSandalsInMain || !isOpenToeOrSandalShoe(it))
-    );
+    const isWorkContext = formalityScore(targetFormality) >= 2;
+    const filterCatForAI = (cat) => {
+      const base = wardrobe.filter(it => (cat === 'shoes' ? isShoeCategoryItem(it) : it.category === cat) && !isItemDisliked(it));
+      const ok = base.filter(it =>
+        !isSwimwearItem(it) &&
+        (allowGymInMain || !isGymOrLoungeItem(it)) &&
+        (allowShortsInMain || !isShortsBottom(it)) &&
+        (allowSandalsInMain || !isOpenToeOrSandalShoe(it)) &&
+        !isWorkDisallowedItem(it, targetFormality)
+      );
+      return ok.length > 0 ? ok : base;
+    };
+    const mainWardrobePool = [
+      ...filterCatForAI('tops'),
+      ...filterCatForAI('bottoms'),
+      ...filterCatForAI('shoes'),
+      ...filterCatForAI('outerwear'),
+      ...filterCatForAI('accessories')
+    ];
     const compactWardrobe = compactWardrobeForAI(mainWardrobePool.length >= 3 ? mainWardrobePool : wardrobe);
 
     const prompt = [
@@ -11757,6 +11944,7 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [] }) 
       !allowGymInMain ? `Strictly exclude gym, workout, soccer/athletic shorts, athletic tops, and loungewear/pajamas — those belong in the separate Morning Exercise Outfit.` : '',
       !allowShortsInMain ? `Strictly exclude all shorts (Mon–Fri / non-casual days require full-length trousers, chinos, jeans, or skirts).` : '',
       !allowSandalsInMain ? `Strictly exclude sandals, slides, and flip-flops (never suggest open-toe/beach footwear for workdays Mon–Fri or smart-casual/formal outfits).` : '',
+      isWorkContext ? `WORK & IMAGE RULE: Because today is ${targetFormality} (workday/polished context), STRICTLY EXCLUDE any T-shirts or tops with large logos, visible branding, printed wording/text, slogans, or chest graphics (pattern "graphic" or "logo"), as well as athletic jerseys. Prefer clean collared shirts (Oxford, Dress, Button-Up, Linen, Blouse) over casual T-shirts when available; if a T-shirt is used under a blazer/cardigan/sweater, it MUST be completely plain/solid without graphics, branding, or wording.` : '',
       `Layer 1 Rule: topId MUST be a true Layer 1 base top (T-Shirt, Henley, Shirt, Blouse, Polo, Tank) — NEVER put a sweater, quarter-zip, pullover, hoodie, sweatshirt, or cardigan as topId (those belong in midLayerId over a base top).`,
       `Layering Rule: ${layerRuleText} Never put an athleisure/sport windbreaker over a chunky knit sweater/cardigan or formal shirt, and never put a denim jacket, blazer, or tailored coat over a zip hoodie or gym/fleece hoodie. Keep fabrics, formality, and colors coherent.`,
       avoidIds.length ? `Avoid repeating these item IDs as main pieces so the user gets a fresh alternative: ${JSON.stringify(avoidIds)}.` : '',
@@ -11805,6 +11993,7 @@ let aiSanityCheckSig = '';
 let aiSanityCheckInFlight = false;
 let aiExSanityCheckSig = '';
 let aiExSanityCheckInFlight = false;
+const aiSanityVerifiedTopIds = new Set();
 
 async function aiTagWardrobeSmartAttributes() {
   if (!wardrobe || wardrobe.length === 0) { toast('Add wardrobe items first.'); return; }
@@ -11903,23 +12092,51 @@ async function maybeRunAIOutfitSanityCheck(outfit) {
   try {
     const dayName = new Date().toLocaleDateString('en-US', { weekday: 'short' });
     const sInfo = typeof getLocationSeasonInfo === 'function' ? getLocationSeasonInfo() : { name: 'Spring' };
+    const bp = typeof buildPersonalStyleBlueprint === 'function' ? buildPersonalStyleBlueprint() : {};
+    const describeForCritic = (it) => it
+      ? `${it.name} (${it.subType}, ${it.formality}, pattern=${it.pattern || 'solid'}${it.season ? `, ${it.season}` : ''}${it.aiDescription ? `, notes="${String(it.aiDescription).slice(0, 160)}"` : ''})`
+      : null;
     const summary = {
-      top: `${outfit.top.name} (${outfit.top.subType}, ${outfit.top.formality}, ${outfit.top.season || ''})`,
-      midLayer: outfit.midLayer ? `${outfit.midLayer.name} (${outfit.midLayer.subType})` : null,
-      outerwear: outfit.outerwear ? `${outfit.outerwear.name} (${outfit.outerwear.subType})` : null,
-      bottom: `${outfit.bottom.name} (${outfit.bottom.subType}, ${outfit.bottom.formality})`,
-      shoe: `${outfit.shoe.name} (${outfit.shoe.subType}, ${outfit.shoe.season || ''})`
+      top: describeForCritic(outfit.top),
+      midLayer: describeForCritic(outfit.midLayer),
+      outerwear: describeForCritic(outfit.outerwear),
+      bottom: describeForCritic(outfit.bottom),
+      shoe: describeForCritic(outfit.shoe)
     };
-    const prompt = [
-      `You are a strict fashion sanity-check critic. Check if ANY piece in this outfit is absurd or weather/context inappropriate.`,
-      `Context: ${dayName}, ${temp}°C, ${sInfo.name}, target formality="${form}".`,
-      `Rules: NEVER allow a sweater/hoodie/heavy knit in "top" (Layer 1) or in >24°C weather; NEVER allow winter boots in >25°C; NEVER allow sandals/slides Mon-Fri work; NEVER allow swimwear in daily outfits.`,
-      `Outfit: ${JSON.stringify(summary)}`,
-      `Return ONLY valid JSON: {"ok": boolean, "badSlots": array of slot keys from ["top","midLayer","outerwear","bottom","shoe"], "reason": "short reason"}`
-    ].join('\n');
 
+    const topPhotoSrc = outfit.top.image || outfit.top.imageUrl || null;
+    const shouldInspectTopPhoto = Boolean(
+      topPhotoSrc &&
+      (!outfit.top.aiPatternVerified || !outfit.top.aiDescription) &&
+      !aiSanityVerifiedTopIds.has(outfit.top.id)
+    );
+    const topImgPart = shouldInspectTopPhoto && typeof photoSrcToGeminiPart === 'function'
+      ? await photoSrcToGeminiPart(topPhotoSrc, 512, outfit.top.id).catch(() => null)
+      : null;
+
+    const isWorkCtx = formalityScore(form) >= 2;
+    const personaNote = [
+      bp.archRule?.name ? `Archetype="${bp.archRule.name}"` : '',
+      Array.isArray(bp.impressions) && bp.impressions.length ? `Impressions=${JSON.stringify(bp.impressions)}` : '',
+      bp.statement ? `Statement="${bp.statement}"` : ''
+    ].filter(Boolean).join(', ');
+
+    const prompt = [
+      `You are a strict fashion & personal-image sanity-check critic. Check if ANY piece in this outfit is absurd, inappropriate for work/context, or clashes with the user's desired image.`,
+      `Context: ${dayName}, ${temp}°C, ${sInfo.name}, target formality="${form}".${personaNote ? ` Desired Image: ${personaNote}.` : ''}`,
+      `Rules:`,
+      `- NEVER allow a sweater/hoodie/heavy knit in "top" (Layer 1) or in >24°C weather; NEVER allow winter boots in >25°C; NEVER allow sandals/slides Mon-Fri work; NEVER allow swimwear in daily outfits.`,
+      isWorkCtx
+        ? `- WORKDAY / SMART-CASUAL+ RULE: Today is a ${form} workday (${dayName}). NEVER allow T-shirts or tops with large logos, visible branding, printed wording/text, slogans, or chest graphics, nor athletic jerseys. If the attached photo of the Layer 1 top shows ANY prominent branding, wording, text, or graphic print on the front/chest, flag "top" in badSlots!`
+        : `- If the user's desired image is Quiet Luxury, Executive, Minimalist, or Polished, flag any top with loud front branding/wording/graphics if it clashes with that image.`,
+      topImgPart ? `Attached image is the Layer 1 "top" (${outfit.top.name}). Inspect it visually for any branding, wording, text, logo, or front graphic!` : '',
+      `Outfit: ${JSON.stringify(summary)}`,
+      `Return ONLY valid JSON: {"ok": boolean, "badSlots": array of slot keys from ["top","midLayer","outerwear","bottom","shoe"], "reason": "short reason", "topDetectedPattern": ${topImgPart ? '"solid"|"stripes"|"check"|"dots"|"graphic"|"logo"|"colorblock"|"textured"' : 'null'}, "topVisualNote": ${topImgPart ? '"concise 1-sentence visual summary explicitly noting any front branding/wording/logo/graphic or plain unprinted fabric"' : 'null'}}`
+    ].filter(Boolean).join('\n');
+
+    const parts = topImgPart ? [topImgPart, { text: prompt }] : [{ text: prompt }];
     const data = await callGeminiGenerateContent(geminiKey, {
-      parts: [{ text: prompt }],
+      parts,
       temperature: 0.1,
       responseMimeType: 'application/json'
     });
@@ -11927,16 +12144,48 @@ async function maybeRunAIOutfitSanityCheck(outfit) {
     const jm = raw.match(/\{[\s\S]*\}/);
     if (!jm) return;
     const verdict = JSON.parse(jm[0]);
-    if (verdict && verdict.ok === false && Array.isArray(verdict.badSlots) && verdict.badSlots.length > 0) {
+
+    if (topImgPart) {
+      aiSanityVerifiedTopIds.add(outfit.top.id);
+      const validPats = ['solid', 'stripes', 'check', 'dots', 'graphic', 'logo', 'colorblock', 'textured'];
+      const detPat = String(verdict.topDetectedPattern || '').toLowerCase().trim();
+      let itemChanged = false;
+      if (validPats.includes(detPat) && outfit.top.pattern !== detPat) {
+        outfit.top.pattern = detPat;
+        itemChanged = true;
+      }
+      if (!outfit.top.aiDescription && typeof verdict.topVisualNote === 'string' && verdict.topVisualNote.trim()) {
+        outfit.top.aiDescription = verdict.topVisualNote.trim();
+        itemChanged = true;
+      }
+      if (!outfit.top.aiPatternVerified) {
+        outfit.top.aiPatternVerified = true;
+        itemChanged = true;
+      }
+      if (itemChanged) {
+        saveLocalDataOnly();
+        if (typeof syncWardrobeItemsToCloud === 'function') {
+          syncWardrobeItemsToCloud([outfit.top]).catch(() => {});
+        }
+      }
+    }
+
+    const badSlotsSet = new Set(Array.isArray(verdict?.badSlots) ? verdict.badSlots : []);
+    if (isWorkCtx && isWorkDisallowedItem(outfit.top, form)) {
+      badSlotsSet.add('top');
+    }
+    const badSlots = Array.from(badSlotsSet);
+
+    if ((verdict?.ok === false || badSlots.length > 0) && badSlots.length > 0) {
       let current = outfit;
       let anyFixed = false;
-      for (const slot of verdict.badSlots) {
+      for (const slot of badSlots) {
         if (!['top', 'midLayer', 'outerwear', 'bottom', 'shoe'].includes(slot)) continue;
         const badItem = current[slot];
         if (!badItem) continue;
         const excluded = typeof addTodayDislikedId === 'function' ? addTodayDislikedId(badItem.id) : new Set([badItem.id]);
         if (typeof swapDislikedPieceMinimal === 'function') {
-          const res = swapDislikedPieceMinimal(slot, current, excluded);
+          const res = swapDislikedPieceMinimal(slot, current, excluded, badItem.id);
           if (res.ok && res.updated) {
             current = res.updated;
             anyFixed = true;
@@ -11944,10 +12193,12 @@ async function maybeRunAIOutfitSanityCheck(outfit) {
         }
       }
       if (anyFixed) {
+        activeAIDailyOutfit = null;
+        try { localStorage.removeItem('wtw_ai_daily_outfit'); } catch {}
         aiSanityCheckSig = `${today}|${temp}|${form}|${current.top?.id}|${current.midLayer?.id || ''}|${current.outerwear?.id || ''}|${current.bottom?.id}|${current.shoe?.id}`;
         if (typeof window !== 'undefined') window.lastRenderedMainOutfit = current;
         renderOutfit();
-        toast(`🧠 AI Critic fixed ${verdict.badSlots.join(', ')}: ${verdict.reason || 'improved weather/style fit'}`);
+        toast(`🧠 AI Critic fixed ${badSlots.join(', ')}: ${verdict?.reason || 'removed graphic/branded or unsuitable piece'}`);
       }
     }
   } catch (e) {
@@ -12082,10 +12333,12 @@ function reassignOutfitLocalForOccasion(occasionText) {
       if (['formal', 'cocktail', 'black-tie', 'business-casual', 'smart-casual'].includes(form)) s += 28;
       if (['lounge', 'athleisure'].includes(form)) s -= 30;
       if (/\b(blazer|shirt|trousers|dress|loafer|oxford|derby|heel|coat|trench)\b/.test(sub)) s += 20;
+      if (isGraphicOrBrandedItem(it)) s -= 120;
     } else if (isWorkEvent) {
       if (['business-casual', 'smart-casual', 'formal', 'elevated-casual'].includes(form)) s += 26;
       if (['lounge', 'athleisure'].includes(form)) s -= 25;
       if (/\b(shirt|oxford|blazer|chino|trousers|loafer|derby|blouse|skirt)\b/.test(sub)) s += 18;
+      if (isGraphicOrBrandedItem(it) || isWorkDisallowedItem(it, 'smart-casual')) s -= 140;
     }
     if (isRainCold && /\b(jacket|coat|hoodie|sweater|cardigan|rain|windbreaker|parka|boot)\b/.test(sub)) s += 20;
     if (weatherSuitable(it)) s += 10;
@@ -12180,7 +12433,7 @@ async function reassignOutfitForSpecialOccasion() {
       const prompt = [
         `You are a personal wardrobe stylist. The user has a special occasion: "${occasionText}".`,
         `Current weather: ${currentTemp}°C, ${cond}, Season: ${sInfo.name}.`,
-        `Use each item's aiDescription (alongside colors, pattern, cut, formality, and season) AND the user's Master Personal Profile & AI Dossiers below to decide what matches best.`,
+        `Use each item's aiDescription (alongside colors, pattern, cut, formality, and season) AND the user's Master Personal Profile & AI Dossiers below to decide what matches best. For work, smart-casual, or formal occasions, strictly avoid graphic/logo/branded/printed-wording tops.`,
         typeof buildMasterPersonalContextForAI === 'function' ? buildMasterPersonalContextForAI() : '',
         `Pick the best outfit from the user's wardrobe JSON below. You MUST only use exact "id" values from the list.`,
         `Return ONLY valid JSON with keys: topId (required), midLayerId (string or null), outerwearId (string or null), bottomId (required), shoeId (required), beltId (string or null), accessoryId (string or null), reason (1 concise sentence explaining why this works for the occasion and weather).`,
@@ -13521,6 +13774,57 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName, componentC
   const resolvedLength = topPick.length || getDefaultLengthForPiece(topPick.category, topPick.subType);
   const resolvedFormality = inferFormalityFromRecognizedPiece(topPick.category, topPick.subType, topPick.formality);
   const season = inferItemSeasonSuitability({ category: topPick.category, subType: topPick.subType, length: resolvedLength });
+
+  // Conservative chest graphic/print detector for smooth-weave casual tops (no false positives on knit/plaid/folded shadows)
+  let detectedPattern = 'solid';
+  const subLow = (topPick.subType || '').toLowerCase();
+  if (topPick.category === 'tops' && !/\b(sweater|cardigan|knit|flannel|tweed|check|plaid|dress shirt|oxford|button)\b/.test(subLow)) {
+    let corePix = 0, coreInk = 0, coreSharp = 0;
+    let edgePix = 0, edgeInk = 0, edgeSharp = 0;
+    for (let y = minY; y <= maxY; y += 2) {
+      const relY = (y - minY) / bboxH;
+      if (relY < 0.14 || relY > 0.72) continue;
+      for (let x = minX; x <= maxX; x += 2) {
+        const pIdx = y * w + x;
+        if (fgMask && !fgMask[pIdx]) continue;
+        const o = pIdx * 4;
+        if (imgData[o + 3] < 120) continue;
+        const r = imgData[o], g = imgData[o + 1], b = imgData[o + 2];
+        if (ignoreHumanSkin && isSkinTonePixel(r, g, b)) continue;
+        const relX = (x - minX) / bboxW;
+        const dist = Math.hypot(r - domR, g - domG, b - domB);
+        let stepMax = 0;
+        if (x + 2 <= maxX && (!fgMask || fgMask[pIdx + 2])) {
+          const oR = (pIdx + 2) * 4;
+          stepMax = Math.max(stepMax, Math.abs(r - imgData[oR]) + Math.abs(g - imgData[oR + 1]) + Math.abs(b - imgData[oR + 2]));
+        }
+        if (y + 2 <= maxY && (!fgMask || fgMask[(y + 2) * w + x])) {
+          const oD = ((y + 2) * w + x) * 4;
+          stepMax = Math.max(stepMax, Math.abs(r - imgData[oD]) + Math.abs(g - imgData[oD + 1]) + Math.abs(b - imgData[oD + 2]));
+        }
+        const isCore = relX >= 0.22 && relX <= 0.78 && relY >= 0.16 && relY <= 0.66;
+        const isMargin = relX < 0.18 || relX > 0.82;
+        const isSharp = stepMax >= 68;
+        const isInk = dist >= 64 || (dist >= 46 && stepMax >= 54);
+        if (isCore) {
+          corePix++;
+          if (isInk) coreInk++;
+          if (isSharp) coreSharp++;
+        } else if (isMargin) {
+          edgePix++;
+          if (isInk) edgeInk++;
+          if (isSharp) edgeSharp++;
+        }
+      }
+    }
+    const coreInkRatio = corePix > 20 ? coreInk / corePix : 0;
+    const coreSharpRatio = corePix > 20 ? coreSharp / corePix : 0;
+    const edgeInkRatio = edgePix > 12 ? edgeInk / edgePix : 0;
+    if (coreInkRatio >= 0.045 && coreSharpRatio >= 0.05 && coreInkRatio > edgeInkRatio * 1.45) {
+      detectedPattern = 'graphic';
+    }
+  }
+
   const finalName = buildStandardGarmentName({
     category: topPick.category,
     subType: topPick.subType,
@@ -13535,6 +13839,7 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName, componentC
     length: resolvedLength,
     formality: resolvedFormality,
     season,
+    pattern: detectedPattern,
     r: domR,
     g: domG,
     b: domB,
@@ -13542,7 +13847,7 @@ function analyzeGarmentPhotoVision(ctx, w, h, fgMask, bbox, fileName, componentC
     colorName,
     name: finalName,
     autoNamed: true,
-    visionNote: topPick.reason,
+    visionNote: detectedPattern === 'graphic' ? `${topPick.reason} · Front graphic/print detected` : topPick.reason,
     alternatives
   };
 }
@@ -13558,6 +13863,12 @@ function normalizeRecognizedSeason(seasonRaw) {
   if (s === 'fall') return 'autumn';
   const valid = ['all-season', 'spring-summer', 'autumn-winter', 'spring', 'summer', 'autumn', 'winter'];
   return valid.includes(s) ? s : 'all-season';
+}
+
+function normalizeRecognizedPattern(patternRaw) {
+  const p = String(patternRaw || '').trim().toLowerCase();
+  const valid = ['solid', 'stripes', 'check', 'dots', 'graphic', 'logo', 'colorblock', 'textured'];
+  return valid.includes(p) ? p : 'solid';
 }
 
 function resolveColorSwatchFromName(colorNameStr, fallbackHex) {
@@ -13688,10 +13999,11 @@ async function recognizeGarmentViaGeminiDirect(imageBase64, mimeType, fileNameHi
     'Analyze the single wardrobe item in the photo (including flat-lay, folded garments, or footwear pairs) and return ONE unified JSON object.',
     'If the item is footwear (sneakers, sandals, loafers, oxfords, boots, heels, slides), classify it strictly under "shoes" and NEVER as outerwear or tops.',
     'If the garment is folded on a flat surface, inspect fabric knit/weave, ribbed neckline/collar, stitching, and proportions rather than mistaking fold creases for puffer baffles or shorts.',
+    'Inspect the front, chest, and back carefully for ANY printed wording/text, slogan, brand name/branding, graphic artwork, or prominent logo: set pattern="logo" for visible branding/wordmarks/prominent logos, pattern="graphic" for printed text/wording/artwork, or pattern="solid" ONLY when plain and unprinted, and mention any print/branding explicitly in notes.',
     'Allowed category and garment_type options:',
     allowedList,
     fileNameHint ? `Filename hint (ignore if generic): ${fileNameHint}` : '',
-    'Return ONLY JSON with keys: category, garment_type, length (short|long|sleeveless|shorts|cropped|none), color_name, color_hex (#RRGGBB), season (all-season|spring-summer|autumn-winter|spring|summer|autumn|winter), formality (casual|lounge|athleisure|elevated-casual|smart-casual|business-casual|formal|cocktail|black-tie), confidenceScore (0..1).'
+    'Return ONLY JSON with keys: category, garment_type, length (short|long|sleeveless|shorts|cropped|none), color_name, color_hex (#RRGGBB), pattern (solid|stripes|check|dots|graphic|logo|colorblock|textured), notes (1 concise sentence noting fabric/cut and whether any front branding, wording, graphic, or logo is visible), season (all-season|spring-summer|autumn-winter|spring|summer|autumn|winter), formality (casual|lounge|athleisure|elevated-casual|smart-casual|business-casual|formal|cocktail|black-tie), confidenceScore (0..1).'
   ].filter(Boolean).join('\n');
 
   const payload = await callGeminiGenerateContent(geminiKey, {
@@ -13764,6 +14076,8 @@ async function recognizeGarmentViaApi(dataUrl, fileNameHint = '') {
       color_name: resolvedColorName,
       primaryColor: resolvedColorName,
       color_hex: resolvedColorHex,
+      pattern: normalizeRecognizedPattern(data.pattern),
+      notes: String(data.notes || data.aiDescription || '').trim(),
       season: normalizeRecognizedSeason(data.season),
       formality: String(data.formality || '').trim().toLowerCase(),
       confidenceScore: Math.max(0, Math.min(1, Number(data.confidenceScore)))
@@ -13838,6 +14152,15 @@ async function hydrateModalWithGeminiRecognition(token, dataUrl, fileNameHint, f
         length: inferredLength
       });
       seasonSel.dataset.userEdited = 'false';
+    }
+
+    const patternSel = document.getElementById('item-pattern');
+    if (patternSel && aiResult.pattern) {
+      patternSel.value = aiResult.pattern;
+    }
+    const aiDescEl = document.getElementById('item-ai-description');
+    if (aiDescEl && aiResult.notes) {
+      aiDescEl.value = aiResult.notes;
     }
 
     const nameInput = document.getElementById('item-name');
@@ -14045,6 +14368,10 @@ function autoDetectColorAndDetails(ctx, w, h, fgMask, bbox, fileNameHint = '', c
     if (seasonSel) {
       seasonSel.value = analysis.season || inferItemSeasonSuitability({ category: analysis.category, subType: analysis.subType, length: resolvedLen });
       seasonSel.dataset.userEdited = 'false';
+    }
+    const patternSel = document.getElementById('item-pattern');
+    if (patternSel && analysis.pattern) {
+      patternSel.value = analysis.pattern;
     }
   }
 
@@ -14505,6 +14832,9 @@ async function finalizeDraftPieceFromImage(imgSource, rawFileName, fallbackSrcPr
     let season = analysis.season || inferItemSeasonSuitability({ category, subType, length });
     let hex = analysis.hex;
     let colorName = analysis.colorName;
+    let pattern = analysis.pattern || 'solid';
+    let aiDescription = '';
+    let aiPatternVerified = false;
     let formality = inferFormalityFromRecognizedPiece(category, subType, analysis.formality);
     let name = buildStandardGarmentName({ category, subType, length, color: hex, colorName });
     let visionNote = analysis.visionNote || 'Vision ID';
@@ -14518,12 +14848,15 @@ async function finalizeDraftPieceFromImage(imgSource, rawFileName, fallbackSrcPr
         length = aiResult.length || resolveRecognizedGarmentLength(category, subType, analysis.category, analysis.length);
         hex = aiResult.color_hex || swatch.hex;
         colorName = aiResult.color_name || swatch.colorName;
+        pattern = aiResult.pattern || pattern;
+        aiDescription = aiResult.notes || '';
+        aiPatternVerified = Boolean(aiResult.pattern);
         formality = (aiResult.formality && getAllFormalityLevels().some(f => f.id === aiResult.formality))
           ? aiResult.formality
           : inferFormalityFromRecognizedPiece(category, subType, length);
         season = aiResult.season || inferItemSeasonSuitability({ category, subType, length });
         name = buildStandardGarmentName({ category, subType, length, color: hex, colorName });
-        visionNote = `Gemini 3.8 Flash · ${Math.round(aiResult.confidenceScore * 100)}% match`;
+        visionNote = aiDescription || `Gemini 3.8 Flash · ${Math.round(aiResult.confidenceScore * 100)}% match`;
       }
     }
 
@@ -14539,6 +14872,9 @@ async function finalizeDraftPieceFromImage(imgSource, rawFileName, fallbackSrcPr
       season,
       color: hex,
       colorName,
+      pattern,
+      aiDescription,
+      aiPatternVerified,
       formality,
       visionNote,
       alternatives: analysis.alternatives || [],
@@ -14672,6 +15008,10 @@ function closeMassValidateModal() {
   if (modal) modal.classList.remove('active');
 }
 
+function renderMassValidateCards() {
+  return renderMassValidateModal();
+}
+
 function renderMassValidateModal() {
   const listEl = document.getElementById('mass-validate-list');
   const titleEl = document.getElementById('mass-validate-title');
@@ -14782,6 +15122,19 @@ function renderMassValidateModal() {
             <label>Formality</label>
             <select onchange="updateMassDraftField('${d.draftId}', 'formality', this.value)">
               ${formalityOptions}
+            </select>
+          </div>
+          <div class="mass-validate-field">
+            <label>Pattern / Branding</label>
+            <select onchange="updateMassDraftField('${d.draftId}', 'pattern', this.value)">
+              <option value="solid" ${(d.pattern || 'solid') === 'solid' ? 'selected' : ''}>⬜ Plain / Solid</option>
+              <option value="stripes" ${d.pattern === 'stripes' ? 'selected' : ''}>📏 Stripes / Lines</option>
+              <option value="check" ${d.pattern === 'check' ? 'selected' : ''}>🏁 Plaid / Check</option>
+              <option value="dots" ${d.pattern === 'dots' ? 'selected' : ''}>⚪ Dots / Micro-Print</option>
+              <option value="graphic" ${d.pattern === 'graphic' ? 'selected' : ''}>🎨 Graphic / Print / Wording</option>
+              <option value="logo" ${d.pattern === 'logo' ? 'selected' : ''}>🏷️ Brand Mark / Logo</option>
+              <option value="colorblock" ${d.pattern === 'colorblock' ? 'selected' : ''}>🟨 Colorblock</option>
+              <option value="textured" ${d.pattern === 'textured' ? 'selected' : ''}>🧶 Textured / Knit</option>
             </select>
           </div>
           <div class="mass-validate-row-actions" style="flex-direction:column; align-items:stretch; gap:6px;">
@@ -14952,6 +15305,7 @@ async function approveSingleMassDraft(draftId) {
     tertiaryColorName: d.tertiaryColor ? (d.tertiaryColorName || getColorNameFromHex(d.tertiaryColor)) : null,
     pattern: d.pattern || 'solid',
     aiDescription: d.aiDescription || '',
+    aiPatternVerified: Boolean(d.aiPatternVerified),
     formality: d.formality || inferFormalityFromRecognizedPiece(d.category, d.subType, 'casual'),
     image: d.image
   };
@@ -15045,6 +15399,14 @@ async function validateAndSaveAllMassDrafts() {
       length: resolvedLength,
       season: d.season || inferItemSeasonSuitability({ category: d.category, subType: d.subType, length: resolvedLength }),
       color: d.color,
+      colorName: d.colorName || getColorNameFromHex(d.color),
+      secondaryColor: d.secondaryColor || null,
+      secondaryColorName: d.secondaryColor ? (d.secondaryColorName || getColorNameFromHex(d.secondaryColor)) : null,
+      tertiaryColor: d.tertiaryColor || null,
+      tertiaryColorName: d.tertiaryColor ? (d.tertiaryColorName || getColorNameFromHex(d.tertiaryColor)) : null,
+      pattern: d.pattern || 'solid',
+      aiDescription: d.aiDescription || '',
+      aiPatternVerified: Boolean(d.aiPatternVerified),
       formality: d.formality || inferFormalityFromRecognizedPiece(d.category, d.subType, 'casual'),
       image: d.image
     };
@@ -15883,10 +16245,10 @@ async function runGeminiItemInspection(photoSrc, curName = '', curCat = 'tops', 
     `- color_hex (#RRGGBB) & color_name`,
     `- secondary_color_hex (#RRGGBB or null if plain/solid)`,
     `- tertiary_color_hex (#RRGGBB or null if fewer than 3 colors)`,
-    `- pattern: one of solid, stripes, check, dots, graphic, logo, colorblock, textured`,
+    `- pattern: one of solid, stripes, check, dots, graphic, logo, colorblock, textured (CRITICAL: choose "logo" if ANY brand name, branding, wordmark, or prominent logo is visible; choose "graphic" if ANY printed wording, text, slogan, or artwork appears on the front/chest/back; choose "solid" ONLY when plain and unprinted)`,
     `- season: one of all-season, spring-summer, autumn-winter, spring, summer, autumn, winter`,
     `- formality: one of casual, lounge, athleisure, elevated-casual, smart-casual, business-casual, formal, cocktail, black-tie`,
-    `- notes: 1-2 concise sentences that explicitly match and summarize ALL fields above (garment type, cut/length, 1st/2nd/3rd colors, pattern/lines/marks/logo, fabric/texture, season, and formality) to serve as the main matching description.`,
+    `- notes: 1-2 concise sentences that explicitly match and summarize ALL fields above (garment type, cut/length, 1st/2nd/3rd colors, whether there is any front branding/wording/printed text/graphic/logo or plain unprinted fabric, fabric/texture, season, and formality) to serve as the main matching description.`,
     `Return ONLY valid JSON with those exact keys.`
   ].join('\n');
   parts.push({ text: promptText });
@@ -15945,11 +16307,12 @@ async function verifyMassDraftWithAI(draftId) {
     d.secondaryColorName = d.secondaryColor ? getColorNameFromHex(d.secondaryColor) : '';
     d.tertiaryColor = (parsed.tertiary_color_hex && /^#[0-9a-f]{6}$/i.test(parsed.tertiary_color_hex)) ? parsed.tertiary_color_hex : '';
     d.tertiaryColorName = d.tertiaryColor ? getColorNameFromHex(d.tertiaryColor) : '';
-    if (parsed.pattern) d.pattern = parsed.pattern;
+    if (parsed.pattern) d.pattern = normalizeRecognizedPattern(parsed.pattern);
     if (parsed.season) { d.season = parsed.season; d.seasonEdited = true; }
     if (parsed.formality) { d.formality = parsed.formality; d.formalityEdited = true; }
     d.visionNote = parsed.notes || 'AI Verified';
     d.aiDescription = parsed.notes || '';
+    d.aiPatternVerified = true;
     d.nameEdited = false;
     refreshMassDraftDerivedFields(d, { updateTypeProps: false, forceNameRecalc: true });
     renderMassValidateCards();
@@ -15996,7 +16359,7 @@ async function generateAllMissingAIDescriptions() {
           it.secondaryColorName = it.secondaryColor ? getColorNameFromHex(it.secondaryColor) : null;
           it.tertiaryColor = (parsed.tertiary_color_hex && /^#[0-9a-f]{6}$/i.test(parsed.tertiary_color_hex)) ? parsed.tertiary_color_hex : null;
           it.tertiaryColorName = it.tertiaryColor ? getColorNameFromHex(it.tertiaryColor) : null;
-          if (parsed.pattern) it.pattern = parsed.pattern;
+          if (parsed.pattern) it.pattern = normalizeRecognizedPattern(parsed.pattern);
           if (parsed.season) it.season = parsed.season;
           if (parsed.formality) it.formality = parsed.formality;
           it.name = buildStandardGarmentName({
@@ -16007,6 +16370,7 @@ async function generateAllMissingAIDescriptions() {
             colorName: it.colorName
           });
           if (parsed.notes) it.aiDescription = parsed.notes;
+          it.aiPatternVerified = true;
           updated.push(it);
         }
       } catch (err) {
@@ -16246,6 +16610,7 @@ async function saveItem() {
     tertiaryColorName: tertiaryColor ? getColorNameFromHex(tertiaryColor) : null,
     pattern,
     aiDescription,
+    aiPatternVerified: Boolean(aiDescription || pattern !== 'solid'),
     formality,
     image: currentItemPhoto || null
   };
@@ -16270,6 +16635,11 @@ async function saveItem() {
   if (savedItem && isInlineBase64DataUrl(savedItem.image)) {
     cacheItemPhotoDataUrl(savedItem.id, savedItem.image);
   }
+  if (typeof aiSanityVerifiedTopIds !== 'undefined' && savedItem?.id) {
+    aiSanityVerifiedTopIds.delete(savedItem.id);
+    aiSanityCheckSig = '';
+  }
+  if (typeof activeAIDailyOutfit !== 'undefined') activeAIDailyOutfit = null;
   saveLocalDataOnly();
   renderFilters();
   renderWardrobe();
@@ -19871,7 +20241,9 @@ function buildPackingList(days) {
   }
 
   // Outerwear: pack 1 versatile shell (or 2 only if rain + cold or long trip)
-  const outers = by('outerwear').filter(o => !anyWork || !isBigLogoItem(o));
+  const rawOuters = by('outerwear');
+  const workFilteredOuters = rawOuters.filter(o => !anyWork || !isBigLogoItem(o));
+  const outers = workFilteredOuters.length ? workFilteredOuters : rawOuters;
   if (!outers.length) {
     warnings.push('No outerwear in your wardrobe — you will want a light layer for air-conditioned places.');
   } else {
@@ -20435,7 +20807,7 @@ function pickTripOutfit(day, items, usage, prev, avoidKey) {
     for (const lc of layerCombos) for (const b of bottoms) for (const s of shoes) {
       const { t, m, o } = lc;
       const main = [t, m, b, s, o].filter(Boolean);
-      let sc = evaluateOutfitScore(t, b, s, o, null, { midLayer: m, skipWearLog: true, blueprint }).score;
+      let sc = evaluateOutfitScore(t, b, s, o, null, { midLayer: m, skipWearLog: true, blueprint, targetFormality: target }).score;
       if (!outfitColorsHarmonious(main)) sc -= 80;
       sc += (formalityMatch(t.formality, target) ? 15 : -25) + (formalityMatch(b.formality, target) ? 10 : -15) + (formalityMatch(s.formality, target) ? 5 : -10);
       if (m) sc += (formalityMatch(m.formality, target) ? 10 : -12);
@@ -21205,23 +21577,30 @@ function togglePersonaCollapse(forceState) {
   }
 }
 
-async function photoSrcToGeminiPart(src, maxDim = 768) {
+async function photoSrcToGeminiPart(src, maxDim = 768, itemId = null) {
   if (!src) return null;
   let dataUrl = src;
   if (/^https?:\/\//i.test(src)) {
-    try {
-      const resp = await fetch(src, { mode: 'cors' });
-      if (resp.ok) {
-        const blob = await resp.blob();
-        dataUrl = await new Promise((resolve, reject) => {
-          const r = new FileReader();
-          r.onloadend = () => resolve(r.result);
-          r.onerror = reject;
-          r.readAsDataURL(blob);
-        });
+    const cached = (itemId && typeof getCachedItemPhotoDataUrl === 'function')
+      ? await getCachedItemPhotoDataUrl(itemId)
+      : null;
+    if (cached) {
+      dataUrl = cached;
+    } else {
+      try {
+        const resp = await fetch(src, { mode: 'cors' });
+        if (resp.ok) {
+          const blob = await resp.blob();
+          dataUrl = await new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onloadend = () => resolve(r.result);
+            r.onerror = reject;
+            r.readAsDataURL(blob);
+          });
+        }
+      } catch (e) {
+        // Fall through to Image load attempt
       }
-    } catch (e) {
-      // Fall through to Image load attempt
     }
   }
   return await new Promise((resolve) => {

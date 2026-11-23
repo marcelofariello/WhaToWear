@@ -39,10 +39,22 @@ export const GARMENT_FORMALITIES = [
   'black-tie',
 ] as const;
 
+export const GARMENT_PATTERNS = [
+  'solid',
+  'stripes',
+  'check',
+  'dots',
+  'graphic',
+  'logo',
+  'colorblock',
+  'textured',
+] as const;
+
 export type GarmentCategory = (typeof GARMENT_CATEGORIES)[number];
 export type GarmentSeason = (typeof GARMENT_SEASONS)[number];
 export type GarmentLength = (typeof GARMENT_LENGTHS)[number];
 export type GarmentFormality = (typeof GARMENT_FORMALITIES)[number];
+export type GarmentPattern = (typeof GARMENT_PATTERNS)[number];
 
 export interface GarmentRecommendationInput {
   name: string;
@@ -63,6 +75,8 @@ export const GarmentRecognitionResultSchema = z.object({
   color_name: z.string().min(1),
   primaryColor: z.string().min(1).optional(),
   color_hex: z.string().regex(/^#[0-9a-fA-F]{6}$/i),
+  pattern: z.enum(GARMENT_PATTERNS).default('solid'),
+  notes: z.string().default(''),
   season: z.enum(GARMENT_SEASONS),
   formality: z.string().min(1),
   confidenceScore: z.number().min(0).max(1),
@@ -109,6 +123,17 @@ export const GARMENT_RECOGNITION_JSON_SCHEMA = {
       description:
         'Dominant 6-digit hex color code with leading hash for the garment, e.g. #722F37, #708090, #1E293B, #000080, #FFFFFF.',
     },
+    pattern: {
+      type: 'string',
+      enum: [...GARMENT_PATTERNS],
+      description:
+        'Surface pattern or visible branding. Use "logo" if the garment has a visible brand name, wordmark, or prominent brand logo; "graphic" if it has printed wording, slogans, typography, or chest/front/back graphic artwork; "stripes", "check", "dots", "colorblock", or "textured" for woven/knit patterns; "solid" ONLY when plain and unprinted.',
+    },
+    notes: {
+      type: 'string',
+      description:
+        '1-2 concise sentences summarizing fabric/knit, cut/collar, color, and explicitly stating whether there is any front/chest branding, printed wording/text, graphic artwork, or logo (or "plain unprinted front" if none).',
+    },
     season: {
       type: 'string',
       enum: [...GARMENT_SEASONS],
@@ -136,6 +161,8 @@ export const GARMENT_RECOGNITION_JSON_SCHEMA = {
     'color_name',
     'primaryColor',
     'color_hex',
+    'pattern',
+    'notes',
     'season',
     'formality',
     'confidenceScore',

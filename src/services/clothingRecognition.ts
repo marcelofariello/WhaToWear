@@ -2,6 +2,7 @@ import { MediaResolution } from '@google/genai';
 import { GEMINI_RECOGNITION_MODEL, getGenAIClient } from '../config/genai.js';
 import {
   GARMENT_CATEGORIES,
+  GARMENT_PATTERNS,
   GARMENT_RECOGNITION_JSON_SCHEMA,
   GarmentRecognitionResultSchema,
   type GarmentRecognitionResult,
@@ -35,12 +36,13 @@ function buildRecognitionPrompt(req: RecognizeGarmentRequest): string {
     '- If you see a crewneck or v-neck collar with short sleeves folded inwards, classify strictly as category "tops", garment_type "T-Shirt", and length "short".',
     '- If you see denim twill with metal rivets and 5-pocket styling, classify as category "bottoms", garment_type "Jeans". If it has short legs above knee, classify as "Denim Shorts".',
     '- If you see sweater yarn with ribbed collar and cuffs, classify as category "tops", garment_type "Sweater".',
+    '- Inspect the front, chest, and back carefully for ANY printed wording/text, slogan, brand name/branding, graphic artwork, or prominent logo: set pattern to "logo" when prominent branding/wordmark/logo is present, "graphic" when printed wording/typography/artwork is present, or "solid" ONLY when plain and unprinted, and describe any print/branding explicitly in notes.',
     '- Map the item STRICTLY to the closest valid option in the provided taxonomy list for the identified category. DO NOT invent free-text adjectives or brand marketing names (e.g., do not output "Merino Wool Crewneck Sweater" or "Tailored Chino Shorts" — use clean garment types like "Sweater", "T-Shirt", "Chinos", "Jeans", "Shorts").',
     req.fileNameHint ? `Original filename hint (use only if helpful, trust visual evidence first): "${req.fileNameHint}".` : '',
     taxonomyLines
       ? `Available category & garment_type taxonomy:\n${taxonomyLines}`
       : '',
-    'Return a single unified JSON object conforming strictly to the provided schema with keys: category, garment_type, subcategory, length, color_name, primaryColor, color_hex, season, formality, confidenceScore.',
+    'Return a single unified JSON object conforming strictly to the provided schema with keys: category, garment_type, subcategory, length, color_name, primaryColor, color_hex, pattern, notes, season, formality, confidenceScore.',
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -97,6 +99,9 @@ export async function identifyGarmentFromImage(
   if (!parsed.subcategory && parsed.garment_type) parsed.subcategory = parsed.garment_type;
   if (!parsed.color_name && parsed.primaryColor) parsed.color_name = parsed.primaryColor;
   if (!parsed.primaryColor && parsed.color_name) parsed.primaryColor = parsed.color_name;
+  const rawPat = String(parsed.pattern || '').trim().toLowerCase();
+  parsed.pattern = (GARMENT_PATTERNS as readonly string[]).includes(rawPat) ? rawPat : 'solid';
+  if (typeof parsed.notes !== 'string') parsed.notes = '';
 
   return GarmentRecognitionResultSchema.parse(parsed);
 }
