@@ -8031,6 +8031,10 @@ function isItemSeasonallyCompatible(item, activeSeasonId, wxCat) {
   if ((wxCat === 'cold' || wxCat === 'very-cold') && (itemSeason === 'winter' || itemSeason === 'autumn-winter')) return true;
 
   if (activeSeasonId === 'spring') {
+    const isBootItem = item.category === 'shoes' && /\b(boot|boots|chukka|chelsea|combat|hiking|caterpillar|ankle boot|work boot)\b/i.test(`${item.subType || ''} ${item.name || ''}`);
+    if (isBootItem && itemSeason === 'autumn-winter') {
+      return wxCat === 'cool' || wxCat === 'cold' || wxCat === 'very-cold';
+    }
     if ((wxCat === 'cool' || wxCat === 'mild') && itemSeason === 'autumn-winter') return true;
     return ['all-season', 'spring', 'spring-summer', 'autumn'].includes(itemSeason);
   }
@@ -8201,6 +8205,8 @@ function setMood(moodId) {
   moodPreselectedByPlanet = false;
   localStorage.setItem('wtw_mood', moodId);
   localStorage.setItem('wtw_mood_user_locked', 'true');
+  if (typeof activeAIDailyOutfit !== 'undefined') activeAIDailyOutfit = null;
+  try { localStorage.removeItem('wtw_daily_main_lock'); } catch {}
   renderMoodSection();
   renderOutfit();
   const m = MOODS.find(x => x.id === moodId);
@@ -8448,7 +8454,11 @@ function isGymOrLoungeItem(it) {
   if (!it) return false;
   const f = (it.formality || '').toLowerCase();
   if (f === 'athleisure' || f === 'lounge') return true;
-  const text = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''}`.toLowerCase();
+  const titleText = `${it.name || ''} ${it.subType || ''}`.toLowerCase();
+  const descText = typeof stripStylingPairingText === 'function'
+    ? stripStylingPairingText(it.aiDescription || '')
+    : (it.aiDescription || '').toLowerCase();
+  const text = `${titleText} ${descText}`;
   return /\b(athleisure|athletic|soccer|football|running|gym|workout|training|track|sweatpants|joggers|pajama|sleepwear|swim|swimming|trunks|board\s*shorts?|beachwear)\b/.test(text);
 }
 
@@ -8547,17 +8557,43 @@ function isBigLogoItem(it) {
 
 function isWorkDisallowedItem(it, targetFormality) {
   if (!it) return false;
-  if (formalityScore(targetFormality) < 2) return false;
+  const fScore = formalityScore(targetFormality);
+  if (fScore < 2) return false;
   const act = String(it.aiActivity || '').toLowerCase();
   if (act === 'exercise' || act === 'swim' || act === 'lounge') return true;
-  if (isGymOrLoungeItem(it) || isShortsBottom(it) || isOpenToeOrSandalShoe(it) || isStrictSportPiece(it) || isGraphicOrBrandedItem(it)) {
+  if (isShortsBottom(it) || isOpenToeOrSandalShoe(it)) return true;
+
+  // Shoes: allow clean casual/leather/suede lifestyle sneakers on smart-casual (even if brand name/logo is in description);
+  // only disallow genuine gym/running/mesh athletic shoes (and casual sneakers on business-casual/formal).
+  if (isShoeCategoryItem(it)) {
+    const shoeTitle = `${it.name || ''} ${it.subType || ''}`.toLowerCase();
+    const shoeDesc = typeof stripStylingPairingText === 'function'
+      ? stripStylingPairingText(it.aiDescription || '')
+      : (it.aiDescription || '').toLowerCase();
+    const shoeText = `${shoeTitle} ${shoeDesc}`;
+    if ((it.formality || '').toLowerCase() === 'athleisure' || (it.formality || '').toLowerCase() === 'lounge') return true;
+    if (/\b(running shoe|running shoes|gym shoe|training shoe|cross[- ]?trainer|trail runner|soccer|football|cleat|basketball|athletic mesh|jogging)\b/.test(shoeText)) {
+      return true;
+    }
+    if (fScore >= 2.5 && /\b(sneaker|sneakers|trainer|trainers|canvas sneaker|skate|hiking boot|work boot)\b/.test(shoeTitle)) {
+      return true;
+    }
+    return false;
+  }
+
+  // Accessories (belts, watches, bags): don't reject for manufacturer branding
+  if (it.category === 'accessories') {
+    return isGymOrLoungeItem(it) || isStrictSportPiece(it);
+  }
+
+  if (isGymOrLoungeItem(it) || isStrictSportPiece(it) || isGraphicOrBrandedItem(it)) {
     return true;
   }
   const text = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''}`.toLowerCase();
-  if (it.category === 'tops' && /\b(athletic|sport|gym|training|running|workout|dry-?fit|dri-?fit|performance|jersey|singlet|tank\s*top|sleeveless)\b/.test(text)) {
+  if (it.category === 'tops' && /\b(athletic|sport(?!\s*(?:coat|jacket))|gym|training|running|workout|dry-?fit|dri-?fit|performance|jersey|singlet|tank\s*top|sleeveless)\b/.test(text)) {
     return true;
   }
-  if (formalityScore(targetFormality) >= 2.5 && it.category === 'tops' && /\b(hoodie|sweatshirt|t-shirt|tee)\b/.test(text)) {
+  if (fScore >= 2.5 && it.category === 'tops' && /\b(hoodie|sweatshirt|t-shirt|tee)\b/.test(text)) {
     return true;
   }
   return false;
@@ -9195,27 +9231,28 @@ function scoreOutfitPersonalAndStyle(top, midLayer, outer, bottom, shoe, beltIte
     });
   }
 
-  // Multi-color accent coordination across pieces (e.g., striped shirt accent matches trousers/shoes)
+  // Multi-color accent coordination across pieces (e.g., striped shirt accent matches trousers/shoes; dampen minor shoe trims like laces/tongues)
   const allColorsInOutfit = allItems.flatMap(it => [it.color, it.secondaryColor, it.tertiaryColor].filter(Boolean));
   allItems.forEach(it => {
+    const isShoe = isShoeCategoryItem(it);
     const extras = [it.secondaryColor, it.tertiaryColor].filter(Boolean);
     extras.forEach(ex => {
       const matchedOther = allItems.some(other => other !== it && other.color && isColorNameMatch(ex, [other.color]));
-      if (matchedOther) personalScore += 14;
+      if (matchedOther) personalScore += (isShoe ? 4 : 14);
     });
   });
 
-  // Pattern, lines, graphic & brand mark coordination
+  // Pattern, lines, graphic & brand mark coordination (don't reward colorblock shoes as statement patterns)
   const loudPatterns = new Set(['stripes', 'check', 'dots', 'graphic', 'colorblock']);
-  const patternedItems = allItems.filter(it => it.pattern && loudPatterns.has(it.pattern));
+  const patternedItems = allItems.filter(it => !isShoeCategoryItem(it) && it.pattern && loudPatterns.has(it.pattern));
   if (patternedItems.length > 1) {
     personalScore -= 18; // avoid clashing multiple loud patterns/lines
-  } else if (patternedItems.length === 1 && allItems.some(it => !it.pattern || it.pattern === 'solid' || it.pattern === 'textured')) {
+  } else if (patternedItems.length === 1 && allItems.some(it => !isShoeCategoryItem(it) && (!it.pattern || it.pattern === 'solid' || it.pattern === 'textured'))) {
     personalScore += 10; // balanced statement pattern anchored by solids
   }
   const dayFormality = opts.targetFormality || ((typeof getDayFormality === 'function') ? getDayFormality() : 'casual');
   const isWorkContext = formalityScore(dayFormality) >= 2;
-  const loudCount = allItems.filter(it => isGraphicOrBrandedItem(it)).length;
+  const loudCount = allItems.filter(it => !isShoeCategoryItem(it) && it.category !== 'accessories' && isGraphicOrBrandedItem(it)).length;
   if (isWorkContext && loudCount > 0) {
     personalScore -= 180 * loudCount;
   } else if (loudCount > 0) {
@@ -9713,6 +9750,106 @@ function renderWardrobeIllusionSection() {
   `;
 }
 
+function scoreShoeAndBeltForOutfit(top, midLayer, outer, bottom, shoe, beltRec, opts = {}) {
+  if (!shoe) return { score: 0, reason: '' };
+  let score = 0;
+  const notes = [];
+  const shoeTxt = `${shoe.name || ''} ${shoe.subType || ''} ${shoe.aiDescription || ''}`.toLowerCase();
+  const botTxt = `${bottom?.name || ''} ${bottom?.subType || ''}`.toLowerCase();
+  const sInfo = opts.seasonInfo || (typeof getLocationSeasonInfo === 'function' ? getLocationSeasonInfo() : { id: 'spring' });
+  const temp = (weather && typeof weather.temp === 'number') ? weather.temp : 20;
+  const topLen = top ? getItemLength(top) : 'short';
+  const targetFormality = opts.targetFormality || (typeof getDayFormality === 'function' ? getDayFormality() : 'casual');
+
+  const shoeHsl = hexToHSL(shoe.color || '#444444');
+  const shoeIsNeutral = isNeutralColor(shoe.color || '#444444');
+  const isWarmBrownLeather = /\b(brown|cognac|tan|camel|espresso|chestnut|mahogany|suede|amber)\b/.test(shoeTxt)
+    || (shoeHsl.h >= 12 && shoeHsl.h <= 52 && shoeHsl.s >= 16 && shoeHsl.l >= 14 && shoeHsl.l <= 68);
+  const isGreyWhiteNeutral = /\b(grey|gray|white|off-white|cream|ivory|stone|black|navy|charcoal)\b/.test(shoeTxt)
+    || shoeHsl.s <= 14 || shoeHsl.l <= 16 || shoeHsl.l >= 85;
+  const isHeavyBoot = /\b(boot|boots|combat|hiking|work boot|caterpillar|padded ankle|ankle boot|heavy)\b/.test(shoeTxt);
+  const isCleanLeatherBoot = /\b(chelsea|chukka|dress boot)\b/.test(shoeTxt) && !/\b(caterpillar|padded|work boot|combat|hiking|green|colorblock)\b/.test(shoeTxt);
+  const isCleanSneakerOrLoafer = /\b(sneaker|sneakers|loafer|loafers|derby|oxford|brogue|boat shoe|deck shoe|espadrille|minimalist|leather sneaker|suede sneaker)\b/.test(shoeTxt);
+  const shoeSeason = shoe.season || inferItemSeasonSuitability(shoe);
+
+  // 1. Avoid matchy-matchy colored shoes matching a colored top (e.g., green boots + teal/green shirt)
+  const visibleTop = midLayer || top;
+  if (visibleTop && visibleTop.color && !isNeutralColor(visibleTop.color)) {
+    const topHsl = hexToHSL(visibleTop.color);
+    const hueDiff = Math.min(Math.abs(topHsl.h - shoeHsl.h), 360 - Math.abs(topHsl.h - shoeHsl.h));
+    if (!shoeIsNeutral && hueDiff <= 50) {
+      score -= 44;
+      notes.push('too matchy with top color');
+    } else if (isWarmBrownLeather || isGreyWhiteNeutral) {
+      score += 18;
+      notes.push('neutral/earth footwear lets the top stand out');
+    }
+  } else if (isWarmBrownLeather || isGreyWhiteNeutral) {
+    score += 12;
+    notes.push('versatile neutral/earth footwear');
+  }
+
+  // 2. Season & weather suitability for boots vs sneakers/loafers
+  if ((sInfo.id === 'spring' || sInfo.id === 'summer') && temp >= 16) {
+    if (isHeavyBoot && !isCleanLeatherBoot) {
+      score -= (topLen === 'short' || topLen === 'sleeveless' || (!midLayer && !outer)) ? 42 : 26;
+      notes.push('heavy autumn/winter boot for mild spring/summer weather');
+    } else if (shoeSeason === 'autumn-winter' || shoeSeason === 'winter') {
+      score -= 22;
+    } else if (isCleanSneakerOrLoafer) {
+      score += 16;
+      notes.push('season-right low-profile footwear');
+    }
+  }
+
+  // 3. Bottom <-> Shoe color & formality anchoring (e.g., tan chinos + warm brown leather or clean grey/white sneakers)
+  const isTanKhakiBottom = /\b(tan|khaki|beige|sand|stone|camel|chino|chinos)\b/.test(botTxt)
+    || (bottom?.color && (() => { const bh = hexToHSL(bottom.color); return bh.h >= 22 && bh.h <= 55 && bh.l >= 42 && bh.l <= 82; })());
+  if (isTanKhakiBottom) {
+    if (isWarmBrownLeather && !isHeavyBoot) {
+      score += 22;
+      notes.push('warm brown leather anchors tan pants sharply');
+    } else if (isGreyWhiteNeutral && isCleanSneakerOrLoafer) {
+      score += 14;
+      notes.push('clean neutral sneakers pair effortlessly with tan pants');
+    } else if (!shoeIsNeutral && !isWarmBrownLeather) {
+      score -= 18;
+    }
+  }
+
+  // Penalize colorblock/loud rugged shoes on smart-casual+ workdays
+  if (formalityScore(targetFormality) >= 2) {
+    if (shoe.pattern === 'colorblock' || /\b(caterpillar|work boot|hiking boot|combat boot)\b/.test(shoeTxt)) {
+      score -= 20;
+    }
+    if ((isWarmBrownLeather || isCleanLeatherBoot || /\b(loafer|derby|oxford|brogue)\b/.test(shoeTxt)) && !/\b(work boot|hiking|combat|caterpillar)\b/.test(shoeTxt)) {
+      score += 12;
+    }
+  }
+
+  // 4. Belt <-> Shoe coordination
+  const beltItem = beltRec && beltRec.beltItem ? beltRec.beltItem : null;
+  if (beltItem && !isDrawstringOrAthleticBottom(bottom)) {
+    const beltDist = colorDistanceHSL(beltItem.color || '#333333', shoe.color || '#333333');
+    const beltTxt = `${beltItem.name || ''} ${beltItem.subType || ''}`.toLowerCase();
+    const beltIsWarmLeather = /\b(brown|cognac|tan|burgundy|oxblood|chestnut|espresso|mahogany)\b/.test(beltTxt);
+    if (beltRec.colorMatchClose || beltDist < 32) {
+      score += 22;
+      notes.push(`harmonizes with ${beltItem.name}`);
+    } else if (beltIsWarmLeather && isWarmBrownLeather) {
+      score += 16;
+      notes.push(`warm leather harmony with ${beltItem.name}`);
+    } else if (beltIsWarmLeather && isGreyWhiteNeutral && isCleanSneakerOrLoafer) {
+      score += 6;
+    } else if (!shoeIsNeutral && beltDist > 55) {
+      score -= 20;
+      notes.push(`clashes with ${beltItem.name}`);
+    }
+  }
+
+  return { score, reason: notes[0] || 'balanced footwear match' };
+}
+
 function evaluateOutfitScore(top, bottom, shoe, outer, accessory, opts = {}) {
   let score = 100;
   const midLayer = opts.midLayer || null;
@@ -9847,6 +9984,13 @@ function evaluateOutfitScore(top, bottom, shoe, outer, accessory, opts = {}) {
   const blueprint = opts.blueprint || buildPersonalStyleBlueprint();
   const personalEval = scoreOutfitPersonalAndStyle(top, midLayer, outer, bottom, shoe, beltItem, accessory, blueprint, { targetFormality });
   score += personalEval.personalScore;
+
+  // Shoe & Belt Coordination with Top + Bottom (avoids matchy-matchy colored shoes, heavy boots in mild Spring, and belt clashes)
+  const shoeBeltEval = scoreShoeAndBeltForOutfit(top, midLayer, outer, bottom, shoe, opts.beltRec || (beltItem ? { beltItem } : null), {
+    seasonInfo: sInfo,
+    targetFormality
+  });
+  score += shoeBeltEval.score;
 
   // Mood scoring (subtle secondary tuning behind Personal & Style Decision)
   items.forEach(it => {
