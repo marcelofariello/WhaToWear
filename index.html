@@ -8827,16 +8827,16 @@ function getTopLayerTier(it) {
   if (/\b(overshirt|shacket|shirt jacket|kimono|vest|gilet|waistcoat)\b/.test(txt)) {
     return 'mid';
   }
-  if (/\b(hoodie|sweatshirt|sweater|cardigan|pullover|fleece|quarter-zip|half-zip|turtleneck|mock-neck|mock neck|poncho|knitted polo|jumper|knitwear|crewneck knit|v-neck knit|cable knit|sweater-vest|sweater vest|shrug|bolero|cape)\b/.test(txt) && !txt.includes('under')) {
+  if (/\b(hoodie|sweatshirt|sweater|cardigan|pullover|fleece|quarter[- ]?zip|half[- ]?zip|1\/4[- ]?zip|1\/2[- ]?zip|zip[- ]?up|turtleneck|mock[- ]?neck|poncho|knitted polo|jumper|knitwear|crewneck knit|v-neck knit|cable knit|sweater[- ]?vest|shrug|bolero|cape)\b/.test(txt) && !/\b(worn\s+under|under\s+a)\b/.test(txt)) {
     return 'mid';
   }
   const isExplicitTeeOrShirt = /\b(t-shirt|tee|dress shirt|oxford|ocbd|poplin|button-up|button-down|camisole|tank|bodysuit)\b/.test(txt);
-  if (!isExplicitTeeOrShirt && /\b(knit|knitted|cashmere|merino)\b/.test(txt) && !txt.includes('under')) {
+  if (!isExplicitTeeOrShirt && /\b(knit|knitted|cashmere|merino)\b/.test(txt) && !/\b(worn\s+under|under\s+a)\b/.test(txt)) {
     return 'mid';
   }
   const aiDesc = (it.aiDescription || '').toLowerCase();
   if (!isExplicitTeeOrShirt && aiDesc && !/(under|pair with|layer with|wear with)\s+(a\s+)?(sweater|cardigan|hoodie|blazer|jacket)/.test(aiDesc)) {
-    if (/\b(sweater|cardigan|hoodie|sweatshirt|pullover|jumper|knitwear|cable-knit|ribbed knit|fleece|turtleneck|blazer|overshirt)\b/.test(aiDesc)) {
+    if (/\b(sweater|cardigan|hoodie|sweatshirt|pullover|quarter[- ]?zip|half[- ]?zip|jumper|knitwear|cable[- ]?knit|ribbed knit|fleece|turtleneck|blazer|overshirt)\b/.test(aiDesc)) {
       return 'mid';
     }
   }
@@ -8897,7 +8897,7 @@ function isHoodieOrSweatshirt(it) {
 function isSweaterOrCardigan(it) {
   if (!it) return false;
   const txt = ((it.subType || '') + ' ' + (it.name || '') + ' ' + (it.aiDescription || '')).toLowerCase();
-  return /\b(sweater|cardigan|knit|pullover|jumper|turtleneck|mock neck|quarter-zip|v-neck knit)\b/.test(txt);
+  return /\b(sweater|cardigan|knit|pullover|jumper|turtleneck|mock[- ]?neck|quarter[- ]?zip|half[- ]?zip|1\/4[- ]?zip|1\/2[- ]?zip|v-neck knit)\b/.test(txt);
 }
 
 function isCoatOverBlazer(it) {
@@ -11277,16 +11277,78 @@ function renderTomorrowPreview() {
 
 let activeExerciseOutfit = null;
 
-function isExerciseCandidate(it) {
-  if (!it || isItemDisliked(it)) return false;
-  const txt = ((it.formality || '') + ' ' + (it.subType || '') + ' ' + (it.name || '') + ' ' + (it.aiDescription || '')).toLowerCase();
-  return it.formality === 'athleisure' || /\b(athleisure|athletic|sport|gym|running|training|workout|jogger|track|sweatpant|performance|dry-fit|dri-fit|mesh|trainer|sneaker|tank|tee|t-shirt|shorts)\b/i.test(txt);
+function stripStylingPairingText(raw) {
+  const prep = '(?:with|over|under|alongside)';
+  const adj = '(?:a|an|the|your|casual|dress|tailored|athletic|sporty|running|gym|plain|basic|fitted|slim|dark|light|white|black|navy|grey|gray|denim|cotton|knit|long[- ]?sleeve|short[- ]?sleeve)';
+  const noun = '(?:t-?shirts?|tees?|tanks?|tank tops?|shirts?|polos?|sweaters?|hoodies?|sweatshirts?|pullovers?|jackets?|blazers?|coats?|jeans|denim|chinos?|trousers?|pants?|slacks|shorts?|joggers?|sweatpants?|leggings?|skirts?|sneakers?|trainers?|running shoes?|shoes?|boots?|loafers?|sandals?)';
+  const itemPhrase = `(?:${adj}\\s+){0,3}${noun}`;
+  const rx = new RegExp(
+    `\\b(?:pair|pairs|paired|pairing|style|styled|styling|wear|worn|wearing|layer|layered|layering|great|ideal|works|matches|matching|goes|combine|combined)\\s+(?:well\\s+|easily\\s+|effortlessly\\s+)?${prep}\\s+${itemPhrase}(?:\\s*(?:,\\s*(?:or|and)?|or|and)\\s*(?:${prep}\\s+)?${itemPhrase})*`,
+    'g'
+  );
+  return String(raw || '').toLowerCase().replace(rx, ' ');
 }
 
 function isStrictSportPiece(it) {
   if (!it) return false;
-  const txt = ((it.formality || '') + ' ' + (it.subType || '') + ' ' + (it.name || '') + ' ' + (it.aiDescription || '')).toLowerCase();
-  return it.formality === 'athleisure' || /\b(athleisure|athletic|sport|gym|running|training|workout|jogger|track|sweatpant|performance|dry-fit|dri-fit|trainer|running shoe|mesh)\b/i.test(txt);
+  if (it.aiActivity === 'exercise') return true;
+  if (it.formality === 'athleisure') return true;
+  const titleTxt = `${it.formality || ''} ${it.subType || ''} ${it.name || ''}`.toLowerCase();
+  const descTxt = stripStylingPairingText(it.aiDescription || '');
+  const txt = `${titleTxt} ${descTxt}`;
+  return /\b(athleisure|athletic|sport(?!\s*(?:coat|jacket))|sports(?!\s*(?:coat|jacket))|gym|running|training|workout|jogger|joggers|track|sweatpant|sweatpants|sweatshorts|performance|dry-?fit|dri-?fit|moisture[- ]?wicking|compression|singlet|jersey|trainer|running shoe|mesh)\b/i.test(txt);
+}
+
+function isNonExerciseBaseTop(it) {
+  if (!it || it.category !== 'tops') return true;
+  if (isSwimwearItem(it)) return true;
+
+  // NEVER allow Layer 2 (mid-layer) or Layer 3 (outerwear) tops as Layer 1 / first-layer workout top:
+  // sweatshirts, hoodies, quarter-zip/half-zip pullovers, sweaters, cardigans, fleeces, overshirts, vests, jackets.
+  if (typeof getTopLayerTier === 'function' && getTopLayerTier(it) !== 'base') return true;
+
+  const titleTxt = `${it.name || ''} ${it.subType || ''}`.toLowerCase();
+  const descTxt = stripStylingPairingText(it.aiDescription || '');
+  const fullTxt = `${titleTxt} ${descTxt}`;
+
+  if (/\b(sweatshirt|hoodie|pullover|quarter[- ]?zip|half[- ]?zip|1\/4[- ]?zip|1\/2[- ]?zip|zip[- ]?up|sweater|cardigan|fleece|jumper|knitwear|turtleneck|mock[- ]?neck|overshirt|shacket|vest|gilet|waistcoat|blazer|jacket|coat|poncho|cape|shrug|bolero)\b/.test(titleTxt)) {
+    return true;
+  }
+
+  // Reject non-exercise street / formal / collared / button-up / knit tops for workout Layer 1
+  if (/\b(dress shirt|oxford|ocbd|poplin|twill|tuxedo shirt|button[- ]?up|button[- ]?down|blouse|linen shirt|chambray|denim shirt|flannel|corduroy|camp[- ]?collar|cuban|mandarin|knitted polo|polo shirt|polo|henley|bodysuit|tunic|corset|cashmere|merino|wool|cable[- ]?knit)\b/.test(titleTxt)) {
+    return true;
+  }
+
+  const isExplicitWorkoutBaseTitle = /\b(t-?shirt|tee|tank|singlet|athletic top|performance top|running top|workout top|gym top|compression|crop top|sports bra|jersey|racerback)\b/.test(titleTxt);
+  if (!isExplicitWorkoutBaseTitle && /\b(sweatshirt|hoodie|pullover|quarter[- ]?zip|half[- ]?zip|1\/4[- ]?zip|1\/2[- ]?zip|sweater|cardigan|fleece|knitwear|button[- ]?down|button[- ]?up|dress shirt|oxford|polo|blouse|flannel|overshirt)\b/.test(fullTxt)) {
+    return true;
+  }
+
+  if (['formal', 'black-tie', 'cocktail', 'business-casual'].includes((it.formality || '').toLowerCase())) {
+    return true;
+  }
+
+  return false;
+}
+
+function isExerciseCandidate(it) {
+  if (!it || isItemDisliked(it) || isSwimwearItem(it)) return false;
+  if (it.category === 'tops' && isNonExerciseBaseTop(it)) return false;
+  if (it.category === 'bottoms' && isNonExerciseStreetBottom(it)) return false;
+  if (isShoeCategoryItem(it) && isNonExerciseShoe(it)) return false;
+  if (isStrictSportPiece(it)) return true;
+  const titleTxt = `${it.formality || ''} ${it.subType || ''} ${it.name || ''}`.toLowerCase();
+  if (it.category === 'tops') {
+    return /\b(tank|tee|t-?shirt|singlet|athletic|crop top|racerback)\b/i.test(titleTxt);
+  }
+  if (it.category === 'bottoms') {
+    return /\b(shorts?|jogger|joggers|sweatpant|sweatpants|sweatshorts|track|legging|leggings)\b/i.test(titleTxt);
+  }
+  if (isShoeCategoryItem(it)) {
+    return /\b(trainer|trainers|sneaker|sneakers|runner|runners|running shoe|athletic shoe|tennis shoe|cross-trainer)\b/i.test(titleTxt);
+  }
+  return false;
 }
 
 let exercisePreferShorts = localStorage.getItem('wtw_exercise_prefer_shorts') === 'true';
@@ -11300,12 +11362,32 @@ function isNonExerciseStreetBottom(it) {
 }
 
 function isExerciseSecondLayerCandidate(it) {
-  if (!it || isItemDisliked(it)) return false;
+  if (!it || isItemDisliked(it) || isSwimwearItem(it)) return false;
   if (it.category !== 'outerwear' && it.category !== 'tops') return false;
-  const text = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''}`.toLowerCase();
-  if (/\b(blazer|suit|trench|overcoat|topcoat|pea coat|denim jacket|leather|moto|dress shirt|button-down|oxford)\b/.test(text)) return false;
-  return /\b(zip hoodie|hoodie|sweatshirt|fleece|windbreaker|track jacket|pullover|quarter-zip|half-zip|anorak|running jacket|gym jacket|training jacket)\b/.test(text)
-    || (it.category === 'outerwear' && (it.formality === 'athleisure' || /\b(sport|athletic|gym|running|training|athleisure)\b/.test(text)));
+  if (['formal', 'black-tie', 'cocktail', 'business-casual', 'smart-casual'].includes((it.formality || '').toLowerCase())) return false;
+  const titleTxt = `${it.name || ''} ${it.subType || ''}`.toLowerCase();
+  const descTxt = stripStylingPairingText(it.aiDescription || '');
+  const text = `${titleTxt} ${descTxt}`;
+  // Reject tailored, street outerwear, collared shirts, and knitwear/sweaters
+  if (/\b(blazer|suit|trench|overcoat|topcoat|pea coat|wool coat|denim jacket|trucker|chore|field jacket|harrington|leather|suede|moto|dress shirt|button[- ]?down|button[- ]?up|oxford|blouse|polo|overshirt|shacket|flannel|corduroy|sweater|cardigan|turtleneck|mock[- ]?neck|jumper|knitwear|cashmere|merino|cable[- ]?knit|ribbed knit|wool)\b/.test(text)) {
+    return false;
+  }
+  // Classic athletic / exercise 2nd layers (worn over a Layer 1 workout tee)
+  if (/\b(zip hoodie|hoodie|sweatshirt|fleece|windbreaker|track jacket|anorak|running jacket|gym jacket|training jacket|track top)\b/.test(titleTxt)) {
+    return true;
+  }
+  // Quarter-zip / half-zip / pullover ONLY if genuinely athletic/sport/athleisure (not a casual knit pullover)
+  if (/\b(pullover|quarter[- ]?zip|half[- ]?zip|1\/4[- ]?zip|1\/2[- ]?zip)\b/.test(titleTxt)) {
+    return it.formality === 'athleisure'
+      || it.aiActivity === 'exercise'
+      || /\b(athleisure|athletic|sport(?!\s*(?:coat|jacket))|gym|running|training|workout|performance|dry-?fit|dri-?fit|moisture[- ]?wicking|track|fleece|hoodie|sweatshirt)\b/.test(text);
+  }
+  if (it.category === 'outerwear') {
+    return it.formality === 'athleisure'
+      || it.aiActivity === 'exercise'
+      || /\b(athleisure|athletic|sport(?!\s*(?:coat|jacket))|gym|running|training|workout|windbreaker|track|anorak)\b/.test(text);
+  }
+  return false;
 }
 
 function generateExerciseOutfit(avoidIds = []) {
@@ -11318,8 +11400,15 @@ function generateExerciseOutfit(avoidIds = []) {
     : (weather && typeof weather.temp === 'number' ? weather.temp : 18);
 
   const rawTopsPool = pool.filter(i => i.category === 'tops' && !isItemDisliked(i));
+  let validExTops = rawTopsPool.filter(i => !isNonExerciseBaseTop(i));
+  if (!validExTops.length && pool !== wardrobe) {
+    validExTops = wardrobe.filter(i => i.category === 'tops' && !isItemDisliked(i) && !isNonExerciseBaseTop(i));
+  }
+  const baseNonSwimTops = rawTopsPool.filter(i => !isSwimwearItem(i) && isBaseTop(i));
   const nonSwimTops = rawTopsPool.filter(i => !isSwimwearItem(i));
-  const topsPool = nonSwimTops.length ? nonSwimTops : rawTopsPool;
+  const topsPool = validExTops.length ? validExTops
+    : (baseNonSwimTops.length ? baseNonSwimTops
+    : (nonSwimTops.length ? nonSwimTops : rawTopsPool));
 
   const rawBottomsPool = pool.filter(i => i.category === 'bottoms' && !isItemDisliked(i));
   const comfBottoms = rawBottomsPool.filter(i => !isNonExerciseStreetBottom(i) && !isSwimwearItem(i));
@@ -11402,8 +11491,11 @@ function generateExerciseOutfit(avoidIds = []) {
   const scoreTop = (t) => {
     let s = isStrictSportPiece(t) ? 30 : 10;
     const len = getItemLength(t);
-    if (morningTemp >= 16 && (len === 'short' || len === 'sleeveless')) s += 12;
-    if (morningTemp < 14 && len === 'long') s += 12;
+    if ((morningTemp >= 14 || exerciseSecondLayer || exercisePreferShorts) && (len === 'short' || len === 'sleeveless')) {
+      s += 12;
+    } else if (morningTemp < 12 && !exercisePreferShorts && !exerciseSecondLayer && len === 'long') {
+      s += 8;
+    }
     s -= getItemWearCount(t) * 2;
     s += ((dayNum + t.id.charCodeAt(0)) % 7) * 0.5;
     return s;
@@ -11515,8 +11607,27 @@ function swapDislikedExercisePiece(itemId, excludedIds) {
     const cat = slotCatMap[slot];
     if (cat) {
       const matchesSlotCat = (w) => (slot === 'shoe' ? isShoeCategoryItem(w) : w.category === cat);
-      const findAlt = (src) => src.find(w => matchesSlotCat(w) && w.id !== itemId && !isItemDisliked(w) && !isSwimwearItem(w) && (slot !== 'shoe' || !isNonExerciseShoe(w)))
-        || src.find(w => matchesSlotCat(w) && w.id !== itemId && !isItemDisliked(w) && !isSwimwearItem(w));
+      const isSlotValid = (w) => {
+        if (slot === 'top') return !isNonExerciseBaseTop(w);
+        if (slot === 'bottom') return !isNonExerciseStreetBottom(w);
+        if (slot === 'shoe') return !isNonExerciseShoe(w);
+        return true;
+      };
+      const findAlt = (src) => {
+        const strictAlt = src.find(w =>
+          matchesSlotCat(w) && w.id !== itemId && w.id !== ex.secondLayer?.id
+          && !isItemDisliked(w) && !isSwimwearItem(w) && isSlotValid(w)
+        );
+        if (strictAlt) return strictAlt;
+        if (slot === 'top') {
+          // Never fall back to a mid-layer (sweatshirt, pullover, hoodie, sweater) as Layer 1 workout top
+          return src.find(w =>
+            matchesSlotCat(w) && w.id !== itemId && w.id !== ex.secondLayer?.id
+            && !isItemDisliked(w) && !isSwimwearItem(w) && isBaseTop(w)
+          ) || null;
+        }
+        return src.find(w => matchesSlotCat(w) && w.id !== itemId && !isItemDisliked(w) && !isSwimwearItem(w));
+      };
       replacement = findAlt(pool) || (pool !== wardrobe ? findAlt(wardrobe) : null);
     }
   }
@@ -11552,6 +11663,20 @@ function renderExerciseOutfit() {
         morningTemp: tex.morningTemp ?? tripCtx.day.tmin ?? 18,
         logged: !!(tripCtx.planEntry.exWorn || (activeExerciseOutfit && activeExerciseOutfit.date === todayStr && activeExerciseOutfit.logged && activeExerciseOutfit.top?.id === tTop.id))
       };
+      if (isNonExerciseBaseTop(activeExerciseOutfit.top)) {
+        const pickedEx = generateExerciseOutfit([activeExerciseOutfit.top.id]);
+        if (pickedEx && pickedEx.top && !isNonExerciseBaseTop(pickedEx.top)) {
+          activeExerciseOutfit.top = pickedEx.top;
+          saveExerciseOutfitState(activeExerciseOutfit);
+        }
+      }
+      if (isNonExerciseStreetBottom(activeExerciseOutfit.bottom) || isSwimwearItem(activeExerciseOutfit.bottom)) {
+        const pickedEx = generateExerciseOutfit([activeExerciseOutfit.bottom.id]);
+        if (pickedEx && pickedEx.bottom && !isNonExerciseStreetBottom(pickedEx.bottom) && !isSwimwearItem(pickedEx.bottom)) {
+          activeExerciseOutfit.bottom = pickedEx.bottom;
+          saveExerciseOutfitState(activeExerciseOutfit);
+        }
+      }
       if (isNonExerciseShoe(activeExerciseOutfit.shoe)) {
         const pickedEx = generateExerciseOutfit([activeExerciseOutfit.shoe.id]);
         if (pickedEx && pickedEx.shoe && !isNonExerciseShoe(pickedEx.shoe)) {
@@ -11566,12 +11691,10 @@ function renderExerciseOutfit() {
           saveExerciseOutfitState(activeExerciseOutfit);
         }
       }
-      if (exerciseSecondLayer && !activeExerciseOutfit.secondLayer) {
+      if (exerciseSecondLayer && (!activeExerciseOutfit.secondLayer || !isExerciseSecondLayerCandidate(activeExerciseOutfit.secondLayer) || activeExerciseOutfit.secondLayer.id === activeExerciseOutfit.top?.id)) {
         const pickedEx = generateExerciseOutfit();
-        if (pickedEx && pickedEx.secondLayer) {
-          activeExerciseOutfit.secondLayer = pickedEx.secondLayer;
-          saveExerciseOutfitState(activeExerciseOutfit);
-        }
+        activeExerciseOutfit.secondLayer = pickedEx?.secondLayer || null;
+        saveExerciseOutfitState(activeExerciseOutfit);
       } else if (!exerciseSecondLayer && activeExerciseOutfit.secondLayer) {
         activeExerciseOutfit.secondLayer = null;
         saveExerciseOutfitState(activeExerciseOutfit);
@@ -11593,28 +11716,40 @@ function renderExerciseOutfit() {
     } catch {}
   }
 
+  const hasValidExBaseTop = wardrobe.some(w => w.category === 'tops' && !isItemDisliked(w) && !isNonExerciseBaseTop(w));
+  const hasValidExSecondLayer = wardrobe.some(w => isExerciseSecondLayerCandidate(w) && w.id !== activeExerciseOutfit?.top?.id);
+  const topInvalid = !!(activeExerciseOutfit?.top && (
+    isItemDisliked(activeExerciseOutfit.top)
+    || isSwimwearItem(activeExerciseOutfit.top)
+    || (hasValidExBaseTop && isNonExerciseBaseTop(activeExerciseOutfit.top))
+  ));
+  const secondLayerInvalid = !!(activeExerciseOutfit?.secondLayer && (
+    isItemDisliked(activeExerciseOutfit.secondLayer)
+    || !isExerciseSecondLayerCandidate(activeExerciseOutfit.secondLayer)
+    || activeExerciseOutfit.secondLayer.id === activeExerciseOutfit.top?.id
+  ));
+
   const needsRefresh = !lockedFromTrip && (!activeExerciseOutfit
     || activeExerciseOutfit.date !== todayStr
-    || isItemDisliked(activeExerciseOutfit.top)
-    || (activeExerciseOutfit.secondLayer && isItemDisliked(activeExerciseOutfit.secondLayer))
+    || topInvalid
+    || secondLayerInvalid
     || isItemDisliked(activeExerciseOutfit.bottom)
     || isItemDisliked(activeExerciseOutfit.shoe)
     || isNonExerciseStreetBottom(activeExerciseOutfit.bottom)
     || isSwimwearItem(activeExerciseOutfit.bottom)
-    || isSwimwearItem(activeExerciseOutfit.top)
     || isNonExerciseShoe(activeExerciseOutfit.shoe)
     || (exercisePreferShorts && !isShortsBottom(activeExerciseOutfit.bottom))
-    || (exerciseSecondLayer && !activeExerciseOutfit.secondLayer)
+    || (exerciseSecondLayer && !activeExerciseOutfit.secondLayer && hasValidExSecondLayer)
     || (!exerciseSecondLayer && activeExerciseOutfit.secondLayer));
 
   if (needsRefresh) {
     const picked = generateExerciseOutfit();
     if (!picked) { section.innerHTML = ''; return; }
     const sameDay = activeExerciseOutfit && activeExerciseOutfit.date === todayStr;
-    const validTop = sameDay && activeExerciseOutfit.top && !isItemDisliked(activeExerciseOutfit.top) && !isSwimwearItem(activeExerciseOutfit.top);
+    const validTop = sameDay && activeExerciseOutfit.top && !topInvalid;
     const validBottom = sameDay && activeExerciseOutfit.bottom && !isItemDisliked(activeExerciseOutfit.bottom) && !isSwimwearItem(activeExerciseOutfit.bottom) && !isNonExerciseStreetBottom(activeExerciseOutfit.bottom) && (!exercisePreferShorts || isShortsBottom(activeExerciseOutfit.bottom));
     const validShoe = sameDay && activeExerciseOutfit.shoe && !isItemDisliked(activeExerciseOutfit.shoe) && !isNonExerciseShoe(activeExerciseOutfit.shoe);
-    const validSecond = sameDay && activeExerciseOutfit.secondLayer && !isItemDisliked(activeExerciseOutfit.secondLayer);
+    const validSecond = sameDay && activeExerciseOutfit.secondLayer && !secondLayerInvalid;
     activeExerciseOutfit = {
       date: todayStr,
       top: validTop ? activeExerciseOutfit.top : picked.top,
@@ -12227,7 +12362,7 @@ async function maybeRunAIExerciseSanityCheck(exOutfit) {
     };
     const prompt = [
       `You are a strict fitness outfit sanity-check critic. Check if ANY piece in this Morning Exercise Outfit is absurd.`,
-      `Rules: NEVER allow swimwear (swim jammers, swim trunks, boardshorts) for dry-land exercise; NEVER allow boots, loafers, dress shoes, or sandals for exercise; NEVER allow jeans or dress pants.`,
+      `Rules: NEVER allow mid-layers, knitwear, or pullovers (sweatshirts, hoodies, quarter-zip/half-zip pullovers, sweaters, cardigans, fleeces, jackets) as the Layer 1 "top" (Layer 1 must be a breathable tee, tank, or athletic base top; hoodies/windbreakers/sweatshirts only belong in "secondLayer" over a base top, and casual knit pullovers/sweaters do not belong in exercise at all); NEVER allow dress shirts, button-downs, oxfords, polos, or blouses for exercise; NEVER allow swimwear (swim jammers, swim trunks, boardshorts) for dry-land exercise; NEVER allow boots, loafers, dress shoes, or sandals for exercise; NEVER allow jeans, chinos, cargo/hiking shorts, or dress pants.`,
       `Morning temp: ${temp}°C. Outfit: ${JSON.stringify(summary)}`,
       `Return ONLY valid JSON: {"ok": boolean, "badSlots": array from ["top","secondLayer","bottom","shoe"], "reason": "short reason"}`
     ].join('\n');
@@ -20275,7 +20410,10 @@ function buildPackingList(days) {
 
   // Exercise / Workout gear (reuse sneakers if already packed to save space!)
   if (includeExercise) {
-    const exTopPool = by('tops').filter(t => isStrictSportPiece(t) || (isExerciseCandidate(t) && !/\b(button|oxford|dress shirt|blazer)\b/i.test(`${t.name || ''} ${t.subType || ''}`)));
+    const exTopStrict = by('tops').filter(t => !isNonExerciseBaseTop(t) && isStrictSportPiece(t));
+    const exTopBroad = by('tops').filter(t => !isNonExerciseBaseTop(t) && isExerciseCandidate(t));
+    const exTopFallback = by('tops').filter(t => !isNonExerciseBaseTop(t));
+    const exTopPool = exTopStrict.length ? exTopStrict : (exTopBroad.length ? exTopBroad : exTopFallback);
     const exTopCount = N >= 5 ? 2 : 1;
     let addedExTops = 0;
     for (const t of exTopPool) {
@@ -20757,7 +20895,8 @@ function pickTripOutfit(day, items, usage, prev, avoidKey) {
     const tops = suit('tops'), bottoms = suit('bottoms'), shoes = suit('shoes');
     if (!tops.length || !bottoms.length || !shoes.length) return null;
 
-    const baseTops = tops.some(isBaseTop) ? tops.filter(isBaseTop) : tops;
+    const allItemBaseTops = items.filter(i => i.category === 'tops' && isBaseTop(i) && (!isWorkDay || !isWorkDisallowedItem(i, target)));
+    const baseTops = tops.some(isBaseTop) ? tops.filter(isBaseTop) : (allItemBaseTops.length ? allItemBaseTops : tops);
     const rawMidAll = items.filter(isMidLayerCandidate);
     const workMidAll = isWorkDay ? rawMidAll.filter(i => !isWorkDisallowedItem(i, target)) : rawMidAll;
     const midAll = workMidAll.length ? workMidAll : rawMidAll;
@@ -20857,7 +20996,16 @@ function pickTripOutfit(day, items, usage, prev, avoidKey) {
 function pickTripExerciseOutfit(day, items, exUsage, prevEx) {
   if (!items || items.length < 3) return null;
   const morningTemp = typeof day.tmin === 'number' ? day.tmin : 18;
-  const topsRaw = items.filter(i => i.category === 'tops' && !isItemDisliked(i));
+  const topsRawAll = items.filter(i => i.category === 'tops' && !isItemDisliked(i));
+  const topsValidEx = topsRawAll.filter(i => !isNonExerciseBaseTop(i));
+  const wardrobeValidExTops = wardrobe.filter(i => i.category === 'tops' && !isItemDisliked(i) && !isNonExerciseBaseTop(i));
+  const topsBaseFallback = topsRawAll.filter(i => !isSwimwearItem(i) && isBaseTop(i));
+  const topsNonSwim = topsRawAll.filter(i => !isSwimwearItem(i));
+  const topsRaw = topsValidEx.length
+    ? topsValidEx
+    : (wardrobeValidExTops.length ? wardrobeValidExTops
+    : (topsBaseFallback.length ? topsBaseFallback
+    : (topsNonSwim.length ? topsNonSwim : topsRawAll)));
   const bottomsRaw = items.filter(i => i.category === 'bottoms' && !isItemDisliked(i));
   const shoesRawAll = items.filter(i => isShoeCategoryItem(i) && !isItemDisliked(i));
   const shoesExValid = shoesRawAll.filter(i => !isNonExerciseShoe(i));
@@ -20867,8 +21015,9 @@ function pickTripExerciseOutfit(day, items, exUsage, prevEx) {
     : (wardrobeExShoes.length ? wardrobeExShoes : shoesRawAll);
   if (!topsRaw.length || !bottomsRaw.length || !shoesRaw.length) return null;
 
-  const comfBottoms = bottomsRaw.filter(i => !isNonExerciseStreetBottom(i));
-  const bottomsBase = comfBottoms.length ? comfBottoms : bottomsRaw;
+  const comfBottoms = bottomsRaw.filter(i => !isNonExerciseStreetBottom(i) && !isSwimwearItem(i));
+  const nonSwimBottoms = bottomsRaw.filter(i => !isSwimwearItem(i));
+  const bottomsBase = comfBottoms.length ? comfBottoms : (nonSwimBottoms.length ? nonSwimBottoms : bottomsRaw);
 
   const todaySkipped = (typeof getTodayDislikedIds === 'function') ? getTodayDislikedIds() : new Set();
   const avoidSet = new Set(typeof avoidIds !== 'undefined' && Array.isArray(avoidIds) ? avoidIds : []);
@@ -20894,11 +21043,14 @@ function pickTripExerciseOutfit(day, items, exUsage, prevEx) {
 
   const pickBest = (list, scorer) => [...list].sort((a, b) => scorer(b) - scorer(a))[0];
 
+  const preferShorts = (typeof exercisePreferShorts !== 'undefined' && exercisePreferShorts);
+  const wantSecondLayer = morningTemp < 15 || (typeof exerciseSecondLayer !== 'undefined' && exerciseSecondLayer);
+
   const top = pickBest(exTops, t => {
     let s = isStrictSportPiece(t) ? 30 : 10;
     const len = getItemLength(t);
-    if (morningTemp >= 16 && (len === 'short' || len === 'sleeveless')) s += 10;
-    if (morningTemp < 14 && len === 'long') s += 10;
+    if ((morningTemp >= 14 || wantSecondLayer || preferShorts) && (len === 'short' || len === 'sleeveless')) s += 10;
+    else if (morningTemp < 12 && !preferShorts && !wantSecondLayer && len === 'long') s += 8;
     s -= (exUsage[t.id] || 0) * 40;
     if (prevEx && prevEx.top === t.id && exTops.length > 1) s -= 60;
     return s + Math.random() * 2;
@@ -20907,7 +21059,7 @@ function pickTripExerciseOutfit(day, items, exUsage, prevEx) {
   const bottom = pickBest(exBottoms, b => {
     let s = isStrictSportPiece(b) ? 30 : 10;
     const len = getItemLength(b);
-    if ((typeof exercisePreferShorts !== 'undefined' && exercisePreferShorts) && (len === 'shorts' || isShortsBottom(b))) s += 40;
+    if (preferShorts && (len === 'shorts' || isShortsBottom(b))) s += 40;
     else if (morningTemp >= 17 && len === 'shorts') s += 14;
     else if (morningTemp < 17 && len === 'long') s += 14;
     s -= (exUsage[b.id] || 0) * 15;
@@ -20923,7 +21075,7 @@ function pickTripExerciseOutfit(day, items, exUsage, prevEx) {
   if (!top || !bottom || !shoe) return null;
 
   let secondLayer = null;
-  if (morningTemp < 15 || (typeof exerciseSecondLayer !== 'undefined' && exerciseSecondLayer)) {
+  if (wantSecondLayer) {
     const layerPool = items.filter(i => i.id !== top.id && isExerciseSecondLayerCandidate(i));
     if (layerPool.length) {
       secondLayer = pickBest(layerPool, l => (isStrictSportPiece(l) ? 30 : 12) - (exUsage[l.id] || 0) * 10);
