@@ -4986,6 +4986,10 @@ function getSlotCandidatesForOutfit(slot, outfitState, excludedIds) {
   const allowShorts = typeof areShortsAllowedToday === 'function' ? areShortsAllowedToday(targetFormality) : true;
   const allowSandals = typeof areSandalsAllowedToday === 'function' ? areSandalsAllowedToday(targetFormality) : true;
 
+  const cooldownInfo = typeof buildRotationCooldownMap === 'function'
+    ? buildRotationCooldownMap(getOutfitDayKey(), { context: 'main' })
+    : null;
+
   const baseFilter = (items) => {
     const allowed = items.filter(it => it && !excludedIds.has(it.id) && !isItemDisliked(it));
     const dayOk = allowed.filter(it =>
@@ -4996,10 +5000,14 @@ function getSlotCandidatesForOutfit(slot, outfitState, excludedIds) {
       !isWorkDisallowedItem(it, targetFormality)
     );
     const pool = dayOk.length > 0 ? dayOk : allowed;
-    let suit = pool.filter(it => weatherSuitable(it) && formalityMatch(it.formality, targetFormality));
-    if (suit.length === 0) suit = pool.filter(it => weatherSuitable(it));
-    if (suit.length === 0) suit = pool.filter(it => formalityMatch(it.formality, targetFormality));
-    return suit.length > 0 ? suit : pool;
+    const wxAndForm = pool.filter(it => weatherSuitable(it) && formalityMatch(it.formality, targetFormality));
+    const wxOnly = pool.filter(it => weatherSuitable(it));
+    const formOnly = pool.filter(it => formalityMatch(it.formality, targetFormality));
+    const suit = wxAndForm.length > 0 ? wxAndForm : (wxOnly.length > 0 ? wxOnly : (formOnly.length > 0 ? formOnly : pool));
+    if (cooldownInfo && typeof filterByRotationCooldown === 'function' && suit.length > 1) {
+      return filterByRotationCooldown(suit, cooldownInfo);
+    }
+    return suit;
   };
 
   if (slot === 'top') {
@@ -7663,16 +7671,21 @@ function saveProfileSettings() {
    WEATHER & PROJECTION ENGINE
    ================================================================ */
 
+let weatherFetchInFlight = false;
+
 async function fetchWeather() {
   const { city, apiKey } = getSettings();
   if (!city) {
+    weatherFetchInFlight = false;
     weather = null;
     updateHeaderSeasonPill();
     renderWeather();
     return;
   }
 
+  weatherFetchInFlight = true;
   let loaded = false;
+  try {
 
   // 1. Try OpenWeatherMap if an API key is provided
   if (apiKey) {
@@ -7815,6 +7828,9 @@ async function fetchWeather() {
       humidity: 50,
       hourly: null
     };
+  }
+  } finally {
+    weatherFetchInFlight = false;
   }
 
   updateHeaderSeasonPill();
@@ -7981,6 +7997,10 @@ function updateHeaderSeasonPill() {
 function setSeasonOverride(mode) {
   seasonOverride = mode || 'auto';
   try { localStorage.setItem('wtw_season_override', seasonOverride); } catch (e) {}
+  if (typeof activeAIDailyOutfit !== 'undefined') activeAIDailyOutfit = null;
+  if (typeof lastAIDailyAttemptKey !== 'undefined') lastAIDailyAttemptKey = null;
+  try { localStorage.removeItem('wtw_daily_main_lock'); } catch {}
+  try { localStorage.removeItem('wtw_ai_daily_outfit'); } catch {}
   updateHeaderSeasonPill();
   renderWeather();
   renderDayContext();
@@ -7995,6 +8015,10 @@ function setOccasionOverride(formalityId) {
   occasionOverride = formalityId || 'auto';
   formalOverride = (occasionOverride === 'formal' || occasionOverride === 'business-casual' || occasionOverride === 'cocktail' || occasionOverride === 'black-tie');
   try { localStorage.setItem('wtw_occasion_override', occasionOverride); } catch (e) {}
+  if (typeof activeAIDailyOutfit !== 'undefined') activeAIDailyOutfit = null;
+  if (typeof lastAIDailyAttemptKey !== 'undefined') lastAIDailyAttemptKey = null;
+  try { localStorage.removeItem('wtw_daily_main_lock'); } catch {}
+  try { localStorage.removeItem('wtw_ai_daily_outfit'); } catch {}
   renderDayContext();
   renderOutfit();
   if (occasionOverride === 'auto') {
@@ -9463,22 +9487,22 @@ const FACE_SHAPE_STYLE_RULES = {
 const BODY_SHAPE_STYLE_RULES = {
   'inverted-triangle': {
     label: 'Inverted Triangle (Broad Shoulders · Athletic)',
-    bestClothTypes: ['Natural-shoulder knitwear & raglan layers', 'Unstructured blazers', 'Wide-leg, pleated or straight trousers & relaxed jeans', 'Clean waist anchoring with leather belts'],
-    goodTopRegex: /\b(v-neck|crewneck|t-shirt|tee|henley|sweater|knit|unstructured|cardigan|hoodie|overshirt)\b/i,
+    bestClothTypes: ['Natural-shoulder knitwear & raglan layers', 'Tailored Oxford/poplin & linen shirts', 'Unstructured blazers', 'Wide-leg, pleated or straight trousers & relaxed jeans', 'Clean waist anchoring with leather belts'],
+    goodTopRegex: /\b(v-neck|crewneck|t-shirt|tee|henley|polo|oxford|poplin|dress shirt|linen shirt|button-up|button-down|sweater|knit|unstructured|cardigan|hoodie|overshirt)\b/i,
     goodBottomRegex: /\b(straight|relaxed|wide-leg|pleated|chino|cargo|linen trousers|bootcut|flare|jeans)\b/i,
-    howToWearTip: 'Keep shoulders unpadded and smooth (soft knits/unstructured mid-layers), while choosing straight, pleated, or relaxed-leg bottoms for crisp lower-half symmetry.'
+    howToWearTip: 'Keep shoulders unpadded and smooth (soft knits, clean shirts, or unstructured mid-layers), while choosing straight, pleated, or relaxed-leg bottoms for crisp lower-half symmetry.'
   },
   rectangle: {
     label: 'Rectangle / Straight (Dimensional Layering)',
     bestClothTypes: ['3-layer texture contrast (Tee + Blazer/Overshirt/Sweater + Jacket)', 'Structured shoulders & notched lapels', 'Tapered chinos, cuffed trousers & high-waist bottoms'],
-    goodTopRegex: /\b(blazer|overshirt|shacket|sweater|cardigan|hoodie|bomber|denim jacket|field|chore|trench|peplum|wrap)\b/i,
+    goodTopRegex: /\b(blazer|overshirt|shacket|sweater|cardigan|hoodie|bomber|denim jacket|field|chore|trench|peplum|wrap|oxford|poplin|polo|button-up|button-down)\b/i,
     goodBottomRegex: /\b(chino|tapered|slim|trousers|high-waist|midi skirt|mini skirt|a-line)\b/i,
     howToWearTip: 'Create dimension with contrasting texture and structured Layer 2 pieces (blazers, cable knits, overshirts), worn half-tucked or belted at the waist.'
   },
   hourglass: {
     label: 'Hourglass (Defined Waist · Tailored Flow)',
-    bestClothTypes: ['Fitted crewneck/v-neck tees & bodysuits', 'Tailored waist-skimming blazers & belted trenches', 'High-waist tailored trousers, straight jeans & pencil/bias skirts'],
-    goodTopRegex: /\b(fitted|bodysuit|camisole|wrap|v-neck|blazer|trench|cardigan|cashmere|t-shirt|tee)\b/i,
+    bestClothTypes: ['Fitted crewneck/v-neck tees, tailored shirts & bodysuits', 'Tailored waist-skimming blazers & belted trenches', 'High-waist tailored trousers, straight jeans & pencil/bias skirts'],
+    goodTopRegex: /\b(fitted|bodysuit|camisole|wrap|v-neck|blouse|oxford|poplin|dress shirt|linen shirt|polo|blazer|trench|cardigan|cashmere|t-shirt|tee)\b/i,
     goodBottomRegex: /\b(high-waist|tailored|straight|pencil|midi|bootcut|flare|trousers|slim)\b/i,
     howToWearTip: 'Follow your natural waist line — tuck your base layer cleanly, pair with tailored/belted outer layers, and avoid shapeless boxy stacking.'
   },
@@ -9502,9 +9526,9 @@ const ARCHETYPE_STYLE_RULES = {
   'quiet-luxury': {
     name: 'Quiet Luxury',
     paletteFocus: 'Muted neutrals, warm camel, espresso, navy, cream, tonal contrast',
-    clothFocus: 'Cashmere knits, tailored blazers, wool overcoats, pleated/straight chinos, leather loafers',
+    clothFocus: 'Cashmere knits, tailored blazers, wool overcoats, crisp oxford/linen shirts, pleated/straight chinos, leather loafers',
     targetFormalities: ['smart-casual', 'business-casual', 'elevated-casual', 'formal'],
-    keywordRegex: /\b(cashmere|merino|chino|trousers|blazer|loafer|overcoat|trench|knit|cardigan|minimalist|leather|polo|suede)\b/i,
+    keywordRegex: /\b(cashmere|merino|chino|trousers|blazer|loafer|overcoat|trench|knit|cardigan|minimalist|leather|polo|suede|oxford|poplin|linen|dress shirt|button-up|button-down|henley|derby)\b/i,
     preferNeutralRatio: 0.7
   },
   executive: {
@@ -10147,19 +10171,29 @@ function renderWardrobeIllusionSection() {
   const stats = calculateWardrobeVersatility();
   const prevDetails = el.querySelector('details');
   const isOpen = prevDetails ? prevDetails.open : false;
+  const cooldownMap = typeof buildRotationCooldownMap === 'function'
+    ? buildRotationCooldownMap(getOutfitDayKey(), { context: 'both', skipSameDayCrossContext: true })
+    : null;
+  const restingCount = cooldownMap
+    ? wardrobe.filter(w => {
+        const d = cooldownMap.itemDaysAgo.get(w.id);
+        return d != null && d >= 1 && d < ROTATION_COOLDOWN_DAYS;
+      }).length
+    : 0;
+  const readyCount = Math.max(0, wardrobe.length - restingCount);
 
   el.innerHTML = `
     <details class="maximizer-details" ${isOpen ? 'open' : ''}>
       <summary class="maximizer-summary">
-        <span>🔮 Wardrobe Illusion &amp; Combination Statistics (${stats.combinations} unique looks from ${stats.totalItems} pieces)</span>
+        <span>🔮 Wardrobe Illusion &amp; 7-Day Rotation (${readyCount} fresh · ${restingCount} resting · ${stats.combinations} looks)</span>
         <span style="font-size:0.76rem; color:var(--primary); font-weight:700;">Tap to expand ▾</span>
       </summary>
       <div class="maximizer-card">
         <div class="maximizer-header">
           <div class="maximizer-title">
-            <span>🔮 Wardrobe Illusion &amp; Usage Maximizer</span>
+            <span>🔮 Wardrobe Illusion &amp; 7-Day Rotation Memory</span>
           </div>
-          <span class="maximizer-badge">Smart Rotation Active</span>
+          <span class="maximizer-badge">7-Day Cooldown Active</span>
         </div>
         <div class="maximizer-stats-row">
           <div class="maximizer-stat-box">
@@ -10167,17 +10201,23 @@ function renderWardrobeIllusionSection() {
             <div class="maximizer-stat-lbl">Unique Looks</div>
           </div>
           <div class="maximizer-stat-box">
-            <div class="maximizer-stat-num">${stats.multiplier}x</div>
-            <div class="maximizer-stat-lbl">Perception Multiplier</div>
+            <div class="maximizer-stat-num">${readyCount} / ${stats.totalItems}</div>
+            <div class="maximizer-stat-lbl">Fresh &amp; Ready Today</div>
           </div>
           <div class="maximizer-stat-box">
-            <div class="maximizer-stat-num">${stats.months} Mo</div>
-            <div class="maximizer-stat-lbl">Non-Repeating Outfits</div>
+            <div class="maximizer-stat-num">${restingCount}</div>
+            <div class="maximizer-stat-lbl">Resting (7-Day Cooldown)</div>
           </div>
         </div>
         <p class="maximizer-desc">
-          Through mathematical layer swapping and tonal anchor shifting, your <strong>${stats.totalItems} pieces</strong> project the impression of a deep luxury wardrobe of over <strong>${stats.combinations} distinct looks</strong>!
+          Pieces worn yesterday are strictly skipped the next day, and worn items rest for <strong>${ROTATION_COOLDOWN_DAYS} days</strong> (stepping down smoothly to longest-rested pieces if a category has fewer than ${ROTATION_COOLDOWN_DAYS} options). Your <strong>${stats.totalItems} pieces</strong> unlock over <strong>${stats.combinations} distinct looks</strong> (${stats.multiplier}x multiplier · ${stats.months} months)!
         </p>
+        ${restingCount > 0 ? `
+        <div style="margin-top:10px; display:flex; justify-content:flex-end;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="clearRotationCooldown()" title="Make all resting pieces available again (e.g. after doing laundry)">
+            🧺 Reset 7-Day Cooldown (Fresh Laundry)
+          </button>
+        </div>` : ''}
       </div>
     </details>
   `;
@@ -10446,31 +10486,60 @@ function evaluateOutfitScore(top, bottom, shoe, outer, accessory, opts = {}) {
   const archName = aObj ? aObj.name : 'Curated Persona';
   const personaMsg = `${aObj ? aObj.icon : '✨'} Built for ${archName} · ${blueprint.palette.name} · ${blueprint.faceRule.label.split(' ')[0]} Face × ${blueprint.bodyRule.label.split('(')[0].trim()} Silhouette`;
 
-  // Wardrobe Maximizer Anti-Repetition & Rotation Check
-  const wearLog = opts.skipWearLog ? [] : getWearLog();
+  // Wardrobe Maximizer 7-Day Cooldown & Anti-Repetition Rotation Check (ALL pieces: top, layers, bottom, shoes, belt, accessory)
+  const cooldownInfo = opts.skipWearLog
+    ? null
+    : (opts.cooldownInfo || (typeof buildRotationCooldownMap === 'function'
+        ? buildRotationCooldownMap(opts.referenceDateKey || null, { context: 'main', extraEntries: opts.extraWornEntries })
+        : null));
   let isNeverWorn = true;
-  for (let i = 0; i < Math.min(10, wearLog.length); i++) {
-    const entry = wearLog[i];
-    if (entry.topId === top.id && entry.bottomId === bottom.id) {
+  let minDaysAgo = null;
+  let allRested7d = true;
+  let hasYesterdayRepeat = false;
+
+  if (cooldownInfo && !opts.skipWearLog) {
+    const comboKey = `${top.id}|${bottom.id}`;
+    const fullComboKey = shoe ? `${top.id}|${bottom.id}|${shoe.id}` : null;
+    const comboDays = cooldownInfo.comboDaysAgo.get(comboKey);
+    const fullComboDays = fullComboKey ? cooldownInfo.fullComboDaysAgo.get(fullComboKey) : null;
+    if (comboDays != null) {
       isNeverWorn = false;
-      score -= (60 - i * 4);
-    } else if (entry.topId === top.id) {
-      score -= 18;
-    } else if (entry.bottomId === bottom.id) {
-      score -= 15;
+      score -= (comboDays <= 7 ? 110 : (comboDays <= 14 ? 48 : 20));
+    } else {
+      score += 24;
     }
-    if (midLayer && entry.midLayerId === midLayer.id) {
-      score -= 10;
+    if (fullComboDays != null && fullComboDays <= 14) {
+      score -= 60;
     }
-  }
-  if (isNeverWorn && !opts.skipWearLog) {
-    score += 28;
-  }
-  if (!opts.skipWearLog) {
-    [top, midLayer, outer, bottom].filter(Boolean).forEach(it => {
+
+    const slotWeights = [
+      { item: top, w: 1.0, track: true },
+      { item: bottom, w: 0.95, track: true },
+      { item: shoe, w: 0.9, track: true },
+      { item: midLayer, w: 0.75, track: true },
+      { item: outer, w: 0.7, track: true },
+      { item: beltItem, w: 0.35, track: false },
+      { item: accessory, w: 0.4, track: false }
+    ];
+    slotWeights.forEach(({ item, w, track }) => {
+      if (!item) return;
+      score += getRotationPenaltyForItem(item, cooldownInfo, w);
+      if (track) {
+        const d = cooldownInfo.itemDaysAgo.get(item.id);
+        if (d != null) {
+          if (minDaysAgo == null || d < minDaysAgo) minDaysAgo = d;
+          if (d < (cooldownInfo.cooldownDays || ROTATION_COOLDOWN_DAYS)) allRested7d = false;
+          if (d === 1) hasYesterdayRepeat = true;
+        }
+      }
+    });
+
+    // Under-worn fairness across ALL core slots (including shoes!) so every piece in the closet gets real airtime
+    [top, midLayer, outer, bottom, shoe].filter(Boolean).forEach(it => {
       const wcCount = getItemWearCount(it);
-      if (wcCount === 0) score += 8;
-      else score -= Math.min(20, wcCount * 2.5);
+      if (wcCount === 0) score += 16;
+      else if (wcCount === 1) score += 4;
+      else score -= Math.min(30, wcCount * 3.5);
     });
   }
 
@@ -10494,7 +10563,18 @@ function evaluateOutfitScore(top, bottom, shoe, outer, accessory, opts = {}) {
     }
   }
 
-  return { score, astralAligned, astralMsg, personaMsg, seasonMsg, seasonInfo: sInfo, isNeverWorn, blueprint, personalEval };
+  return {
+    score,
+    astralAligned,
+    astralMsg,
+    personaMsg,
+    seasonMsg,
+    seasonInfo: sInfo,
+    isNeverWorn,
+    rotationStatus: { allRested7d, minDaysAgo, hasYesterdayRepeat },
+    blueprint,
+    personalEval
+  };
 }
 
 function shuffle(arr) {
@@ -10506,6 +10586,68 @@ function shuffle(arr) {
   return a;
 }
 
+function hashStringToUnit(str) {
+  let h = 2166136261 >>> 0;
+  const s = String(str || '');
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return (h % 1000003) / 1000003;
+}
+
+function makeSeededRng(seedStr) {
+  let state = (Math.floor(hashStringToUnit(seedStr) * 0x7fffffff) || 1234567) >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+function pickQualityWeighted(scoredList, opts = {}) {
+  if (!Array.isArray(scoredList) || scoredList.length === 0) return null;
+  const sorted = [...scoredList].sort((a, b) => b.score - a.score);
+  if (sorted.length === 1) return sorted[0];
+
+  // Optional deduplication (e.g., keep best stack per distinct base top so 1 shirt doesn't monopolize all top contenders)
+  let contenders = sorted;
+  if (typeof opts.dedupKeyFn === 'function') {
+    const seen = new Set();
+    contenders = [];
+    for (const entry of sorted) {
+      const k = opts.dedupKeyFn(entry);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      contenders.push(entry);
+    }
+  }
+
+  const bestScore = contenders[0].score;
+  const scoreBand = typeof opts.scoreBand === 'number' ? opts.scoreBand : 24;
+  const maxContenders = typeof opts.maxContenders === 'number' ? opts.maxContenders : 6;
+  const temperature = typeof opts.temperature === 'number' ? opts.temperature : 12;
+  const rng = typeof opts.rng === 'function' ? opts.rng : Math.random;
+
+  let band = contenders.filter(c => (bestScore - c.score) <= scoreBand).slice(0, maxContenders);
+  if (band.length === 0) band = [contenders[0]];
+  if (band.length === 1) return band[0];
+
+  const weights = band.map(c => {
+    const baseW = Math.exp((c.score - bestScore) / Math.max(2, temperature));
+    const wearBonus = typeof opts.wearCountFn === 'function'
+      ? (opts.wearCountFn(c) === 0 ? 1.35 : (1 / (1 + opts.wearCountFn(c) * 0.15)))
+      : 1;
+    return Math.max(0.01, baseW * wearBonus);
+  });
+  const totalW = weights.reduce((s, w) => s + w, 0);
+  let r = rng() * totalW;
+  for (let i = 0; i < band.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return band[i];
+  }
+  return band[band.length - 1];
+}
+
 function pickItem(candidates) {
   if (candidates.length === 0) return null;
   return candidates[Math.floor(Math.random() * candidates.length)];
@@ -10514,13 +10656,23 @@ function pickItem(candidates) {
 function buildDailyOutfitCandidatePools(options = {}) {
   const previewOnly = !!(options && options.previewOnly);
   const targetDate = (options && options.targetDate) ? options.targetDate : null;
+  const refDateKey = (options && options.referenceDateKey)
+    || (targetDate ? isoDate(targetDate) : getOutfitDayKey());
   const avoidSet = new Set(Array.isArray(options && options.avoidIds) ? options.avoidIds : []);
   const targetFormality = options.targetFormality || getDayFormality(targetDate || new Date());
-  const sInfo = getLocationSeasonInfo();
+  const sInfo = getLocationSeasonInfo(targetDate || undefined);
   const blueprint = buildPersonalStyleBlueprint();
   const layerInfo = getTargetTopLayers();
   const targetLayers = layerInfo.count;
   const wc = getWeatherCategory();
+  const skipCooldown = Boolean(options && options.skipCooldown);
+  const cooldownInfo = skipCooldown
+    ? null
+    : (options.cooldownInfo || buildRotationCooldownMap(refDateKey, {
+        context: 'main',
+        extraEntries: options.extraWornEntries,
+        skipSameDayCrossContext: previewOnly
+      }));
 
   const byCategory = { tops: [], bottoms: [], shoes: [], outerwear: [], accessories: [] };
   (wardrobe || []).forEach(item => {
@@ -10539,6 +10691,29 @@ function buildDailyOutfitCandidatePools(options = {}) {
   const allowSandalsInMain = areSandalsAllowedToday(targetFormality, targetDate);
   const todaySkippedIds = (!previewOnly && typeof getTodayDislikedIds === 'function') ? getTodayDislikedIds() : new Set();
 
+  // Helper: apply 7-day cooldown & hard never-yesterday filter across progressive valid suitability tiers
+  const selectWithCooldownTiers = (tiers) => {
+    const nonEmptyTiers = tiers.filter(t => Array.isArray(t) && t.length > 0);
+    if (!nonEmptyTiers.length) return [];
+    if (!cooldownInfo) return nonEmptyTiers[0];
+    const hasNonConsecutive = (arr) => arr.some(it => {
+      const d = cooldownInfo.itemDaysAgo.get(it.id);
+      return d == null || d >= 2;
+    });
+    const hasRested7d = (arr) => arr.some(it => {
+      const d = cooldownInfo.itemDaysAgo.get(it.id);
+      return d == null || d >= (cooldownInfo.cooldownDays || ROTATION_COOLDOWN_DAYS);
+    });
+    // Prefer the narrowest suitability tier that has rested (7d+) pieces; if none, prefer the narrowest tier that avoids yesterday (daysAgo === 1)
+    for (const t of nonEmptyTiers) {
+      if (hasRested7d(t)) return filterByRotationCooldown(t, cooldownInfo);
+    }
+    for (const t of nonEmptyTiers) {
+      if (hasNonConsecutive(t)) return filterByRotationCooldown(t, cooldownInfo);
+    }
+    return filterByRotationCooldown(nonEmptyTiers[0], cooldownInfo);
+  };
+
   const filterCat = (items, opts = {}) => {
     const allowedAll = items.filter(it => !isItemDisliked(it));
     const allowedToday = allowedAll.filter(it => !todaySkippedIds.has(it.id) && !avoidSet.has(it.id));
@@ -10552,12 +10727,16 @@ function buildDailyOutfitCandidatePools(options = {}) {
       !isWorkDisallowedItem(it, targetFormality)
     );
     const pool = dayFiltered.length > 0 ? dayFiltered : (allowed.length > 0 ? allowed : items);
-    if (opts.skipWeatherFormality) return pool;
-    let suitable = pool.filter(it => weatherSuitable(it) && formalityMatch(it.formality, targetFormality));
-    if (suitable.length === 0) suitable = pool.filter(it => weatherSuitable(it));
-    if (suitable.length === 0) suitable = pool.filter(it => formalityMatch(it.formality, targetFormality));
-    if (suitable.length === 0) suitable = pool;
-    return suitable;
+    if (opts.skipWeatherFormality) {
+      return opts.skipCooldownFilter ? pool : filterByRotationCooldown(pool, cooldownInfo);
+    }
+    const wxAndForm = pool.filter(it => weatherSuitable(it) && formalityMatch(it.formality, targetFormality));
+    const wxOnly = pool.filter(it => weatherSuitable(it));
+    const formOnly = pool.filter(it => formalityMatch(it.formality, targetFormality));
+    if (opts.skipCooldownFilter) {
+      return wxAndForm.length ? wxAndForm : (wxOnly.length ? wxOnly : (formOnly.length ? formOnly : pool));
+    }
+    return selectWithCooldownTiers([wxAndForm, wxOnly, formOnly, pool]);
   };
 
   const topsFiltered = filterCat(byCategory.tops);
@@ -10571,11 +10750,16 @@ function buildDailyOutfitCandidatePools(options = {}) {
     (allowGymInMain || !isGymOrLoungeItem(it)) &&
     !isWorkDisallowedItem(it, targetFormality)
   );
-  const allowedTops = allowedTopsDay.length > 0 ? allowedTopsDay : allowedTopsRaw;
+  const allowedTopsNoSkip = allowedTopsRaw.filter(it =>
+    !todaySkippedIds.has(it.id) &&
+    (allowGymInMain || !isGymOrLoungeItem(it)) &&
+    !isWorkDisallowedItem(it, targetFormality)
+  );
+  const allowedTops = allowedTopsDay.length > 0 ? allowedTopsDay : (allowedTopsNoSkip.length > 0 ? allowedTopsNoSkip : allowedTopsRaw);
 
   const trueBaseTops = topsFiltered.filter(isBaseTop);
-  const fallbackBaseTops = allowedTops.filter(isBaseTop);
-  const anyBaseTops = allowedTopsRaw.filter(isBaseTop);
+  const fallbackBaseTops = filterByRotationCooldown(allowedTops.filter(isBaseTop), cooldownInfo);
+  const anyBaseTops = filterByRotationCooldown(allowedTopsRaw.filter(isBaseTop), cooldownInfo);
   const baseTops = trueBaseTops.length > 0 ? trueBaseTops
     : (fallbackBaseTops.length > 0 ? fallbackBaseTops
     : (anyBaseTops.length > 0 ? anyBaseTops : topsFiltered));
@@ -10584,28 +10768,28 @@ function buildDailyOutfitCandidatePools(options = {}) {
   const rawOuterwearNonGym = allowGymInMain
     ? rawOuterwearAll
     : rawOuterwearAll.filter(it => !isGymOrLoungeItem(it) && !isWorkDisallowedItem(it, targetFormality));
-  const rawOuterwear = rawOuterwearNonGym.length > 0 ? rawOuterwearNonGym : byCategory.outerwear.filter(it => !isItemDisliked(it));
+  const rawOuterwearFallback = byCategory.outerwear.filter(it => !isItemDisliked(it) && !todaySkippedIds.has(it.id) && (allowGymInMain || (!isGymOrLoungeItem(it) && !isWorkDisallowedItem(it, targetFormality))));
+  const rawOuterwear = rawOuterwearNonGym.length > 0 ? rawOuterwearNonGym : (rawOuterwearFallback.length > 0 ? rawOuterwearFallback : byCategory.outerwear.filter(it => !isItemDisliked(it)));
 
-  const rawMidCandidates = [
+  const rawMidCandidatesAll = [
     ...allowedTops.filter(isMidLayerCandidate),
     ...rawOuterwear.filter(isMidLayerCandidate)
   ];
-  const suitableMid = rawMidCandidates.filter(it => weatherSuitable(it) && formalityMatch(it.formality, targetFormality));
-  const formMid = rawMidCandidates.filter(it => formalityMatch(it.formality, targetFormality));
-  const wxMid = rawMidCandidates.filter(it => weatherSuitable(it));
-  const midLayers = suitableMid.length > 0 ? suitableMid
-    : (formMid.length > 0 ? formMid
-    : (wxMid.length > 0 ? wxMid : rawMidCandidates));
+  const rawMidCandidates = filterByRotationCooldown(rawMidCandidatesAll, cooldownInfo);
+  const suitableMid = rawMidCandidatesAll.filter(it => weatherSuitable(it) && formalityMatch(it.formality, targetFormality));
+  const formMid = rawMidCandidatesAll.filter(it => formalityMatch(it.formality, targetFormality));
+  const wxMid = rawMidCandidatesAll.filter(it => weatherSuitable(it));
+  const midLayers = selectWithCooldownTiers([suitableMid, formMid, wxMid, rawMidCandidatesAll]);
 
-  const rawOuterShells = rawOuterwear.filter(isOuterShellCandidate);
-  const suitableOuter = rawOuterShells.filter(it => weatherSuitable(it) && formalityMatch(it.formality, targetFormality));
-  const wxOuter = rawOuterShells.filter(it => weatherSuitable(it));
-  const formOuter = rawOuterShells.filter(it => formalityMatch(it.formality, targetFormality));
-  const outerShells = suitableOuter.length > 0 ? suitableOuter
-    : (wxOuter.length > 0 ? wxOuter
-    : (formOuter.length > 0 ? formOuter : rawOuterShells));
+  const rawOuterShellsAll = rawOuterwear.filter(isOuterShellCandidate);
+  const rawOuterShells = filterByRotationCooldown(rawOuterShellsAll, cooldownInfo);
+  const suitableOuter = rawOuterShellsAll.filter(it => weatherSuitable(it) && formalityMatch(it.formality, targetFormality));
+  const wxOuter = rawOuterShellsAll.filter(it => weatherSuitable(it));
+  const formOuter = rawOuterShellsAll.filter(it => formalityMatch(it.formality, targetFormality));
+  const outerShells = selectWithCooldownTiers([suitableOuter, wxOuter, formOuter, rawOuterShellsAll]);
 
-  const belts = byCategory.accessories.filter(a => isBeltItem(a) && !isItemDisliked(a) && !todaySkippedIds.has(a.id));
+  const allEligibleBelts = byCategory.accessories.filter(a => isBeltItem(a) && !isItemDisliked(a) && !todaySkippedIds.has(a.id));
+  const belts = filterByRotationCooldown(allEligibleBelts, cooldownInfo);
   const nonBeltAccessories = filterCat(byCategory.accessories.filter(a => !isBeltItem(a)));
 
   return {
@@ -10616,6 +10800,8 @@ function buildDailyOutfitCandidatePools(options = {}) {
     layerInfo,
     targetLayers,
     wc,
+    refDateKey,
+    cooldownInfo,
     allowGymInMain,
     allowShortsInMain,
     allowSandalsInMain,
@@ -10629,16 +10815,31 @@ function buildDailyOutfitCandidatePools(options = {}) {
     shoes,
     allShoesAllowed,
     belts,
+    allEligibleBelts,
     nonBeltAccessories
   };
+}
+
+function selectBeltForShoeWithRotation(shoe, bottom, top, upperLayer, restedBelts, allBelts) {
+  const restedRec = proposeBeltForOutfit(shoe, bottom, top, upperLayer, restedBelts || []);
+  if (restedRec.status === 'none' || restedRec.colorMatchClose || !Array.isArray(allBelts) || allBelts.length <= (restedBelts || []).length) {
+    return restedRec;
+  }
+  const allRec = proposeBeltForOutfit(shoe, bottom, top, upperLayer, allBelts);
+  // Only fall back to a cooling-down belt if no rested belt was close AND an all-belt option IS a close leather match
+  if (allRec.beltItem && allRec.colorMatchClose && !restedRec.colorMatchClose) {
+    return allRec;
+  }
+  return restedRec.beltItem ? restedRec : allRec;
 }
 
 function rankShoesForLockedOutfit(top, midLayer, outer, bottom, shoeCandidates, beltsPool, opts = {}) {
   const blueprint = opts.blueprint || buildPersonalStyleBlueprint();
   const targetFormality = opts.targetFormality || (typeof getDayFormality === 'function' ? getDayFormality() : 'casual');
   const sInfo = opts.seasonInfo || getLocationSeasonInfo();
+  const allBeltsFallback = opts.allEligibleBelts || beltsPool || [];
   const scored = (shoeCandidates || []).map(shoe => {
-    const beltRec = proposeBeltForOutfit(shoe, bottom, top, outer || midLayer, beltsPool || []);
+    const beltRec = selectBeltForShoeWithRotation(shoe, bottom, top, outer || midLayer, beltsPool || [], allBeltsFallback);
     const shoeBeltEval = scoreShoeAndBeltForOutfit(top, midLayer, outer, bottom, shoe, beltRec, {
       seasonInfo: sInfo,
       targetFormality
@@ -10649,6 +10850,9 @@ function rankShoesForLockedOutfit(top, midLayer, outer, bottom, shoeCandidates, 
       beltRec,
       blueprint,
       targetFormality,
+      cooldownInfo: opts.cooldownInfo || null,
+      referenceDateKey: opts.referenceDateKey || null,
+      extraWornEntries: opts.extraWornEntries || null,
       skipWearLog: !!opts.skipWearLog
     });
     const mainItems = [top, midLayer, outer, bottom, shoe].filter(Boolean);
@@ -10665,6 +10869,201 @@ function rankShoesForLockedOutfit(top, midLayer, outer, bottom, shoeCandidates, 
   return scored;
 }
 
+function scoreTopStackIntrinsic(t, m, o, ctx) {
+  const { wc, sInfo, targetFormality, isWorkContext, blueprint, cooldownInfo, eligibleBottoms } = ctx;
+  const tStack = [t, m, o].filter(Boolean);
+  let sc = 100;
+
+  // 1. Weather & sleeve length fit
+  const topLen = getItemLength(t);
+  if (wc.cat === 'hot') {
+    sc += (topLen === 'short' || topLen === 'sleeveless') ? 30 : -30;
+  } else if (wc.cat === 'cold' || wc.cat === 'very-cold') {
+    if (topLen === 'long') sc += 25;
+    if (m) sc += 24;
+  } else if (wc.cat === 'cool') {
+    if (topLen === 'long') sc += 15;
+    if (m) sc += 18;
+  }
+  if (wc.isRain && o && /\b(rain|windbreaker|trench|parka|overcoat|anorak|waterproof)\b/i.test(o.subType || '')) {
+    sc += 20;
+  }
+
+  // 2. Season suitability across top stack ONLY
+  tStack.forEach(it => {
+    const itSeason = it.season || inferItemSeasonSuitability(it);
+    const subLower = ((it.subType || '') + ' ' + (it.name || '')).toLowerCase();
+    const hsl = hexToHSL(it.color || '#555555');
+    if (itSeason === sInfo.id) sc += 18;
+    else if (
+      ((sInfo.id === 'spring' || sInfo.id === 'summer') && itSeason === 'spring-summer') ||
+      ((sInfo.id === 'autumn' || sInfo.id === 'winter') && itSeason === 'autumn-winter')
+    ) sc += 14;
+    else if (itSeason === 'all-season') sc += 6;
+    if (Array.isArray(sInfo.preferredFabrics) && sInfo.preferredFabrics.some(k => subLower.includes(k))) sc += 10;
+    if (sInfo.id === 'autumn' && ((hsl.h >= 12 && hsl.h <= 55 && hsl.l <= 68) || (hsl.h >= 75 && hsl.h <= 140 && hsl.s <= 55))) sc += 6;
+    else if (sInfo.id === 'winter' && (hsl.l <= 38 || isNeutralColor(it.color))) sc += 6;
+    else if (sInfo.id === 'spring' && hsl.l >= 50 && hsl.s >= 18) sc += 6;
+    else if (sInfo.id === 'summer' && hsl.l >= 62) sc += 8;
+  });
+
+  // 3. Layer hierarchy & workday formality
+  if (m || o) {
+    if (isWorkContext) {
+      if (isShirtBaseTop(t)) sc += 36;
+      else if (isPrimaryBaseTop(t)) {
+        const hasStructuredUpper = [m, o].some(u => u && !isHoodieOrSweatshirt(u) && formalityScore(u.formality || 'casual') >= 1.5);
+        sc += hasStructuredUpper ? 8 : -16;
+      } else if (isBaseTop(t)) sc += 20;
+      else sc -= 120;
+    } else {
+      if (isPrimaryBaseTop(t)) sc += 22;
+      else if (isBaseTop(t)) sc += 18;
+      else sc -= 120;
+    }
+  } else {
+    if (isWorkContext) {
+      if (isShirtBaseTop(t)) sc += 36;
+      else if (isPrimaryBaseTop(t)) sc -= 18;
+      else if (isBaseTop(t)) sc += 12;
+    } else {
+      if (isBaseTop(t)) sc += 12;
+    }
+  }
+
+  if (isWorkContext) {
+    tStack.forEach(it => {
+      if (isWorkDisallowedItem(it, targetFormality)) { sc -= 200; return; }
+      const fs = formalityScore(it.formality || 'casual');
+      if (fs >= 2) sc += 14;
+      else if (fs >= 1.5) sc += 5;
+      else if (fs <= 1) sc -= 6;
+    });
+  }
+  if (m && !isLayerPairCompatible(t, m, o)) sc -= 180;
+  if (o && !isLayerPairCompatible(t, m, o)) sc -= 180;
+  if (!outfitColorsHarmonious(tStack)) sc -= 65;
+
+  // 4. Personal Image Blueprint near the face (independent of bottom/shoe!)
+  const personalEval = scoreOutfitPersonalAndStyle(t, m, o, null, null, null, null, blueprint, { targetFormality });
+  sc += personalEval.personalScore;
+
+  // 5. Mood & Astral alignment on top stack
+  tStack.forEach(it => {
+    const hsl = hexToHSL(it.color);
+    const subLower = (it.subType || '').toLowerCase();
+    if (currentMood === 'energetic' && hsl.s > 45 && hsl.l > 25 && hsl.l < 75) sc += 8;
+    else if (currentMood === 'calm' && ((hsl.s <= 40 && hsl.l >= 30) || isNeutralColor(it.color))) sc += 8;
+    else if (currentMood === 'confident' && (isNeutralColor(it.color) || ['formal','business-casual','smart-casual','cocktail','black-tie'].includes(it.formality))) sc += 8;
+    else if (currentMood === 'cozy' && (/\b(sweater|hoodie|henley|flannel|knit|cardigan|fleece|cashmere|lounge)\b/.test(subLower) || (hsl.h >= 20 && hsl.h <= 55))) sc += 10;
+    else if (currentMood === 'creative' && !isNeutralColor(it.color)) sc += 8;
+  });
+
+  if (astralActive) {
+    const chart = getNatalChart();
+    if (chart) {
+      for (const it of tStack) {
+        const itemHSL = hexToHSL(it.color);
+        const planetHSL = hexToHSL(chart.luckyHex);
+        const hDiff = Math.min(Math.abs(itemHSL.h - planetHSL.h), 360 - Math.abs(itemHSL.h - planetHSL.h));
+        if (hDiff < 35 || isColorNameMatch(it.color, chart.sun.powerColors) || isColorNameMatch(it.color, chart.rising.powerColors)) {
+          sc += 18;
+          break;
+        }
+      }
+    }
+  }
+
+  // 6. Rotation cooldown & under-worn fairness (no single favorite shirt dominating every week)
+  if (cooldownInfo) {
+    sc += getRotationPenaltyForItem(t, cooldownInfo, 1.0);
+    if (m) sc += getRotationPenaltyForItem(m, cooldownInfo, 0.7);
+    if (o) sc += getRotationPenaltyForItem(o, cooldownInfo, 0.65);
+  }
+  tStack.forEach(it => {
+    const wcCount = getItemWearCount(it);
+    if (wcCount === 0) sc += 18;
+    else if (wcCount === 1) sc += 4;
+    else sc -= Math.min(30, wcCount * 3.5);
+  });
+
+  // 7. Reachability: ensure at least 1 eligible rested bottom harmonizes with this top stack
+  if (Array.isArray(eligibleBottoms) && eligibleBottoms.length > 0) {
+    const hasHarmBottom = eligibleBottoms.some(b => outfitColorsHarmonious([...tStack, b]));
+    sc += hasHarmBottom ? 10 : -45;
+  }
+
+  return sc;
+}
+
+function scoreBottomForLockedTop(topStackItems, b, ctx) {
+  const { top, midLayer, outer, wc, sInfo, targetFormality, isWorkContext, blueprint, cooldownInfo, eligibleShoes } = ctx;
+  let sc = 100;
+
+  // 1. Color harmony & tonal contrast with locked top stack (NO dummyShoe contamination!)
+  const pairItems = [...topStackItems, b];
+  sc += outfitColorsHarmonious(pairItems) ? 32 : -68;
+  const visTop = midLayer || top;
+  if (visTop?.color && b.color) {
+    const lDiff = Math.abs(hexToHSL(visTop.color).l - hexToHSL(b.color).l);
+    if (lDiff >= 18) sc += 14;
+    else if (lDiff < 8 && !isNeutralColor(b.color)) sc -= 14;
+  }
+
+  // 2. Weather, season & formality fit
+  const botLen = getItemLength(b);
+  if (wc.cat === 'hot' && botLen === 'shorts') sc += 28;
+  else if ((wc.cat === 'cold' || wc.cat === 'very-cold') && botLen === 'long') sc += 28;
+  else if ((wc.cat === 'cold' || wc.cat === 'very-cold') && botLen === 'shorts') sc -= 120;
+  else if (wc.cat === 'cool' && botLen === 'long') sc += 15;
+
+  const bSeason = b.season || inferItemSeasonSuitability(b);
+  if (bSeason === sInfo.id) sc += 16;
+  else if (
+    ((sInfo.id === 'spring' || sInfo.id === 'summer') && bSeason === 'spring-summer') ||
+    ((sInfo.id === 'autumn' || sInfo.id === 'winter') && bSeason === 'autumn-winter')
+  ) sc += 12;
+  else if (bSeason === 'all-season') sc += 6;
+
+  if (isWorkContext) {
+    if (isWorkDisallowedItem(b, targetFormality)) sc -= 200;
+    else {
+      const fs = formalityScore(b.formality || 'casual');
+      if (fs >= 2) sc += 16;
+      else if (fs >= 1.5) sc += 6;
+      else if (fs <= 1) sc -= 8;
+    }
+  }
+
+  // 3. Personal Image & Silhouette match
+  const pEval = scoreOutfitPersonalAndStyle(top, midLayer, outer, b, null, null, null, blueprint, { targetFormality });
+  sc += pEval.personalScore;
+
+  // 4. Rotation cooldown, combo freshness & wear balance
+  if (cooldownInfo) {
+    sc += getRotationPenaltyForItem(b, cooldownInfo, 0.95);
+    const ck = `${top.id}|${b.id}`;
+    const comboDays = cooldownInfo.comboDaysAgo.get(ck);
+    if (comboDays != null) {
+      sc -= (comboDays <= 7 ? 110 : (comboDays <= 14 ? 48 : 18));
+    } else {
+      sc += 22;
+    }
+  }
+  const wcCount = getItemWearCount(b);
+  if (wcCount === 0) sc += 16;
+  else if (wcCount === 1) sc += 4;
+  else sc -= Math.min(28, wcCount * 3.5);
+
+  // 5. Footwear reachability: ensure at least 1 eligible rested shoe pairs well with (topStack + b)
+  if (Array.isArray(eligibleShoes) && eligibleShoes.length > 0) {
+    const hasHarmShoe = eligibleShoes.some(sh => outfitColorsHarmonious([...pairItems, sh]));
+    sc += hasHarmShoe ? 10 : -30;
+  }
+
+  return sc;
+}
+
 function generateOutfit(options = {}) {
   if (wardrobe.length === 0) return null;
 
@@ -10673,8 +11072,9 @@ function generateOutfit(options = {}) {
   const pools = buildDailyOutfitCandidatePools(options);
   const {
     byCategory, targetFormality, sInfo, blueprint, layerInfo, targetLayers, wc,
+    refDateKey, cooldownInfo,
     baseTops, midLayers, rawMidCandidates, outerShells, rawOuterShells,
-    bottoms, shoes, allShoesAllowed, belts, nonBeltAccessories
+    bottoms, shoes, allShoesAllowed, belts, allEligibleBelts, nonBeltAccessories
   } = pools;
 
   if (byCategory.tops.length === 0 || byCategory.bottoms.length === 0 || byCategory.shoes.length === 0) {
@@ -10784,80 +11184,71 @@ function generateOutfit(options = {}) {
     if (lockedOutfit) return lockedOutfit;
   }
 
-  // ===== 3-STEP STAGED DECISION (Local Engine / Instant Preview before 3-Step AI Stylist) =====
-  const wearLog = getWearLog();
-  const recentTopIds = new Set(wearLog.slice(0, 4).map(e => e?.topId).filter(Boolean));
-  const recentBotIds = new Set(wearLog.slice(0, 3).map(e => e?.bottomId).filter(Boolean));
+  // ===== OPTIMIZED 3-STEP STAGED DECISION (Zero dummyBottom/dummyShoe bias + 7-Day Cooldown + Quality-Gated Variety) =====
   const isWorkContext = formalityScore(targetFormality) >= 2;
-  const dummyBottom = bottoms[0] || byCategory.bottoms[0];
-  const dummyShoe = shoes[0] || byCategory.shoes[0];
+  const rng = previewOnly ? makeSeededRng(`preview|${refDateKey}|${targetFormality}|${targetLayers}`) : Math.random;
+  const shoePoolForRanking = shoes.length > 0 ? shoes : allShoesAllowed;
 
-  // STEP 1: Pick the best Top (+ Layer 2 / Layer 3 when targetLayers >= 2)
+  // STEP 1: Score all eligible rested Top stacks intrinsically (never contaminated by bottoms[0] or shoes[0]!)
+  const topCtx = { wc, sInfo, targetFormality, isWorkContext, blueprint, cooldownInfo, eligibleBottoms: bottoms };
   const topStackCandidates = [];
-  const scoreTopItem = (t, m, o) => {
-    const ev = evaluateOutfitScore(t, dummyBottom, dummyShoe, o, null, {
-      midLayer: m,
-      blueprint,
-      targetFormality,
-      skipWearLog: true
-    });
-    let sc = ev.score;
-    const tStack = [t, m, o].filter(Boolean);
-    if (!outfitColorsHarmonious(tStack)) sc -= 60;
-    if (recentTopIds.has(t.id)) sc -= 28;
-    sc -= Math.min(20, getItemWearCount(t) * 2.5);
-    if (isWorkContext && isShirtBaseTop(t)) sc += 18;
-    if (wc.isRain && o && /\b(rain|windbreaker|trench|parka|overcoat|anorak|waterproof)\b/i.test(o.subType || '')) sc += 18;
-    sc += Math.random() * 5; // subtle tie-breaker across equally great tops
-    return sc;
-  };
 
   baseTops.forEach(t => {
     if (targetLayers === 1) {
-      topStackCandidates.push({ top: t, midLayer: null, outer: null, proposedMidLayer: null, score: scoreTopItem(t, null, null) });
+      topStackCandidates.push({ top: t, midLayer: null, outer: null, proposedMidLayer: null, score: scoreTopStackIntrinsic(t, null, null, topCtx) });
     } else if (targetLayers === 2) {
       const validMids = midLayers.filter(m => isLayerPairCompatible(t, m, null));
       const validOuters = outerShells.filter(o => isLayerPairCompatible(t, null, o));
       let added = false;
       validMids.slice(0, 8).forEach(m => {
-        topStackCandidates.push({ top: t, midLayer: m, outer: null, proposedMidLayer: null, score: scoreTopItem(t, m, null) });
+        topStackCandidates.push({ top: t, midLayer: m, outer: null, proposedMidLayer: null, score: scoreTopStackIntrinsic(t, m, null, topCtx) });
         added = true;
       });
       validOuters.slice(0, 8).forEach(o => {
-        topStackCandidates.push({ top: t, midLayer: null, outer: o, proposedMidLayer: null, score: scoreTopItem(t, null, o) });
+        topStackCandidates.push({ top: t, midLayer: null, outer: o, proposedMidLayer: null, score: scoreTopStackIntrinsic(t, null, o, topCtx) });
         added = true;
       });
       if (!added) {
         const relaxedMids = rawMidCandidates.filter(m => isLayerPairCompatible(t, m, null));
         if (relaxedMids.length) {
-          topStackCandidates.push({ top: t, midLayer: relaxedMids[0], outer: null, proposedMidLayer: null, score: scoreTopItem(t, relaxedMids[0], null) });
+          topStackCandidates.push({ top: t, midLayer: relaxedMids[0], outer: null, proposedMidLayer: null, score: scoreTopStackIntrinsic(t, relaxedMids[0], null, topCtx) });
         } else {
-          topStackCandidates.push({ top: t, midLayer: null, outer: null, proposedMidLayer: null, score: scoreTopItem(t, null, null) - 10 });
+          topStackCandidates.push({ top: t, midLayer: null, outer: null, proposedMidLayer: null, score: scoreTopStackIntrinsic(t, null, null, topCtx) - 10 });
         }
       }
     } else {
       const midPool = midLayers.filter(m => isLayerPairCompatible(t, m, null));
       const relaxedMids = rawMidCandidates.filter(m => isLayerPairCompatible(t, m, null));
-      const midChoices = midPool.length ? midPool.slice(0, 5) : (relaxedMids.length ? relaxedMids.slice(0, 3) : [null]);
+      const midChoices = midPool.length ? midPool.slice(0, 6) : (relaxedMids.length ? relaxedMids.slice(0, 3) : [null]);
       midChoices.forEach(m => {
         const validOuters = outerShells.filter(o => isLayerPairCompatible(t, m, o));
         const relaxedOuters = validOuters.length ? validOuters : rawOuterShells.filter(o => isLayerPairCompatible(t, m, o));
-        const oChoices = relaxedOuters.length ? relaxedOuters.slice(0, 4) : [null];
+        const oChoices = relaxedOuters.length ? relaxedOuters.slice(0, 5) : [null];
         oChoices.forEach(o => {
+          let stackScore = scoreTopStackIntrinsic(t, m, o, topCtx);
+          if (!m && rawMidCandidates.length > 0) stackScore -= 45;
+          if (!o && rawOuterShells.length > 0) stackScore -= 55;
           topStackCandidates.push({
             top: t,
             midLayer: m,
             outer: o,
-            proposedMidLayer: !m ? buildProposedMidLayerFallback(t, dummyBottom, null, blueprint) : null,
-            score: scoreTopItem(t, m, o)
+            proposedMidLayer: !m ? buildProposedMidLayerFallback(t, bottoms[0] || byCategory.bottoms[0], null, blueprint) : null,
+            score: stackScore
           });
         });
       });
     }
   });
 
-  topStackCandidates.sort((a, b) => b.score - a.score);
-  const chosenTopStack = topStackCandidates[0] || {
+  // Deduplicate by base top so one shirt with multiple jackets doesn't crowd out other great tops, then sample across the top quality band
+  const chosenTopStack = pickQualityWeighted(topStackCandidates, {
+    dedupKeyFn: c => c.top.id,
+    scoreBand: 48,
+    temperature: 26,
+    maxContenders: 8,
+    wearCountFn: c => getItemWearCount(c.top),
+    rng
+  }) || {
     top: baseTops[0] || byCategory.tops[0],
     midLayer: null,
     outer: null,
@@ -10865,51 +11256,58 @@ function generateOutfit(options = {}) {
   };
   const { top, midLayer, outer, proposedMidLayer } = chosenTopStack;
 
-  // STEP 2: Given the locked Top (+ Layers), pick the best matching Bottom
+  // STEP 2: Given locked Top (+ Layers), score all eligible rested Bottoms cleanly (no dummyShoe bias!)
   const topStackItems = [top, midLayer, outer].filter(Boolean);
-  const scoredBottoms = bottoms.map(b => {
-    const ev = evaluateOutfitScore(top, b, dummyShoe, outer, null, {
-      midLayer,
-      blueprint,
-      targetFormality
-    });
-    let sc = ev.score;
-    const pairItems = [...topStackItems, b];
-    sc += outfitColorsHarmonious(pairItems) ? 28 : -55;
-    if (recentBotIds.has(b.id)) sc -= 18;
-    // Reward clean tonal contrast between visible top and bottom
-    const visTop = midLayer || top;
-    if (visTop?.color && b.color) {
-      const lDiff = Math.abs(hexToHSL(visTop.color).l - hexToHSL(b.color).l);
-      if (lDiff >= 18) sc += 12;
-      else if (lDiff < 8 && !isNeutralColor(b.color)) sc -= 14;
-    }
-    return { bottom: b, score: sc };
+  const botCtx = { top, midLayer, outer, wc, sInfo, targetFormality, isWorkContext, blueprint, cooldownInfo, eligibleShoes: shoePoolForRanking };
+  const scoredBottoms = bottoms.map(b => ({
+    bottom: b,
+    score: scoreBottomForLockedTop(topStackItems, b, botCtx)
+  }));
+  const chosenBotEntry = pickQualityWeighted(scoredBottoms, {
+    scoreBand: 28,
+    temperature: 16,
+    maxContenders: 5,
+    wearCountFn: c => getItemWearCount(c.bottom),
+    rng
   });
-  scoredBottoms.sort((a, b) => b.score - a.score);
-  const bottom = (scoredBottoms[0] && scoredBottoms[0].bottom) || bottoms[0] || byCategory.bottoms[0];
+  const bottom = (chosenBotEntry && chosenBotEntry.bottom) || bottoms[0] || byCategory.bottoms[0];
 
-  // STEP 3: Given locked Top + Bottom, rank ALL eligible Shoes & Belts together and pick the #1 match
+  // STEP 3: Given locked Top + Bottom, rank ALL eligible rested Shoes & Belts together and pick from the top tier
   const accessory = (() => {
     if (!nonBeltAccessories.length) return null;
     if (wc.isRain) {
       const umb = nonBeltAccessories.find(a => (a.subType || '').toLowerCase().includes('umbrella'));
       if (umb) return umb;
     }
-    return nonBeltAccessories[0];
+    const scoredAcc = nonBeltAccessories.map(a => ({
+      acc: a,
+      score: 100 + getRotationPenaltyForItem(a, cooldownInfo, 0.8) - getItemWearCount(a) * 4
+    }));
+    const pickedAcc = pickQualityWeighted(scoredAcc, { scoreBand: 18, temperature: 12, maxContenders: 4, wearCountFn: c => getItemWearCount(c.acc), rng });
+    return pickedAcc ? pickedAcc.acc : nonBeltAccessories[0];
   })();
-  const shoePoolForRanking = shoes.length > 0 ? shoes : allShoesAllowed;
-  const rankedShoes = rankShoesForLockedOutfit(top, midLayer, outer, bottom, shoePoolForRanking, belts.length ? belts : byCategory.accessories, {
+
+  const rankedShoes = rankShoesForLockedOutfit(top, midLayer, outer, bottom, shoePoolForRanking, belts, {
+    allEligibleBelts: allEligibleBelts.length ? allEligibleBelts : byCategory.accessories,
     blueprint,
     targetFormality,
     seasonInfo: sInfo,
+    cooldownInfo,
+    referenceDateKey: refDateKey,
+    extraWornEntries: options.extraWornEntries || null,
     accessory
   });
-  const bestShoeEntry = rankedShoes[0];
+  const bestShoeEntry = pickQualityWeighted(rankedShoes, {
+    scoreBand: 18,
+    temperature: 12,
+    maxContenders: 4,
+    wearCountFn: c => getItemWearCount(c.shoe),
+    rng
+  }) || rankedShoes[0];
   const shoe = bestShoeEntry ? bestShoeEntry.shoe : (shoes[0] || byCategory.shoes[0]);
   const beltRec = bestShoeEntry
     ? bestShoeEntry.beltRec
-    : proposeBeltForOutfit(shoe, bottom, top, outer || midLayer, byCategory.accessories);
+    : selectBeltForShoeWithRotation(shoe, bottom, top, outer || midLayer, belts, allEligibleBelts.length ? allEligibleBelts : byCategory.accessories);
   const evalResult = bestShoeEntry
     ? bestShoeEntry.evalResult
     : evaluateOutfitScore(top, bottom, shoe, outer, accessory, {
@@ -10917,8 +11315,16 @@ function generateOutfit(options = {}) {
         beltItem: beltRec.beltItem,
         beltRec,
         blueprint,
-        targetFormality
+        targetFormality,
+        cooldownInfo,
+        referenceDateKey: refDateKey,
+        extraWornEntries: options.extraWornEntries || null
       });
+
+  // Ensure the selected shoe appears first in rankedShoes UI list
+  const orderedRankedShoes = bestShoeEntry
+    ? [bestShoeEntry, ...rankedShoes.filter(r => r.shoe.id !== bestShoeEntry.shoe.id)]
+    : rankedShoes;
 
   const localOutfit = {
     top,
@@ -10938,7 +11344,8 @@ function generateOutfit(options = {}) {
     personaMessage: evalResult.personaMsg,
     personalEval: evalResult.personalEval,
     isNeverWorn: evalResult.isNeverWorn,
-    rankedShoes: rankedShoes.slice(0, 3).map((r, i) => ({
+    rotationStatus: evalResult.rotationStatus || null,
+    rankedShoes: orderedRankedShoes.slice(0, 3).map((r, i) => ({
       shoeId: r.shoe.id,
       rank: i + 1,
       verdict: i === 0 ? 'Best Choice' : (i === 1 ? 'Runner-Up' : '3rd Option'),
@@ -10960,8 +11367,17 @@ function saveDailyMainLock(outfit, forceNewTimestamp = false) {
   const todayStr = getOutfitDayKey();
   const targetFormality = typeof getDayFormality === 'function' ? getDayFormality() : 'casual';
   const source = outfit.aiDailyMeta ? 'ai' : 'local';
+  const weatherReady = Boolean(weather && typeof weather.temp === 'number');
+  const seasonId = (outfit.seasonInfo && outfit.seasonInfo.id) || (typeof getLocationSeasonInfo === 'function' ? getLocationSeasonInfo().id : 'spring');
   const existing = getDailyMainLock();
+  // Archive yesterday's (or any past day's) locked outfit into wearLog BEFORE overwriting it!
+  if (existing && existing.date && existing.date < todayStr && typeof archiveLockEntryToWearLog === 'function') {
+    archiveLockEntryToWearLog(existing, 'main', todayStr);
+  }
   if (!forceNewTimestamp && existing && existing.date === todayStr &&
+      existing.engineVersion === 2 &&
+      existing.weatherReady === weatherReady &&
+      existing.seasonId === seasonId &&
       existing.topId === outfit.top.id &&
       existing.bottomId === outfit.bottom.id &&
       existing.shoeId === outfit.shoe.id &&
@@ -10974,9 +11390,13 @@ function saveDailyMainLock(outfit, forceNewTimestamp = false) {
     return;
   }
   const lock = {
+    engineVersion: 2,
     date: todayStr,
     updatedAt: Date.now(),
     source,
+    weatherReady,
+    seasonId,
+    targetLayers: outfit.targetLayers || 2,
     formality: targetFormality,
     layerOverride,
     mood: currentMood,
@@ -10996,7 +11416,19 @@ function saveDailyMainLock(outfit, forceNewTimestamp = false) {
 function hydrateDailyMainLock(lock, ctx) {
   if (!lock || !ctx) return null;
   const todayStr = getOutfitDayKey();
-  if (lock.date !== todayStr) return null;
+  if (lock.date !== todayStr) {
+    if (lock.date && lock.date < todayStr && typeof archiveLockEntryToWearLog === 'function') {
+      archiveLockEntryToWearLog(lock, 'main', todayStr);
+    }
+    return null;
+  }
+  // Upgrade smoothly from legacy pre-rotation locks once
+  if (!lock.engineVersion || lock.engineVersion < 2) return null;
+  // If a provisional local lock was created before live weather loaded, regenerate cleanly now that weather arrived
+  if (lock.source === 'local' && lock.weatherReady === false && weather && typeof weather.temp === 'number') {
+    return null;
+  }
+  if (lock.seasonId && ctx.sInfo && lock.seasonId !== ctx.sInfo.id) return null;
   if (lock.formality !== ctx.targetFormality || lock.layerOverride !== layerOverride) return null;
   if (lock.mood && lock.mood !== currentMood) return null;
   const findById = (id) => id ? wardrobe.find(w => w.id === id) || null : null;
@@ -11071,6 +11503,7 @@ function hydrateDailyMainLock(lock, ctx) {
     personaMessage: evalResult.personaMsg,
     personalEval: evalResult.personalEval,
     isNeverWorn: evalResult.isNeverWorn,
+    rotationStatus: evalResult.rotationStatus || null,
     aiDailyMeta: lock.aiDailyMeta || null,
     lockSource: lock.source || (lock.aiDailyMeta ? 'ai' : 'local'),
     blueprint: ctx.blueprint
@@ -11641,9 +12074,16 @@ function renderOutfit() {
     items += renderOutfitItem(outfit.accessory, 'Finishing Accessory', `✨ #${stepNum++} · Accessory`);
   }
 
-  const freshnessHtml = outfit.isNeverWorn
-    ? `<span class="freshness-badge freshness-100">✨ 100% Fresh Combination</span>`
-    : `<span class="freshness-badge freshness-rotated">🔄 Smart Rotation</span>`;
+  const rot = outfit.rotationStatus || null;
+  const freshnessHtml = (rot && rot.allRested7d && outfit.isNeverWorn)
+    ? `<span class="freshness-badge freshness-100" title="All pieces rested 7+ days and fresh pairing">✨ 100% Fresh · 7-Day Rested</span>`
+    : (rot && rot.allRested7d)
+      ? `<span class="freshness-badge freshness-100" title="Every piece in this outfit has rested at least 7 days">✨ 7-Day Rested Pieces</span>`
+      : (rot && typeof rot.minDaysAgo === 'number' && rot.minDaysAgo >= 2)
+        ? `<span class="freshness-badge freshness-rotated" title="No consecutive-day repeats — shortest rest across these pieces is ${rot.minDaysAgo} days">🔄 Smart Rotation (${rot.minDaysAgo}d+ rested)</span>`
+        : (outfit.isNeverWorn
+            ? `<span class="freshness-badge freshness-100">✨ 100% Fresh Combination</span>`
+            : `<span class="freshness-badge freshness-rotated">🔄 Smart Rotation</span>`);
 
   const autoTempInfo = getAutoTopLayersFromTemp();
   const formalityLevels = getAllFormalityLevels();
@@ -11907,12 +12347,61 @@ function renderTomorrowPreview() {
     return;
   }
 
-  const tomorrowKey = addDays(getOutfitDayKey(), 1);
+  const todayKey = getOutfitDayKey();
+  const tomorrowKey = addDays(todayKey, 1);
   const tomorrowDate = parseISO(tomorrowKey);
   const tomorrowLabel = fmtDate(tomorrowKey);
   const tomorrowWx = getTomorrowWeatherContext();
   const tomorrowFormality = getDayFormality(tomorrowDate);
-  const previewOutfit = withWeather(tomorrowWx, () => generateOutfit({ previewOnly: true, targetDate: tomorrowDate }));
+
+  // Treat today's currently shown/locked outfits as worn today so Tomorrow Preview NEVER repeats today's pieces
+  const extraWornEntries = [];
+  const curMain = (typeof window !== 'undefined' && window.lastRenderedMainOutfit) || null;
+  if (curMain && curMain.top && curMain.bottom) {
+    extraWornEntries.push({
+      date: todayKey,
+      context: 'main',
+      source: 'auto-shown',
+      topId: curMain.top.id,
+      midLayerId: curMain.midLayer?.id || null,
+      outerId: curMain.outerwear?.id || null,
+      bottomId: curMain.bottom.id,
+      shoeId: curMain.shoe?.id || null,
+      beltId: curMain.beltRec?.beltItem?.id || null,
+      accessoryId: curMain.accessory?.id || null
+    });
+  } else {
+    const savedMain = getDailyMainLock();
+    if (savedMain && savedMain.date === todayKey) {
+      extraWornEntries.push({ ...savedMain, context: 'main', source: 'auto-shown', outerId: savedMain.outerwearId || null });
+    }
+  }
+  const curEx = (typeof activeExerciseOutfit === 'object' && activeExerciseOutfit && activeExerciseOutfit.date === todayKey)
+    ? activeExerciseOutfit
+    : null;
+  if (curEx && curEx.top && curEx.bottom) {
+    extraWornEntries.push({
+      date: todayKey,
+      context: 'exercise',
+      source: 'auto-shown',
+      topId: curEx.top.id,
+      secondLayerId: curEx.secondLayer?.id || null,
+      bottomId: curEx.bottom.id,
+      shoeId: curEx.shoe?.id || null
+    });
+  } else {
+    const savedEx = safeJSON('wtw_exercise_outfit_today', null);
+    if (savedEx && savedEx.date === todayKey) {
+      extraWornEntries.push({ ...savedEx, context: 'exercise', source: 'auto-shown' });
+    }
+  }
+
+  const previewOutfit = withWeather(tomorrowWx, () => generateOutfit({
+    previewOnly: true,
+    targetDate: tomorrowDate,
+    referenceDateKey: tomorrowKey,
+    extraWornEntries
+  }));
 
   if (!previewOutfit || !previewOutfit.top) {
     section.innerHTML = '';
@@ -11920,7 +12409,11 @@ function renderTomorrowPreview() {
   }
 
   const previewEx = (typeof generateExerciseOutfit === 'function')
-    ? withWeather(tomorrowWx, () => generateExerciseOutfit())
+    ? withWeather(tomorrowWx, () => generateExerciseOutfit([], {
+        previewOnly: true,
+        referenceDateKey: tomorrowKey,
+        extraWornEntries
+      }))
     : null;
 
   const wxIcon = tomorrowWx.main === 'rain' ? '🌧️' : tomorrowWx.main === 'snow' ? '❄️' : tomorrowWx.main === 'clouds' ? '⛅' : '☀️';
@@ -11943,8 +12436,9 @@ function renderTomorrowPreview() {
   ].filter(p => p && p.item);
 
   const cardsHtml = pieces.map(({ role, item }) => {
-    const thumb = item.photo
-      ? `<img class="tomorrow-preview-thumb" src="${escapeHtml(item.photo)}" alt="${escapeHtml(item.name)}">`
+    const imgSrc = item.image || item.photo || '';
+    const thumb = imgSrc
+      ? `<img class="tomorrow-preview-thumb" src="${escapeHtml(imgSrc)}" alt="${escapeHtml(item.name)}">`
       : `<div class="tomorrow-preview-thumb">${getCategoryEmoji ? getCategoryEmoji(item.category) : '👕'}</div>`;
     return `
       <div class="tomorrow-preview-item">
@@ -12100,8 +12594,10 @@ function isExerciseSecondLayerCandidate(it) {
   return false;
 }
 
-function generateExerciseOutfit(avoidIds = []) {
-  const tripCtx = (typeof getActiveTripContext === 'function') ? getActiveTripContext() : null;
+function generateExerciseOutfit(avoidIds = [], opts = {}) {
+  const previewOnly = !!(opts && opts.previewOnly);
+  const refDateKey = (opts && opts.referenceDateKey) || getOutfitDayKey();
+  const tripCtx = (typeof getActiveTripContext === 'function') ? getActiveTripContext(false, opts.targetDate || null) : null;
   const pool = (tripCtx && tripCtx.checklistItems.length >= 3) ? tripCtx.checklistItems : wardrobe;
   if (!pool || pool.length < 3) return null;
 
@@ -12133,13 +12629,33 @@ function generateExerciseOutfit(avoidIds = []) {
   const shoesPool = exValidShoes.length ? exValidShoes : rawShoesPool;
   if (!topsPool.length || !bottomsPool.length || !shoesPool.length) return null;
 
-  const todaySkipped = (typeof getTodayDislikedIds === 'function') ? getTodayDislikedIds() : new Set();
-  const avoidSet = new Set(typeof avoidIds !== 'undefined' && Array.isArray(avoidIds) ? avoidIds : []);
+  const todaySkipped = (!previewOnly && typeof getTodayDislikedIds === 'function') ? getTodayDislikedIds() : new Set();
+  const avoidSet = new Set(Array.isArray(avoidIds) ? avoidIds : []);
+  const cooldownInfo = typeof buildRotationCooldownMap === 'function'
+    ? buildRotationCooldownMap(refDateKey, {
+        context: 'exercise',
+        extraEntries: opts.extraWornEntries,
+        skipSameDayCrossContext: previewOnly
+      })
+    : null;
+
   const isAvailable = (x) => x && !avoidSet.has(x.id) && !todaySkipped.has(x.id);
+  const isFreshAvailable = (x) => {
+    if (!isAvailable(x)) return false;
+    if (!cooldownInfo) return true;
+    const d = cooldownInfo.itemDaysAgo.get(x.id);
+    return d == null || d >= 2;
+  };
   const preferSport = (list, cat) => {
     const strict = list.filter(isStrictSportPiece);
-    if (strict.some(isAvailable)) return strict;
+    if (strict.some(isFreshAvailable)) return strict;
     const broader = list.filter(isExerciseCandidate);
+    if (broader.some(isFreshAvailable)) return broader;
+    if (cat === 'shoes') {
+      const casualShoes = list.filter(s => /\b(sneaker|trainer|runner|slip-on)\b/i.test((s.subType || '') + ' ' + (s.name || '')));
+      if (casualShoes.some(isFreshAvailable)) return casualShoes;
+    }
+    if (strict.some(isAvailable)) return strict;
     if (broader.some(isAvailable)) return broader;
     if (cat === 'shoes') {
       const casualShoes = list.filter(s => /\b(sneaker|trainer|runner|slip-on)\b/i.test((s.subType || '') + ' ' + (s.name || '')));
@@ -12184,8 +12700,9 @@ function generateExerciseOutfit(avoidIds = []) {
   }
   exShoes = nonFormal(exShoes);
 
-  // Date-seeded daily tie-breaker so it proposes a consistent daily look all morning
-  const dayNum = Math.floor(Date.now() / 86400000);
+  const rng = previewOnly ? makeSeededRng(`ex-preview|${refDateKey}`) : Math.random;
+
+  // Apply strict 7-day cooldown & never-yesterday filtering + quality-gated variety selection
   const pickBest = (list, scorer) => {
     let filtered = list.filter(x => !avoidSet.has(x.id) && !todaySkipped.has(x.id));
     if (!filtered.length && avoidSet.size) {
@@ -12195,37 +12712,51 @@ function generateExerciseOutfit(avoidIds = []) {
       filtered = list.filter(x => !todaySkipped.has(x.id));
     }
     if (!filtered.length) filtered = list;
-    return [...filtered].sort((a, b) => scorer(b) - scorer(a))[0];
+    if (cooldownInfo && typeof filterByRotationCooldown === 'function' && filtered.length > 1) {
+      filtered = filterByRotationCooldown(filtered, cooldownInfo);
+    }
+    const scored = filtered.map(item => ({ item, score: scorer(item) }));
+    const chosen = pickQualityWeighted(scored, {
+      scoreBand: 16,
+      temperature: 10,
+      maxContenders: 5,
+      wearCountFn: c => getItemWearCount(c.item),
+      rng
+    });
+    return chosen ? chosen.item : filtered[0];
   };
 
   const scoreTop = (t) => {
-    let s = isStrictSportPiece(t) ? 30 : 10;
+    let s = isStrictSportPiece(t) ? 26 : 14;
     const len = getItemLength(t);
     if ((morningTemp >= 14 || exerciseSecondLayer || exercisePreferShorts) && (len === 'short' || len === 'sleeveless')) {
       s += 12;
     } else if (morningTemp < 12 && !exercisePreferShorts && !exerciseSecondLayer && len === 'long') {
       s += 8;
     }
-    s -= getItemWearCount(t) * 2;
-    s += ((dayNum + t.id.charCodeAt(0)) % 7) * 0.5;
+    s += getRotationPenaltyForItem(t, cooldownInfo, 1.0);
+    const wc = getItemWearCount(t);
+    s += (wc === 0 ? 14 : -Math.min(24, wc * 3));
     return s;
   };
 
   const scoreBottom = (b) => {
-    let s = isStrictSportPiece(b) ? 30 : 10;
+    let s = isStrictSportPiece(b) ? 26 : 14;
     const len = getItemLength(b);
     if (exercisePreferShorts && (len === 'shorts' || isShortsBottom(b))) s += 40;
     else if (morningTemp >= 17 && len === 'shorts') s += 15;
     else if (morningTemp < 17 && len === 'long') s += 15;
-    s -= getItemWearCount(b) * 2;
-    s += ((dayNum + b.id.charCodeAt(0)) % 7) * 0.5;
+    s += getRotationPenaltyForItem(b, cooldownInfo, 0.95);
+    const wc = getItemWearCount(b);
+    s += (wc === 0 ? 14 : -Math.min(24, wc * 3));
     return s;
   };
 
   const scoreShoe = (sh) => {
-    let s = isStrictSportPiece(sh) ? 35 : (/\b(sneaker|trainer|runner)\b/i.test((sh.subType || '') + ' ' + (sh.name || '')) ? 22 : 0);
-    s -= getItemWearCount(sh) * 1.5;
-    s += ((dayNum + sh.id.charCodeAt(0)) % 5) * 0.5;
+    let s = isStrictSportPiece(sh) ? 28 : (/\b(sneaker|trainer|runner)\b/i.test((sh.subType || '') + ' ' + (sh.name || '')) ? 20 : 0);
+    s += getRotationPenaltyForItem(sh, cooldownInfo, 0.9);
+    const wc = getItemWearCount(sh);
+    s += (wc === 0 ? 12 : -Math.min(20, wc * 2.5));
     return s;
   };
 
@@ -12239,10 +12770,11 @@ function generateExerciseOutfit(avoidIds = []) {
     const layerPool = pool.filter(i => i.id !== top.id && isExerciseSecondLayerCandidate(i));
     if (layerPool.length) {
       secondLayer = pickBest(layerPool, (l) => {
-        let s = isStrictSportPiece(l) ? 30 : 12;
-        if (l.formality === 'athleisure') s += 12;
-        s -= getItemWearCount(l) * 1.5;
-        s += ((dayNum + l.id.charCodeAt(0)) % 5) * 0.5;
+        let s = isStrictSportPiece(l) ? 26 : 14;
+        if (l.formality === 'athleisure') s += 10;
+        s += getRotationPenaltyForItem(l, cooldownInfo, 0.8);
+        const wc = getItemWearCount(l);
+        s += (wc === 0 ? 10 : -Math.min(20, wc * 2.5));
         return s;
       });
     }
@@ -12254,8 +12786,13 @@ function generateExerciseOutfit(avoidIds = []) {
 function saveExerciseOutfitState(ex) {
   if (!ex || !ex.top || !ex.bottom || !ex.shoe) return;
   const todayStr = ex.date || getOutfitDayKey();
+  const prevSaved = safeJSON('wtw_exercise_outfit_today', null);
+  if (prevSaved && prevSaved.date && prevSaved.date < todayStr && typeof archiveLockEntryToWearLog === 'function') {
+    archiveLockEntryToWearLog(prevSaved, 'exercise', todayStr);
+  }
   try {
     localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
+      engineVersion: 2,
       date: todayStr,
       updatedAt: Date.now(),
       topId: ex.top.id,
@@ -12414,7 +12951,9 @@ function renderExerciseOutfit() {
   if (!lockedFromTrip && (!activeExerciseOutfit || activeExerciseOutfit.date !== todayStr)) {
     try {
       const saved = safeJSON('wtw_exercise_outfit_today', null);
-      if (saved && saved.date === todayStr) {
+      if (saved && saved.date && saved.date < todayStr && typeof archiveLockEntryToWearLog === 'function') {
+        archiveLockEntryToWearLog(saved, 'exercise', todayStr);
+      } else if (saved && saved.date === todayStr && saved.engineVersion >= 2) {
         const top = wardrobe.find(w => w.id === saved.topId);
         const secondLayer = saved.secondLayerId ? wardrobe.find(w => w.id === saved.secondLayerId) : null;
         const bottom = wardrobe.find(w => w.id === saved.bottomId);
@@ -12553,34 +13092,49 @@ function toggleExercisePreferShorts() {
   toast(exercisePreferShorts ? '🩳 Morning exercise set to Prefer Shorts' : '🏃 Morning exercise set to auto-select by temperature');
 }
 
+const todayExShuffledAvoidIds = new Set();
+let todayExShuffledDay = null;
+
 function shuffleExerciseOutfit() {
-  const avoid = activeExerciseOutfit
+  const todayStr = getOutfitDayKey();
+  if (todayExShuffledDay !== todayStr) {
+    todayExShuffledAvoidIds.clear();
+    todayExShuffledDay = todayStr;
+  }
+  const currentIds = activeExerciseOutfit
     ? [activeExerciseOutfit.top?.id, activeExerciseOutfit.secondLayer?.id, activeExerciseOutfit.bottom?.id, activeExerciseOutfit.shoe?.id].filter(Boolean)
     : [];
-  const picked = generateExerciseOutfit(avoid);
+  currentIds.forEach(id => todayExShuffledAvoidIds.add(id));
+  let picked = generateExerciseOutfit(Array.from(todayExShuffledAvoidIds));
+  if (!picked || (activeExerciseOutfit && picked.top?.id === activeExerciseOutfit.top?.id && picked.bottom?.id === activeExerciseOutfit.bottom?.id)) {
+    todayExShuffledAvoidIds.clear();
+    currentIds.forEach(id => todayExShuffledAvoidIds.add(id));
+    picked = generateExerciseOutfit(currentIds);
+  }
   if (!picked) { toast('No alternative exercise pieces found'); return; }
-  const todayStr = getOutfitDayKey();
   activeExerciseOutfit = { date: todayStr, ...picked, logged: false };
   saveExerciseOutfitState(activeExerciseOutfit);
   renderExerciseOutfit();
 }
 
 function logExerciseWearToday(topId, secondLayerId, bottomId, shoeId) {
+  const todayStr = getOutfitDayKey();
   const ids = [topId, secondLayerId, bottomId, shoeId].filter(Boolean);
-  const updated = [];
-  ids.forEach(id => {
-    const it = wardrobe.find(w => w.id === id);
-    if (it) {
-      it.wearCount = (typeof it.wearCount === 'number' ? it.wearCount : Math.max(0, getItemWearCount(it) - 1)) + 1;
-      updated.push(it);
-    }
-  });
-  if (updated.length) {
-    saveLocalDataOnly();
-    if (typeof syncWardrobeItemsToCloud === 'function') {
-      syncWardrobeItemsToCloud(updated).catch(() => {});
-    }
+  const existing = getWearLog();
+  const alreadyLogged = existing.some(e => e && e.source === 'logged' && e.context === 'exercise' && e.date === todayStr && e.topId === topId && e.bottomId === bottomId);
+  if (alreadyLogged) {
+    toast('✓ Today’s workout outfit is already counted in your wear history.');
+    return;
   }
+  const updated = applyWearDelta(ids, 1, {
+    date: todayStr,
+    context: 'exercise',
+    source: 'logged',
+    topId: topId || null,
+    secondLayerId: secondLayerId || null,
+    bottomId: bottomId || null,
+    shoeId: shoeId || null
+  });
   if (activeExerciseOutfit) {
     activeExerciseOutfit.logged = true;
     try {
@@ -12597,7 +13151,8 @@ function logExerciseWearToday(topId, secondLayerId, bottomId, shoeId) {
     btn.innerHTML = `✓ Logged (${updated.length} items worn)`;
   }
   renderWardrobe();
-  toast(`🏃 Workout logged! Counted ${updated.length} items worn.`);
+  renderWardrobeIllusionSection();
+  toast(`🏃 Workout logged! Counted ${updated.length} items worn — they'll rest for ${ROTATION_COOLDOWN_DAYS} days.`);
 }
 
 let activeAIDailyOutfit = null;
@@ -12615,8 +13170,11 @@ function setAIProgressStatus(msg) {
   }
 }
 
-function compactWardrobeForAI(items) {
+function compactWardrobeForAI(items, cooldownInfo = null) {
   return (items || []).filter(it => it && !isItemDisliked(it)).map(it => {
+    const daysAgo = cooldownInfo && cooldownInfo.itemDaysAgo instanceof Map
+      ? cooldownInfo.itemDaysAgo.get(it.id)
+      : null;
     const obj = {
       id: it.id,
       name: it.name,
@@ -12626,7 +13184,8 @@ function compactWardrobeForAI(items) {
       colorHex: it.color || '',
       formality: it.formality,
       length: getItemLength(it),
-      wearCount: getItemWearCount(it)
+      wearCount: getItemWearCount(it),
+      daysSinceWorn: daysAgo == null ? 'never-or-7d+' : daysAgo
     };
     if (it.secondaryColor) obj.secondaryColor = it.secondaryColorName || getColorNameFromHex(it.secondaryColor);
     if (it.tertiaryColor) obj.tertiaryColor = it.tertiaryColorName || getColorNameFromHex(it.tertiaryColor);
@@ -12634,6 +13193,21 @@ function compactWardrobeForAI(items) {
     obj.season = it.season || inferItemSeasonSuitability(it);
     if (it.aiDescription) obj.aiDescription = String(it.aiDescription).slice(0, 260);
     return obj;
+  });
+}
+
+function orderCandidatesForAIVariety(items, cooldownInfo = null) {
+  // Shuffle first to eliminate fixed array-index-0 positional bias, then gently prioritize unworn & longest-rested pieces
+  const randomized = shuffle(items || []);
+  return randomized.sort((a, b) => {
+    const da = (cooldownInfo && cooldownInfo.itemDaysAgo.get(a.id)) ?? 999;
+    const db = (cooldownInfo && cooldownInfo.itemDaysAgo.get(b.id)) ?? 999;
+    const restedA = da >= ROTATION_COOLDOWN_DAYS ? 1 : 0;
+    const restedB = db >= ROTATION_COOLDOWN_DAYS ? 1 : 0;
+    if (restedA !== restedB) return restedB - restedA;
+    // Bucket wearCount into broad tiers (0, 1-2, 3+) so ties remain freshly randomized
+    const tierOf = (it) => { const c = getItemWearCount(it); return c === 0 ? 0 : (c <= 2 ? 1 : 2); };
+    return tierOf(a) - tierOf(b);
   });
 }
 
@@ -12768,6 +13342,7 @@ function hydrateAIDailyOutfitFromPicked(picked, currentTemp) {
     blueprint: bp,
     personalEval: evalResult.personalEval,
     isNeverWorn: evalResult.isNeverWorn,
+    rotationStatus: evalResult.rotationStatus || null,
     aiDailyMeta: {
       mode: picked.mode || '3-step',
       modelUsed: picked.modelUsed || '',
@@ -12797,7 +13372,7 @@ function getAIDailyOutfitCacheKey() {
   const form = (typeof getDayFormality === 'function') ? getDayFormality() : 'casual';
   const arch = (userProfile && userProfile.personaArchetype) || 'quiet-luxury';
   const moodKey = typeof currentMood === 'string' ? currentMood : 'calm';
-  return `${todayStr}|${cityKey}|${sInfo.id}|${sInfo.hemisphere}|${tempBand}|${mainCond}|${layerOverride}|${form}|${arch}|${moodKey}|v3step`;
+  return `${todayStr}|${cityKey}|${sInfo.id}|${sInfo.hemisphere}|${tempBand}|${mainCond}|${layerOverride}|${form}|${arch}|${moodKey}|v4rot`;
 }
 
 function restoreCachedAIDailyOutfit(cacheKey) {
@@ -12819,6 +13394,10 @@ function maybeTriggerAIDailyOutfit(forceRefresh = false, avoidIds = []) {
   if (typeof activeSpecialOccasion !== 'undefined' && activeSpecialOccasion) return;
   if (typeof getActiveTripContext === 'function' && getActiveTripContext()) return;
   if (!wardrobe || wardrobe.length < 3) return;
+  // Wait for initial live weather fetch if a city is configured so Gemini decides with real temperature & season
+  if (!forceRefresh && !weather && typeof weatherFetchInFlight !== 'undefined' && weatherFetchInFlight && getSettings().city) {
+    return;
+  }
   const geminiKey = (localStorage.getItem('wtw_gemini_apikey') || '').trim();
   if (!geminiKey) return;
   const cacheKey = getAIDailyOutfitCacheKey();
@@ -12830,7 +13409,7 @@ function maybeTriggerAIDailyOutfit(forceRefresh = false, avoidIds = []) {
   // If today's lock came from AI (e.g. synced from another device) and matches today's context, adopt it without re-spending tokens
   if (!forceRefresh) {
     const existingLock = getDailyMainLock();
-    if (existingLock && existingLock.date === getOutfitDayKey() && existingLock.source === 'ai' && existingLock.aiDailyMeta && existingLock.layerOverride === layerOverride && existingLock.formality === getDayFormality() && (!existingLock.mood || existingLock.mood === currentMood)) {
+    if (existingLock && existingLock.engineVersion >= 2 && existingLock.date === getOutfitDayKey() && existingLock.source === 'ai' && existingLock.aiDailyMeta && existingLock.layerOverride === layerOverride && existingLock.formality === getDayFormality() && (!existingLock.mood || existingLock.mood === currentMood)) {
       return;
     }
   }
@@ -12847,8 +13426,11 @@ function maybeTriggerAIDailyOutfit(forceRefresh = false, avoidIds = []) {
    ================================================ */
 
 async function runAIStage1Top({ geminiKey, pools, personalCtx, currentTemp, cond, wearContext, avoidIds }) {
-  const { targetLayers, targetFormality, sInfo, baseTops, midLayers, outerShells } = pools;
+  const { targetLayers, targetFormality, sInfo, baseTops, midLayers, outerShells, cooldownInfo } = pools;
   const isWorkContext = formalityScore(targetFormality) >= 2;
+  const variedBaseTops = orderCandidatesForAIVariety(baseTops, cooldownInfo);
+  const variedMidLayers = orderCandidatesForAIVariety(midLayers, cooldownInfo);
+  const variedOuterShells = orderCandidatesForAIVariety(outerShells, cooldownInfo);
   const layerDirective = targetLayers === 1
     ? `STRICT 1-LAYER MODE: Choose ONLY a Layer 1 base top (topId). You MUST return midLayerId: null and outerwearId: null.`
     : targetLayers === 2
@@ -12858,33 +13440,35 @@ async function runAIStage1Top({ geminiKey, pools, personalCtx, currentTemp, cond
   const promptLines = [
     `You are Step 1 of a 3-step master stylist pipeline for WhaToWear.`,
     `STEP 1 GOAL: Choose ONLY the single best Top (and compatible Layer 2/3 ONLY if requested below) for today. Do NOT worry about pants or shoes yet — Steps 2 and 3 will match them to your choice.`,
-    `Context: ${currentTemp}°C, ${cond}, Season: ${sInfo.name}, Target Formality: ${targetFormality}, Mood: ${currentMood || 'balanced'}.`,
+    `Context: Date=${pools.refDateKey}, ${currentTemp}°C, ${cond}, Season: ${sInfo.name}, Target Formality: ${targetFormality}, Mood: ${currentMood || 'balanced'}.`,
     layerDirective,
     isWorkContext
-      ? `Workday Rule: Prefer crisp collared shirts (Oxford, Dress, Button-Up, Linen, Polo) or completely plain/solid clean tees (zero front wording, logos, or loud graphics).`
+      ? `Workday Rule: Prefer crisp collared shirts (Oxford, Dress, Button-Up, Linen, Polo) or refined solid smart-casual tops (zero front wording, logos, or loud graphics).`
       : `Casual Rule: Pick a flattering, weather-appropriate Layer 1 base top that suits the user's complexion and silhouette.`,
     `Layer 1 Rule: topId MUST be chosen strictly from baseTops below (never a sweater, hoodie, sweatshirt, quarter-zip, pullover, or jacket).`,
-    wearContext.recentTopIds.length ? `Recently worn top IDs (prefer fresh alternatives unless none fit): ${JSON.stringify(wearContext.recentTopIds)}.` : '',
+    `ROTATION & VARIETY RULE: Pieces worn in the last 7 days have already been rested out of the pool whenever fresh options exist. Actively rotate across the user's full wardrobe — prioritize pieces with wearCount: 0 or the lowest wearCount and daysSinceWorn: "never-or-7d+" rather than repeating the same safe grey tee every time!`,
+    wearContext.yesterdayIds.length ? `NEVER repeat yesterday's pieces if any alternative exists: ${JSON.stringify(wearContext.yesterdayIds)}.` : '',
+    wearContext.recent7DayIds.length ? `Recently worn within last 7 days (avoid unless no rested option exists): ${JSON.stringify(wearContext.recent7DayIds)}.` : '',
     avoidIds.length ? `Strictly avoid these item IDs (user shuffled or disliked them): ${JSON.stringify(avoidIds)}.` : '',
     personalCtx,
-    `Eligible baseTops: ${JSON.stringify(compactWardrobeForAI(baseTops))}`,
-    targetLayers >= 2 && midLayers.length ? `Eligible midLayers (Layer 2): ${JSON.stringify(compactWardrobeForAI(midLayers))}` : '',
-    targetLayers >= 2 && outerShells.length ? `Eligible outerShells (Layer 3 / light jacket): ${JSON.stringify(compactWardrobeForAI(outerShells))}` : '',
+    `Eligible rested baseTops (randomized order): ${JSON.stringify(compactWardrobeForAI(variedBaseTops, cooldownInfo))}`,
+    targetLayers >= 2 && variedMidLayers.length ? `Eligible rested midLayers (Layer 2): ${JSON.stringify(compactWardrobeForAI(variedMidLayers, cooldownInfo))}` : '',
+    targetLayers >= 2 && variedOuterShells.length ? `Eligible rested outerShells (Layer 3 / light jacket): ${JSON.stringify(compactWardrobeForAI(variedOuterShells, cooldownInfo))}` : '',
     `Return ONLY valid JSON with exact keys: {"topId": "<exact id from baseTops>", "midLayerId": "<exact id or null>", "outerwearId": "<exact id or null>", "topReason": "1 concise sentence explaining why this top/layer stack flatters the user and fits today's weather & occasion"}`
   ].filter(Boolean);
 
   const data = await callGeminiGenerateContent(geminiKey, {
     parts: [{ text: promptLines.join('\n') }],
-    temperature: 0.3,
+    temperature: 0.55,
     responseMimeType: 'application/json',
     preferQuality: true
   });
   const parsed = parseGeminiJsonObject(data) || {};
   const findIn = (list, id) => (id ? list.find(x => x.id === id) || null : null);
 
-  let top = findIn(baseTops, parsed.topId) || baseTops[0];
-  let midLayer = targetLayers >= 2 ? findIn(midLayers, parsed.midLayerId) : null;
-  let outerwear = targetLayers >= 2 ? findIn(outerShells, parsed.outerwearId) : null;
+  let top = findIn(variedBaseTops, parsed.topId) || variedBaseTops[0];
+  let midLayer = targetLayers >= 2 ? findIn(variedMidLayers, parsed.midLayerId) : null;
+  let outerwear = targetLayers >= 2 ? findIn(variedOuterShells, parsed.outerwearId) : null;
 
   if (targetLayers === 1) {
     midLayer = null;
@@ -12905,34 +13489,36 @@ async function runAIStage1Top({ geminiKey, pools, personalCtx, currentTemp, cond
 }
 
 async function runAIStage2Bottom({ geminiKey, pools, personalCtx, currentTemp, cond, wearContext, lockedTopStack, avoidIds }) {
-  const { targetFormality, sInfo, bottoms } = pools;
+  const { targetFormality, sInfo, bottoms, cooldownInfo } = pools;
+  const variedBottoms = orderCandidatesForAIVariety(bottoms, cooldownInfo);
   const lockedSummary = {
-    top: compactWardrobeForAI([lockedTopStack.top])[0],
-    midLayer: lockedTopStack.midLayer ? compactWardrobeForAI([lockedTopStack.midLayer])[0] : null,
-    outerwear: lockedTopStack.outerwear ? compactWardrobeForAI([lockedTopStack.outerwear])[0] : null
+    top: compactWardrobeForAI([lockedTopStack.top], cooldownInfo)[0],
+    midLayer: lockedTopStack.midLayer ? compactWardrobeForAI([lockedTopStack.midLayer], cooldownInfo)[0] : null,
+    outerwear: lockedTopStack.outerwear ? compactWardrobeForAI([lockedTopStack.outerwear], cooldownInfo)[0] : null
   };
 
   const promptLines = [
     `You are Step 2 of a 3-step master stylist pipeline for WhaToWear.`,
     `STEP 2 GOAL: The Top (and any upper layers) is ALREADY LOCKED below. Choose the single BEST matching Bottom (pants/chinos/jeans/trousers/shorts) from eligibleBottoms that creates the sharpest, most harmonious outfit with this exact Top.`,
-    `Context: ${currentTemp}°C, ${cond}, Season: ${sInfo.name}, Target Formality: ${targetFormality}, Mood: ${currentMood || 'balanced'}.`,
+    `Context: Date=${pools.refDateKey}, ${currentTemp}°C, ${cond}, Season: ${sInfo.name}, Target Formality: ${targetFormality}, Mood: ${currentMood || 'balanced'}.`,
     `LOCKED TOP STACK: ${JSON.stringify(lockedSummary)}`,
-    `Matching Rules: Ensure clean tonal contrast (don't wash out or clash hues), match formality level (e.g., chinos/trousers for smart-casual), match fabric weight & season, and flatter the user's body silhouette.`,
-    wearContext.recentBottomIds.length ? `Recently worn bottom IDs (prefer fresh rotation if equally strong): ${JSON.stringify(wearContext.recentBottomIds)}.` : '',
+    `Matching & Variety Rules: Ensure clean tonal contrast (don't wash out or clash hues), match formality level (e.g., chinos/trousers/dark clean denim for smart-casual), match fabric weight & season, flatter the user's body silhouette, and favor less-worn / freshly rested pants over repeatedly picking the exact same pair.`,
+    wearContext.yesterdayIds.length ? `NEVER repeat yesterday's bottom if any alternative exists: ${JSON.stringify(wearContext.yesterdayIds)}.` : '',
+    wearContext.recentBottomIds.length ? `Recently worn bottom IDs within last 7 days (avoid unless no rested option fits): ${JSON.stringify(wearContext.recentBottomIds)}.` : '',
     avoidIds.length ? `Strictly avoid these item IDs: ${JSON.stringify(avoidIds)}.` : '',
     personalCtx,
-    `Eligible bottoms: ${JSON.stringify(compactWardrobeForAI(bottoms))}`,
+    `Eligible rested bottoms (randomized order): ${JSON.stringify(compactWardrobeForAI(variedBottoms, cooldownInfo))}`,
     `Return ONLY valid JSON with exact keys: {"bottomId": "<exact id from eligible bottoms>", "bottomReason": "1 concise sentence explaining why these pants/bottoms best match the locked top"}`
   ].filter(Boolean);
 
   const data = await callGeminiGenerateContent(geminiKey, {
     parts: [{ text: promptLines.join('\n') }],
-    temperature: 0.25,
+    temperature: 0.45,
     responseMimeType: 'application/json',
     preferQuality: true
   });
   const parsed = parseGeminiJsonObject(data) || {};
-  const bottom = bottoms.find(b => b.id === parsed.bottomId) || bottoms[0];
+  const bottom = variedBottoms.find(b => b.id === parsed.bottomId) || variedBottoms[0];
 
   return {
     bottom,
@@ -12941,23 +13527,24 @@ async function runAIStage2Bottom({ geminiKey, pools, personalCtx, currentTemp, c
   };
 }
 
-async function runAIStage3ShoesAndBelt({ geminiKey, pools, personalCtx, currentTemp, cond, lockedTopStack, lockedBottom, avoidIds }) {
-  const { targetFormality, sInfo, shoes, allShoesAllowed, belts, nonBeltAccessories, blueprint } = pools;
+async function runAIStage3ShoesAndBelt({ geminiKey, pools, personalCtx, currentTemp, cond, wearContext, lockedTopStack, lockedBottom, avoidIds }) {
+  const { targetFormality, sInfo, shoes, allShoesAllowed, belts, allEligibleBelts, nonBeltAccessories, blueprint, cooldownInfo, refDateKey } = pools;
   const shoePoolBase = shoes.length > 0 ? shoes : allShoesAllowed;
   const avoidSet = new Set(Array.isArray(avoidIds) ? avoidIds : []);
   const shoeCandidatesNonAvoid = shoePoolBase.filter(s => !avoidSet.has(s.id));
   const shoeCandidates = shoeCandidatesNonAvoid.length > 0 ? shoeCandidatesNonAvoid : shoePoolBase;
 
-  // Order shoe candidates with local pre-ranking so visual comparison prioritizes the best contenders (up to 8 photos)
+  // Order shoe candidates with local pre-ranking INCLUDING 7-day rotation cooldown & wear balance (never skipWearLog!)
   const preRanked = rankShoesForLockedOutfit(
     lockedTopStack.top, lockedTopStack.midLayer, lockedTopStack.outerwear,
     lockedBottom, shoeCandidates, belts,
-    { blueprint, targetFormality, seasonInfo: sInfo, skipWearLog: true }
+    { allEligibleBelts, blueprint, targetFormality, seasonInfo: sInfo, cooldownInfo, referenceDateKey: refDateKey }
   );
   const orderedShoes = preRanked.map(r => r.shoe);
   const visualShoes = orderedShoes.slice(0, 8);
   const needsBelt = !isDrawstringOrAthleticBottom(lockedBottom);
-  const eligibleBelts = needsBelt ? belts.filter(b => !avoidSet.has(b.id)) : [];
+  const beltSource = belts.length > 0 ? belts : (allEligibleBelts || []);
+  const eligibleBelts = needsBelt ? beltSource.filter(b => !avoidSet.has(b.id)) : [];
   const visualBelts = eligibleBelts.slice(0, 4);
 
   // Load compact 256px garment photos in parallel so Gemini can SEE the actual colors, textures, soles, and shapes
@@ -12976,27 +13563,30 @@ async function runAIStage3ShoesAndBelt({ geminiKey, pools, personalCtx, currentT
   const validPhotos = loadedPhotos.filter(p => p.part);
 
   const lockedSummary = {
-    top: compactWardrobeForAI([lockedTopStack.top])[0],
-    midLayer: lockedTopStack.midLayer ? compactWardrobeForAI([lockedTopStack.midLayer])[0] : null,
-    outerwear: lockedTopStack.outerwear ? compactWardrobeForAI([lockedTopStack.outerwear])[0] : null,
-    bottom: compactWardrobeForAI([lockedBottom])[0]
+    top: compactWardrobeForAI([lockedTopStack.top], cooldownInfo)[0],
+    midLayer: lockedTopStack.midLayer ? compactWardrobeForAI([lockedTopStack.midLayer], cooldownInfo)[0] : null,
+    outerwear: lockedTopStack.outerwear ? compactWardrobeForAI([lockedTopStack.outerwear], cooldownInfo)[0] : null,
+    bottom: compactWardrobeForAI([lockedBottom], cooldownInfo)[0]
   };
 
   const promptLines = [
     `You are Step 3 (Final Footwear & Belt Specialist) of a 3-step master stylist pipeline for WhaToWear.`,
     `STEP 3 GOAL: The Top and Bottom are ALREADY LOCKED below. Compare ALL candidate shoes head-to-head and pick the #1 BEST SHOES and BEST MATCHING BELT (plus optional accessory) for this exact outfit.`,
-    `Context: ${currentTemp}°C, ${cond}, Season: ${sInfo.name}, Target Formality: ${targetFormality}, Mood: ${currentMood || 'balanced'}.`,
+    `Context: Date=${refDateKey}, ${currentTemp}°C, ${cond}, Season: ${sInfo.name}, Target Formality: ${targetFormality}, Mood: ${currentMood || 'balanced'}.`,
     `LOCKED OUTFIT (Top + Bottom): ${JSON.stringify(lockedSummary)}`,
-    `CRITICAL STYLING RULES FOR SHOES & BELT:`,
+    `CRITICAL STYLING & ROTATION RULES FOR SHOES & BELT:`,
     `1. Visually inspect the attached garment photos (if present) alongside descriptions — judge real color tones, leather finish, sole color, and shoe chunkiness.`,
     `2. NEVER be overly "matchy-matchy" with bright/colored footwear matching a colored shirt (e.g., SKIP green boots when wearing a green/teal top — neutral or warm earth-tone shoes like brown leather, tan, grey, white, black, or navy look far sharper and let the top stand out).`,
     `3. RESPECT SEASON & WEIGHT: On Spring/Summer mild or warm days (16°C+, especially with a short-sleeve tee or 1 top layer), strongly prefer clean leather/suede sneakers, loafers, derbies, or crisp neutral sneakers over heavy Autumn/Winter or chunky ankle/work boots.`,
-    `4. COORDINATE BELT & SHOES: Match belt tone to the winning shoes & bottoms (e.g. warm brown/cognac/burgundy leather with brown/earth shoes, black with black). ${needsBelt ? 'Pick the best beltId from eligibleBelts (or null if none exist).' : 'The locked bottom is elastic/drawstring/athletic — you MUST return beltId: null.'}`,
-    `5. Rank the top 3 shoe options (or all available if fewer than 3) in shoeRanking with rank 1 = your winning shoeId, explaining concisely why #1 wins and how #2 / #3 compare.`,
+    `4. ROTATE FOOTWEAR: NEVER pick shoes worn yesterday, and prefer rested shoes (daysSinceWorn: "never-or-7d+" and lowest wearCount) when two pairs look comparably great with the outfit!`,
+    `5. COORDINATE BELT & SHOES: Match belt tone to the winning shoes & bottoms (e.g. warm brown/cognac/burgundy leather with brown/earth shoes, black with black). ${needsBelt ? 'Pick the best beltId from eligibleBelts (or null if none exist).' : 'The locked bottom is elastic/drawstring/athletic — you MUST return beltId: null.'}`,
+    `6. Rank the top 3 shoe options (or all available if fewer than 3) in shoeRanking with rank 1 = your winning shoeId, explaining concisely why #1 wins and how #2 / #3 compare.`,
+    wearContext && wearContext.yesterdayIds.length ? `NEVER pick yesterday's shoe/belt IDs: ${JSON.stringify(wearContext.yesterdayIds)}.` : '',
+    wearContext && wearContext.recentShoeIds.length ? `Shoes worn within the last 7 days (avoid unless no rested option matches): ${JSON.stringify(wearContext.recentShoeIds)}.` : '',
     personalCtx,
-    `Eligible shoes (compare ALL of these): ${JSON.stringify(compactWardrobeForAI(orderedShoes))}`,
-    needsBelt ? `Eligible belts: ${JSON.stringify(compactWardrobeForAI(eligibleBelts))}` : `Eligible belts: [] (no belt needed)`,
-    nonBeltAccessories.length ? `Optional non-belt accessories: ${JSON.stringify(compactWardrobeForAI(nonBeltAccessories.slice(0, 6)))}` : '',
+    `Eligible rested shoes (compare ALL of these): ${JSON.stringify(compactWardrobeForAI(orderedShoes, cooldownInfo))}`,
+    needsBelt ? `Eligible belts: ${JSON.stringify(compactWardrobeForAI(eligibleBelts, cooldownInfo))}` : `Eligible belts: [] (no belt needed)`,
+    nonBeltAccessories.length ? `Optional non-belt accessories: ${JSON.stringify(compactWardrobeForAI(orderCandidatesForAIVariety(nonBeltAccessories, cooldownInfo).slice(0, 6), cooldownInfo))}` : '',
     `Return ONLY valid JSON with exact keys:`,
     `{`,
     `  "shoeId": "<exact winning id from eligible shoes>",`,
@@ -13024,7 +13614,7 @@ async function runAIStage3ShoesAndBelt({ geminiKey, pools, personalCtx, currentT
 
   const data = await callGeminiGenerateContent(geminiKey, {
     parts,
-    temperature: 0.25,
+    temperature: 0.35,
     responseMimeType: 'application/json',
     preferQuality: true
   });
@@ -13063,9 +13653,20 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [], pa
     }
 
     const wearLog = getWearLog();
+    const cd = pools.cooldownInfo;
+    const recentEntries7d = wearLog.filter(e => {
+      if (!e || !e.date) return false;
+      const d = calendarDaysBetween(e.date, pools.refDateKey);
+      return d != null && d >= 1 && d < ROTATION_COOLDOWN_DAYS;
+    });
     const wearContext = {
-      recentTopIds: [...new Set(wearLog.slice(0, 5).map(e => e?.topId).filter(Boolean))],
-      recentBottomIds: [...new Set(wearLog.slice(0, 4).map(e => e?.bottomId).filter(Boolean))]
+      yesterdayIds: cd ? Array.from(cd.yesterdayIds) : [],
+      recent7DayIds: cd ? Array.from(cd.cooldownIds) : [],
+      recentTopIds: [...new Set(recentEntries7d.map(e => e?.topId).filter(Boolean))],
+      recentBottomIds: [...new Set(recentEntries7d.map(e => e?.bottomId).filter(Boolean))],
+      recentShoeIds: [...new Set(recentEntries7d.map(e => e?.shoeId).filter(Boolean))],
+      recentLayerIds: [...new Set(recentEntries7d.flatMap(e => [e?.midLayerId, e?.outerId]).filter(Boolean))],
+      recentBeltIds: [...new Set(recentEntries7d.map(e => e?.beltId).filter(Boolean))]
     };
     const personalCtx = typeof buildMasterPersonalContextForAI === 'function'
       ? buildMasterPersonalContextForAI()
@@ -13101,7 +13702,7 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [], pa
 
     setAIProgressStatus(partialFrom === 'shoe' ? 'AI comparing Shoes & Belt for your outfit...' : 'AI Step 3/3: Comparing Shoes & Belt...');
     const stage3 = await runAIStage3ShoesAndBelt({
-      geminiKey, pools, personalCtx, currentTemp, cond,
+      geminiKey, pools, personalCtx, currentTemp, cond, wearContext,
       lockedTopStack: stage1,
       lockedBottom: stage2.bottom,
       avoidIds
@@ -13200,7 +13801,7 @@ function askAIToRedecideOutfitNow() {
     return;
   }
   const cur = (typeof window !== 'undefined' && window.lastRenderedMainOutfit) || activeAIDailyOutfit?.outfit || null;
-  const avoid = cur ? [cur.top?.id].filter(Boolean) : [];
+  const avoid = cur ? [cur.top?.id, cur.midLayer?.id, cur.outerwear?.id, cur.bottom?.id, cur.shoe?.id].filter(Boolean) : [];
   activeAIDailyOutfit = null;
   aiDailyLastError = '';
   try { localStorage.removeItem('wtw_ai_daily_outfit'); } catch {}
@@ -13520,6 +14121,9 @@ async function maybeRunAIExerciseSanityCheck(exOutfit) {
   }
 }
 
+const todayShuffledAvoidIds = new Set();
+let todayShuffledAvoidDay = null;
+
 function shuffleOutfit() {
   if (typeof activeSpecialOccasion !== 'undefined' && activeSpecialOccasion) {
     activeSpecialOccasion = null;
@@ -13535,10 +14139,26 @@ function shuffleOutfit() {
       return;
     }
   }
+  const todayStr = getOutfitDayKey();
+  if (todayShuffledAvoidDay !== todayStr) {
+    todayShuffledAvoidIds.clear();
+    todayShuffledAvoidDay = todayStr;
+  }
   const curShown = activeAIDailyOutfit?.outfit || (typeof window !== 'undefined' ? window.lastRenderedMainOutfit : null);
-  const prevAvoid = curShown
-    ? [curShown.top?.id, curShown.bottom?.id].filter(Boolean)
+  const currentIds = curShown
+    ? [curShown.top?.id, curShown.midLayer?.id, curShown.outerwear?.id, curShown.bottom?.id, curShown.shoe?.id].filter(Boolean)
     : [];
+  currentIds.forEach(id => todayShuffledAvoidIds.add(id));
+
+  // If we've cycled through nearly all rested base tops in this session, reset session history while still avoiding the immediately previous look
+  const testPools = buildDailyOutfitCandidatePools({ avoidIds: Array.from(todayShuffledAvoidIds), previewOnly: true });
+  const freshRemainingTops = testPools.baseTops.filter(t => !todayShuffledAvoidIds.has(t.id));
+  const prevAvoid = freshRemainingTops.length > 0 ? Array.from(todayShuffledAvoidIds) : currentIds;
+  if (freshRemainingTops.length === 0) {
+    todayShuffledAvoidIds.clear();
+    currentIds.forEach(id => todayShuffledAvoidIds.add(id));
+  }
+
   activeAIDailyOutfit = null;
   lastAIDailyAttemptKey = null;
   aiDailyLastError = '';
@@ -13550,6 +14170,9 @@ function shuffleOutfit() {
     void icon.offsetWidth; // force reflow
     icon.classList.add('shuffle-spin');
   }
+  // Generate an instant fresh local outfit explicitly avoiding the previous outfit pieces
+  const freshLocal = generateOutfit({ avoidIds: prevAvoid });
+  if (freshLocal && typeof window !== 'undefined') window.lastRenderedMainOutfit = freshLocal;
   maybeTriggerAIDailyOutfit(true, prevAvoid);
   renderOutfit();
 }
@@ -14012,10 +14635,14 @@ function renderWardrobe() {
   }
 
   const bp = buildPersonalStyleBlueprint();
+  const wardrobeCooldownMap = typeof buildRotationCooldownMap === 'function'
+    ? buildRotationCooldownMap(getOutfitDayKey(), { context: 'both', skipSameDayCrossContext: true })
+    : null;
   const enriched = items.map(item => ({
     item,
     wearCount: getItemWearCount(item),
-    fit: computeItemPersonaFitRank(item, bp)
+    fit: computeItemPersonaFitRank(item, bp),
+    cooldownDaysAgo: wardrobeCooldownMap ? wardrobeCooldownMap.itemDaysAgo.get(item.id) : null
   }));
 
   if (wardrobeSort === 'fit-desc') enriched.sort((a, b) => b.fit.score - a.fit.score);
@@ -14023,7 +14650,7 @@ function renderWardrobe() {
   else if (wardrobeSort === 'wear-desc') enriched.sort((a, b) => b.wearCount - a.wearCount);
   else if (wardrobeSort === 'wear-asc') enriched.sort((a, b) => a.wearCount - b.wearCount);
 
-  grid.innerHTML = enriched.map(({ item, wearCount, fit }, idx) => {
+  grid.innerHTML = enriched.map(({ item, wearCount, fit, cooldownDaysAgo }, idx) => {
     const emoji = getCategoryEmoji(item.category);
     const len = getItemLength(item);
     const lenLabel = getLengthLabel(len, item.category);
@@ -14084,6 +14711,7 @@ function renderWardrobe() {
           ${isDisabled ? `<span class="badge" onclick="event.stopPropagation(); toggleWardrobeItemDisabled('${item.id}')" style="cursor:pointer; background:#fef2f2; color:#b91c1c; border:1px solid #fecaca;" title="Tap to re-enable">🚫 Disabled (Tap to Enable)</span>` : ''}
           ${dislikeReason ? `<span class="badge" onclick="event.stopPropagation(); unblockDislikedTerm('${safeDislikeReason}')" style="cursor:pointer; background:#fef2f2; color:#b91c1c; border:1px solid #fecaca;" title="Blocked by Dislike filter: ${escapeHtml(dislikeReason)}. Tap to unblock.">🚫 Blocked: "${escapeHtml(dislikeReason)}" (Tap to Unblock)</span>` : ''}
           <span class="badge badge-wear-count" onclick="event.stopPropagation(); incrementItemWear('${item.id}')" style="cursor:pointer;" title="Times worn (tap to add +1)">👕 Worn ${wearCount}×</span>
+          ${(typeof cooldownDaysAgo === 'number' && cooldownDaysAgo >= 1 && cooldownDaysAgo < ROTATION_COOLDOWN_DAYS) ? `<span class="badge" style="background:rgba(245,158,11,0.16); color:#fbbf24; border:1px solid rgba(245,158,11,0.38);" title="Resting for 7-day rotation cooldown (last worn ${cooldownDaysAgo === 1 ? 'yesterday' : `${cooldownDaysAgo} days ago`})">⏳ ${cooldownDaysAgo === 1 ? 'Worn Yesterday' : `Worn ${cooldownDaysAgo}d ago`} · Rests ${ROTATION_COOLDOWN_DAYS - cooldownDaysAgo}d</span>` : ''}
           <span class="badge ${fitBadgeClass}" title="${escapeHtml(fit.reason)}">${fitIcon} ${fit.score}/10 Fit</span>
           <span class="badge badge-category">${escapeHtml(getCategoryLabel(item.category))}</span>
           <span class="badge badge-formality">${escapeHtml(getFormalityDisplayLabel(item.formality))}</span>
@@ -22008,7 +22636,7 @@ function pickTripAccessory(accs, usage) {
   return pool[0].id;
 }
 
-function pickTripOutfit(day, items, usage, prev, avoidKey) {
+function pickTripOutfit(day, items, usage, prev, avoidKey, recentPlans = []) {
   const wx = dayWx(day);
   const target = dayTarget(day);
   const isWorkDay = formalityScore(target) >= 2;
@@ -22019,27 +22647,65 @@ function pickTripOutfit(day, items, usage, prev, avoidKey) {
     : (layerOverride === '3' ? 3
     : ((day.tmax <= 20 || day.tmin <= 15 || day.rain) ? 3 : (day.tmax >= 26 && day.tmin >= 20 ? 1 : 2))));
 
+  // Build 7-day cooldown map combining prior home wearLog + earlier trip days strictly before day.date
+  const extraTripEntries = (Array.isArray(recentPlans) ? recentPlans : [])
+    .filter(p => p && p.date && p.date < day.date && p.items)
+    .map(p => ({
+      date: p.date,
+      context: 'main',
+      source: 'auto-shown',
+      topId: p.items.top || null,
+      midLayerId: p.items.mid || null,
+      outerId: p.items.outer || null,
+      bottomId: p.items.bottom || null,
+      shoeId: p.items.shoe || null,
+      beltId: p.items.belt || null,
+      accessoryId: p.items.acc || null
+    }));
+  if (prev && prev.items) {
+    const prevDate = prev.date || addDays(day.date, -1);
+    extraTripEntries.push({
+      date: prevDate,
+      context: 'main',
+      source: 'auto-shown',
+      topId: prev.items.top || null,
+      midLayerId: prev.items.mid || null,
+      outerId: prev.items.outer || null,
+      bottomId: prev.items.bottom || null,
+      shoeId: prev.items.shoe || null,
+      beltId: prev.items.belt || null,
+      accessoryId: prev.items.acc || null
+    });
+  }
+  const tripCooldown = typeof buildRotationCooldownMap === 'function'
+    ? buildRotationCooldownMap(day.date, { context: 'main', extraEntries: extraTripEntries, skipSameDayCrossContext: true })
+    : null;
+
   return withWeather(wx, () => {
     const suit = cat => {
       const all = items.filter(i => i.category === cat && !/\b(pajama|pyjama|sleepwear|nightwear|pjs)\b/i.test(`${i.name || ''} ${i.subType || ''}`));
       const nonWorkDisallowed = isWorkDay ? all.filter(i => !isWorkDisallowedItem(i, target)) : all;
       const pool = nonWorkDisallowed.length ? nonWorkDisallowed : all;
       const ok = pool.filter(weatherSuitable);
-      return ok.length ? ok : pool;
+      const base = ok.length ? ok : pool;
+      return (tripCooldown && base.length > 1) ? filterByRotationCooldown(base, tripCooldown) : base;
     };
     const tops = suit('tops'), bottoms = suit('bottoms'), shoes = suit('shoes');
     if (!tops.length || !bottoms.length || !shoes.length) return null;
 
     const allItemBaseTops = items.filter(i => i.category === 'tops' && isBaseTop(i) && (!isWorkDay || !isWorkDisallowedItem(i, target)));
-    const baseTops = tops.some(isBaseTop) ? tops.filter(isBaseTop) : (allItemBaseTops.length ? allItemBaseTops : tops);
+    const baseTopsRaw = tops.some(isBaseTop) ? tops.filter(isBaseTop) : (allItemBaseTops.length ? allItemBaseTops : tops);
+    const baseTops = (tripCooldown && baseTopsRaw.length > 1) ? filterByRotationCooldown(baseTopsRaw, tripCooldown) : baseTopsRaw;
     const rawMidAll = items.filter(isMidLayerCandidate);
     const workMidAll = isWorkDay ? rawMidAll.filter(i => !isWorkDisallowedItem(i, target)) : rawMidAll;
-    const midAll = workMidAll.length ? workMidAll : rawMidAll;
+    const midPool = workMidAll.length ? workMidAll : rawMidAll;
+    const midAll = (tripCooldown && midPool.length > 1) ? filterByRotationCooldown(midPool, tripCooldown) : midPool;
     const rawOuterAll = items.filter(i => i.category === 'outerwear');
     const workOuterAll = isWorkDay ? rawOuterAll.filter(i => !isWorkDisallowedItem(i, target)) : rawOuterAll;
     const outerAll = workOuterAll.length ? workOuterAll : rawOuterAll;
     const outerShells = outerAll.filter(isOuterShellCandidate);
-    const outers = outerShells.length ? tripOuterCandidates(outerShells) : [];
+    const outersRaw = outerShells.length ? tripOuterCandidates(outerShells) : [];
+    const outers = (tripCooldown && outersRaw.length > 1) ? filterByRotationCooldown(outersRaw, tripCooldown) : outersRaw;
     const pi = prev && prev.items ? prev.items : null;
 
     const layerCombos = [];
@@ -22077,11 +22743,17 @@ function pickTripOutfit(day, items, usage, prev, avoidKey) {
       }
     }
 
-    let best = null, bs = -Infinity;
+    const candidates = [];
     for (const lc of layerCombos) for (const b of bottoms) for (const s of shoes) {
       const { t, m, o } = lc;
       const main = [t, m, b, s, o].filter(Boolean);
-      let sc = evaluateOutfitScore(t, b, s, o, null, { midLayer: m, skipWearLog: true, blueprint, targetFormality: target }).score;
+      let sc = evaluateOutfitScore(t, b, s, o, null, {
+        midLayer: m,
+        cooldownInfo: tripCooldown,
+        referenceDateKey: day.date,
+        blueprint,
+        targetFormality: target
+      }).score;
       if (!outfitColorsHarmonious(main)) sc -= 80;
       sc += (formalityMatch(t.formality, target) ? 15 : -25) + (formalityMatch(b.formality, target) ? 10 : -15) + (formalityMatch(s.formality, target) ? 5 : -10);
       if (m) sc += (formalityMatch(m.formality, target) ? 10 : -12);
@@ -22089,26 +22761,34 @@ function pickTripOutfit(day, items, usage, prev, avoidKey) {
       if (isHoodieOrSweatshirt(t) || /\b(sweater|flannel|cardigan)\b/i.test(t.subType || '')) {
         if (day.tmax >= 22) sc -= 70;
       }
-      sc -= (usage[t.id] || 0) * 70 + (usage[b.id] || 0) * 18 + (usage[s.id] || 0) * 8 + (m ? (usage[m.id] || 0) * 12 : 0) + (o ? (usage[o.id] || 0) * 6 : 0);
+      sc -= (usage[t.id] || 0) * 85 + (usage[b.id] || 0) * 38 + (usage[s.id] || 0) * 32 + (m ? (usage[m.id] || 0) * 26 : 0) + (o ? (usage[o.id] || 0) * 18 : 0);
       if (pi) {
-        if (pi.top === t.id) sc -= 120;
-        if (bottoms.length > 1 && pi.bottom === b.id) sc -= 40;
-        if (shoes.length > 1 && pi.shoe === s.id) sc -= 15;
+        if (pi.top === t.id) sc -= 260;
+        if (bottoms.length > 1 && pi.bottom === b.id) sc -= 220;
+        if (shoes.length > 1 && pi.shoe === s.id) sc -= 200;
+        if (m && midAll.length > 1 && pi.mid === m.id) sc -= 140;
+        if (o && outers.length > 1 && pi.outer === o.id) sc -= 120;
       }
       const key = [t.id, m ? m.id : '', b.id, s.id, o ? o.id : ''].join('|');
-      if (avoidKey && key === avoidKey) sc -= 300;
+      if (avoidKey && key === avoidKey) sc -= 350;
       // Avoid repeating outfits or key pieces worn in this same location on previous trips
       if (locHistory.outfitKeys.has(key)) sc -= 250;
       if (locHistory.itemIds.has(t.id)) sc -= 30;
       if (locHistory.itemIds.has(b.id)) sc -= 15;
       if (m && locHistory.itemIds.has(m.id)) sc -= 15;
       if (o && locHistory.itemIds.has(o.id)) sc -= 15;
-      sc += Math.random() * 6;
-      if (sc > bs) {
-        bs = sc;
-        best = { top: t.id, mid: m ? m.id : null, bottom: b.id, shoe: s.id, outer: o ? o.id : null };
-      }
+      candidates.push({
+        score: sc,
+        combo: { top: t.id, mid: m ? m.id : null, bottom: b.id, shoe: s.id, outer: o ? o.id : null }
+      });
     }
+    const chosen = pickQualityWeighted(candidates, {
+      dedupKeyFn: c => `${c.combo.top}|${c.combo.bottom}|${c.combo.shoe}`,
+      scoreBand: 18,
+      temperature: 10,
+      maxContenders: 5
+    });
+    const best = chosen ? chosen.combo : null;
     if (!best) return null;
 
     const chosenTop = items.find(w => w.id === best.top);
@@ -22118,7 +22798,9 @@ function pickTripOutfit(day, items, usage, prev, avoidKey) {
     const chosenOuter = best.outer ? items.find(w => w.id === best.outer) : null;
 
     const packedAccs = items.filter(i => i.category === 'accessories');
-    const beltRec = proposeBeltForOutfit(chosenShoe, chosenBottom, chosenTop, chosenOuter || chosenMid, packedAccs);
+    const packedBelts = packedAccs.filter(isBeltItem);
+    const restedBelts = (tripCooldown && packedBelts.length > 1) ? filterByRotationCooldown(packedBelts, tripCooldown) : packedBelts;
+    const beltRec = selectBeltForShoeWithRotation(chosenShoe, chosenBottom, chosenTop, chosenOuter || chosenMid, restedBelts, packedBelts);
     best.belt = beltRec.beltItem ? beltRec.beltItem.id : null;
     best.beltHex = beltRec.proposedHex;
     best.beltColorName = beltRec.proposedColorName;
@@ -22128,7 +22810,7 @@ function pickTripOutfit(day, items, usage, prev, avoidKey) {
   });
 }
 
-function pickTripExerciseOutfit(day, items, exUsage, prevEx) {
+function pickTripExerciseOutfit(day, items, exUsage, prevEx, recentPlans = []) {
   if (!items || items.length < 3) return null;
   const morningTemp = typeof day.tmin === 'number' ? day.tmin : 18;
   const topsRawAll = items.filter(i => i.category === 'tops' && !isItemDisliked(i));
@@ -22154,9 +22836,34 @@ function pickTripExerciseOutfit(day, items, exUsage, prevEx) {
   const nonSwimBottoms = bottomsRaw.filter(i => !isSwimwearItem(i));
   const bottomsBase = comfBottoms.length ? comfBottoms : (nonSwimBottoms.length ? nonSwimBottoms : bottomsRaw);
 
+  const extraExEntries = (Array.isArray(recentPlans) ? recentPlans : [])
+    .filter(p => p && p.date && p.date < day.date && p.exercise)
+    .map(p => ({
+      date: p.date,
+      context: 'exercise',
+      source: 'auto-shown',
+      topId: p.exercise.top || null,
+      secondLayerId: p.exercise.secondLayer || null,
+      bottomId: p.exercise.bottom || null,
+      shoeId: p.exercise.shoe || null
+    }));
+  if (prevEx) {
+    extraExEntries.push({
+      date: addDays(day.date, -1),
+      context: 'exercise',
+      source: 'auto-shown',
+      topId: prevEx.top || null,
+      secondLayerId: prevEx.secondLayer || null,
+      bottomId: prevEx.bottom || null,
+      shoeId: prevEx.shoe || null
+    });
+  }
+  const exCooldown = typeof buildRotationCooldownMap === 'function'
+    ? buildRotationCooldownMap(day.date, { context: 'exercise', extraEntries: extraExEntries, skipSameDayCrossContext: true })
+    : null;
+
   const todaySkipped = (typeof getTodayDislikedIds === 'function') ? getTodayDislikedIds() : new Set();
-  const avoidSet = new Set(typeof avoidIds !== 'undefined' && Array.isArray(avoidIds) ? avoidIds : []);
-  const isAvailable = (x) => x && !avoidSet.has(x.id) && !todaySkipped.has(x.id);
+  const isAvailable = (x) => x && !todaySkipped.has(x.id);
   const preferSport = (list, cat) => {
     const strict = list.filter(isStrictSportPiece);
     if (strict.some(isAvailable)) return strict;
@@ -22176,36 +22883,50 @@ function pickTripExerciseOutfit(day, items, exUsage, prevEx) {
   let exBottoms = preferSport(bottomsBase, 'bottoms');
   let exShoes = preferSport(shoesRaw, 'shoes');
 
-  const pickBest = (list, scorer) => [...list].sort((a, b) => scorer(b) - scorer(a))[0];
+  const pickBest = (list, scorer, prevId) => {
+    let pool = (exCooldown && list.length > 1) ? filterByRotationCooldown(list, exCooldown) : list;
+    if (prevId && pool.length > 1) {
+      const noPrev = pool.filter(x => x.id !== prevId);
+      if (noPrev.length) pool = noPrev;
+    }
+    const scored = pool.map(item => ({ item, score: scorer(item) }));
+    const chosen = pickQualityWeighted(scored, { scoreBand: 14, temperature: 9, maxContenders: 4 });
+    return chosen ? chosen.item : pool[0];
+  };
 
   const preferShorts = (typeof exercisePreferShorts !== 'undefined' && exercisePreferShorts);
   const wantSecondLayer = morningTemp < 15 || (typeof exerciseSecondLayer !== 'undefined' && exerciseSecondLayer);
 
   const top = pickBest(exTops, t => {
-    let s = isStrictSportPiece(t) ? 30 : 10;
+    let s = isStrictSportPiece(t) ? 26 : 14;
     const len = getItemLength(t);
     if ((morningTemp >= 14 || wantSecondLayer || preferShorts) && (len === 'short' || len === 'sleeveless')) s += 10;
     else if (morningTemp < 12 && !preferShorts && !wantSecondLayer && len === 'long') s += 8;
-    s -= (exUsage[t.id] || 0) * 40;
-    if (prevEx && prevEx.top === t.id && exTops.length > 1) s -= 60;
-    return s + Math.random() * 2;
-  });
+    s -= (exUsage[t.id] || 0) * 55;
+    s += getRotationPenaltyForItem(t, exCooldown, 1.0);
+    if (prevEx && prevEx.top === t.id && exTops.length > 1) s -= 240;
+    return s;
+  }, prevEx?.top);
 
   const bottom = pickBest(exBottoms, b => {
-    let s = isStrictSportPiece(b) ? 30 : 10;
+    let s = isStrictSportPiece(b) ? 26 : 14;
     const len = getItemLength(b);
     if (preferShorts && (len === 'shorts' || isShortsBottom(b))) s += 40;
     else if (morningTemp >= 17 && len === 'shorts') s += 14;
     else if (morningTemp < 17 && len === 'long') s += 14;
-    s -= (exUsage[b.id] || 0) * 15;
-    return s + Math.random() * 2;
-  });
+    s -= (exUsage[b.id] || 0) * 35;
+    s += getRotationPenaltyForItem(b, exCooldown, 0.95);
+    if (prevEx && prevEx.bottom === b.id && exBottoms.length > 1) s -= 220;
+    return s;
+  }, prevEx?.bottom);
 
   const shoe = pickBest(exShoes, sh => {
-    let s = isStrictSportPiece(sh) ? 35 : (/\b(sneaker|trainer|runner)\b/i.test((sh.subType || '') + ' ' + (sh.name || '')) ? 22 : 0);
-    s -= (exUsage[sh.id] || 0) * 5;
-    return s + Math.random();
-  });
+    let s = isStrictSportPiece(sh) ? 28 : (/\b(sneaker|trainer|runner)\b/i.test((sh.subType || '') + ' ' + (sh.name || '')) ? 20 : 0);
+    s -= (exUsage[sh.id] || 0) * 28;
+    s += getRotationPenaltyForItem(sh, exCooldown, 0.9);
+    if (prevEx && prevEx.shoe === sh.id && exShoes.length > 1) s -= 200;
+    return s;
+  }, prevEx?.shoe);
 
   if (!top || !bottom || !shoe) return null;
 
@@ -22213,7 +22934,11 @@ function pickTripExerciseOutfit(day, items, exUsage, prevEx) {
   if (wantSecondLayer) {
     const layerPool = items.filter(i => i.id !== top.id && isExerciseSecondLayerCandidate(i));
     if (layerPool.length) {
-      secondLayer = pickBest(layerPool, l => (isStrictSportPiece(l) ? 30 : 12) - (exUsage[l.id] || 0) * 10);
+      secondLayer = pickBest(layerPool, l => {
+        let s = (isStrictSportPiece(l) ? 26 : 14) - (exUsage[l.id] || 0) * 25 + getRotationPenaltyForItem(l, exCooldown, 0.8);
+        if (prevEx && prevEx.secondLayer === l.id && layerPool.length > 1) s -= 180;
+        return s;
+      }, prevEx?.secondLayer);
     }
   }
 
@@ -22248,7 +22973,7 @@ function planTrip() {
     const o = old[i];
     if (o && o.worn) {
       if (includeExercise && !o.exercise) {
-        o.exercise = pickTripExerciseOutfit(d, items, exUsage, prevEx);
+        o.exercise = pickTripExerciseOutfit(d, items, exUsage, prevEx, plan);
       }
       if (o.exercise) {
         [o.exercise.top, o.exercise.secondLayer, o.exercise.bottom, o.exercise.shoe].filter(Boolean).forEach(id => {
@@ -22260,14 +22985,14 @@ function planTrip() {
       prev = o;
       return;
     }
-    const ex = includeExercise ? pickTripExerciseOutfit(d, items, exUsage, prevEx) : null;
+    const ex = includeExercise ? pickTripExerciseOutfit(d, items, exUsage, prevEx, plan) : null;
     if (ex) {
       [ex.top, ex.secondLayer, ex.bottom, ex.shoe].filter(Boolean).forEach(id => {
         exUsage[id] = (exUsage[id] || 0) + 1;
       });
       prevEx = ex;
     }
-    const entry = { date: d.date, items: pickTripOutfit(d, items, usage, prev), exercise: ex, worn: false };
+    const entry = { date: d.date, items: pickTripOutfit(d, items, usage, prev, null, plan), exercise: ex, worn: false };
     bumpUsage(usage, entry);
     plan.push(entry);
     prev = entry;
@@ -22358,8 +23083,9 @@ function tripSwapDay(i) {
   const usage = {};
   trip.plan.forEach((p, j) => { if (j !== i) bumpUsage(usage, p); });
   const prev = i > 0 ? trip.plan[i - 1] : null;
+  const recentPlans = trip.plan.slice(0, i);
   const avoid = cur.items ? [cur.items.top, cur.items.mid || '', cur.items.bottom, cur.items.shoe, cur.items.outer || ''].join('|') : '';
-  const out = pickTripOutfit(trip.days[i], packedWardrobeItems(), usage, prev, avoid);
+  const out = pickTripOutfit(trip.days[i], packedWardrobeItems(), usage, prev, avoid, recentPlans);
   if (out) {
     cur.items = out;
     saveTrip();
@@ -23963,6 +24689,8 @@ function checkDailyRollover() {
   if (currentDayKey !== lastKnownOutfitDayKey) {
     lastKnownOutfitDayKey = currentDayKey;
     lastKnownEveningPreview = currentEveningPreview;
+    if (typeof archiveStaleDailyLocksIfNeeded === 'function') archiveStaleDailyLocksIfNeeded(currentDayKey);
+    if (typeof todayShuffledAvoidIds !== 'undefined') todayShuffledAvoidIds.clear();
     if (typeof activeAIDailyOutfit !== 'undefined') activeAIDailyOutfit = null;
     if (typeof activeExerciseOutfit !== 'undefined') activeExerciseOutfit = null;
     try {
@@ -24041,6 +24769,7 @@ function init() {
 
   setupIosPwa();
   loadData();
+  if (typeof archiveStaleDailyLocksIfNeeded === 'function') archiveStaleDailyLocksIfNeeded();
   runRetroactiveWardrobeCleanup({ silent: true });
   const { city, apiKey, geminiApiKey, dob, birthTime, birthPlace } = getSettings();
   document.getElementById('setting-city').value = city;
@@ -24117,13 +24846,13 @@ function init() {
   safeStep('renderAstralSection', renderAstralSection);
   safeStep('renderMoodSection', renderMoodSection);
   safeStep('renderWardrobeIllusionSection', renderWardrobeIllusionSection);
+  safeStep('fetchWeather', fetchWeather);
   safeStep('renderOutfit', renderOutfit);
   safeStep('renderShopRecommendations', renderShopRecommendations);
   safeStep('renderUserProfileUI', renderUserProfileUI);
   safeStep('renderTripBanner', renderTripBanner);
   safeStep('hydrateUnlimitedPhotosFromIdb', hydrateUnlimitedPhotosFromIdb);
   safeStep('initFirebaseSync', initFirebaseSync);
-  safeStep('fetchWeather', fetchWeather);
   safeStep('setupDailyRolloverWatcher', setupDailyRolloverWatcher);
 }
 

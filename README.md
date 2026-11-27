@@ -78,12 +78,12 @@ Upload up to 8 photos of looks you love. WhaToWear reads dominant colours, contr
     - **Unique Looks Count**: e.g., 18 pieces $\rightarrow$ 144 looks.
     - **Perception Multiplier**: e.g., 8.0x wardrobe expansion factor.
     - **Months of Non-Repeating Outfits**: e.g., dress for 4.8 months without repeating!
-- **Wear Log & Anti-Repetition Rotation Memory**:
-  - Logs your worn outfits in browser storage (`wtw_wear_log`).
-  - Penalizes recently worn pairings so you never wear the exact same look on consecutive days.
-  - Rewards unrepeated, fresh pairings (+40 bonus).
-  - Displays a **Freshness Rating Badge**: `✨ 100% Fresh Combination · Never worn this exact pairing!`
-  - **"📌 I'm Wearing This Today!"** button to log and lock in today's rotation.
+- **7-Day Rotation Cooldown, Anti-Repetition & Variety-Optimized Decision Engine**:
+  - Tracks worn outfits across devices via cloud-synced `wtw_wear_log` (covering both main daily outfits and morning exercise outfits) and automatically archives yesterday's locked outfit when the day rolls over—even if you didn't manually tap *"I'm Wearing This Today!"*.
+  - **Never repeats consecutive days** for any core piece (tops, mid-layers, outerwear, bottoms, or shoes) whenever alternatives exist, and **rests worn pieces for 7 full days** (gracefully stepping down to longest-rested pieces if a category has fewer than 7 options, and avoiding same-day overlap between Morning Exercise and Main Outfits).
+  - **Eliminates first-item / same-starting-outfit bias**: Step 1 scores top stacks intrinsically without `bottoms[0]`/`shoes[0]` contamination, uses quality-gated weighted sampling across top-tier contenders (prioritizing unworn and least-worn items), randomizes candidate ordering for the 3-step AI Stylist, and defers initial outfit locking until live weather arrives.
+  - Displays a **7-Day Freshness Rating Badge** (`✨ 100% Fresh · 7-Day Rested`), shows per-item **Resting Cooldown** badges in *My Wardrobe*, and offers a 1-click **🧺 Reset 7-Day Cooldown (Fresh Laundry)** control inside *Wardrobe Illusion & Rotation Memory*.
+  - **"📌 I'm Wearing This Today!"** and **"📌 Wearing for Workout!"** buttons log wears, increment wardrobe counts, and sync cooldown state across devices.
 
 ### 6. 🛍️ Pieces to Buy & AI Studio Product Photography (`@google/genai`)
 - Every recommended piece starts in **🧥 Garment Photo** studio mode rendered server-side via the official `@google/genai` SDK (`gemini-3.1-flash-image` / `gemini-3-pro-image`) inside `3:4` e-commerce card containers:
