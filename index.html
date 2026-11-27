@@ -6687,17 +6687,22 @@ function applyRemoteCloudData(data, opts = {}) {
     if (data.settings && typeof data.settings === 'object') {
       if (data.settings.city) localStorage.setItem('wtw_city', data.settings.city);
       if (data.settings.apiKey) localStorage.setItem('wtw_apikey', data.settings.apiKey);
+      if (data.settings.geminiApiKey && !localStorage.getItem('wtw_gemini_apikey')) {
+        localStorage.setItem('wtw_gemini_apikey', data.settings.geminiApiKey);
+      }
       if (data.settings.dob) localStorage.setItem('wtw_dob', data.settings.dob);
       if (data.settings.birthTime) localStorage.setItem('wtw_birth_time', data.settings.birthTime);
       if (data.settings.birthPlace) localStorage.setItem('wtw_birth_place', data.settings.birthPlace);
 
       const cityInput = document.getElementById('setting-city');
       const apiKeyInput = document.getElementById('setting-apikey');
+      const geminiKeyInput = document.getElementById('setting-gemini-apikey');
       const dobInput = document.getElementById('setting-dob');
       const birthTimeInput = document.getElementById('setting-birth-time');
       const birthPlaceInput = document.getElementById('setting-birth-place');
       if (cityInput) cityInput.value = data.settings.city || '';
       if (apiKeyInput) apiKeyInput.value = data.settings.apiKey || '';
+      if (geminiKeyInput && !geminiKeyInput.value && data.settings.geminiApiKey) geminiKeyInput.value = data.settings.geminiApiKey;
       if (dobInput) dobInput.value = data.settings.dob || '';
       if (birthTimeInput) birthTimeInput.value = data.settings.birthTime || '';
       if (birthPlaceInput) birthPlaceInput.value = data.settings.birthPlace || '';
@@ -10227,23 +10232,52 @@ function scoreShoeAndBeltForOutfit(top, midLayer, outer, bottom, shoe, beltRec, 
   if (!shoe) return { score: 0, reason: '' };
   let score = 0;
   const notes = [];
-  const shoeTxt = `${shoe.name || ''} ${shoe.subType || ''} ${shoe.aiDescription || ''}`.toLowerCase();
-  const botTxt = `${bottom?.name || ''} ${bottom?.subType || ''}`.toLowerCase();
+  const shoeTitle = `${shoe.name || ''} ${shoe.subType || ''}`.toLowerCase();
+  const shoeDesc = (shoe.aiDescription || '').toLowerCase();
+  const shoeTxt = `${shoeTitle} ${shoeDesc}`.trim();
+  const botTxt = `${bottom?.name || ''} ${bottom?.subType || ''} ${bottom?.aiDescription || ''}`.toLowerCase();
   const sInfo = opts.seasonInfo || (typeof getLocationSeasonInfo === 'function' ? getLocationSeasonInfo() : { id: 'spring' });
   const temp = (weather && typeof weather.temp === 'number') ? weather.temp : 20;
   const topLen = top ? getItemLength(top) : 'short';
   const targetFormality = opts.targetFormality || (typeof getDayFormality === 'function' ? getDayFormality() : 'casual');
 
   const shoeHsl = hexToHSL(shoe.color || '#444444');
+  const botHsl = hexToHSL(bottom?.color || '#334155');
   const shoeIsNeutral = isNeutralColor(shoe.color || '#444444');
-  const isWarmBrownLeather = /\b(brown|cognac|tan|camel|espresso|chestnut|mahogany|suede|amber)\b/.test(shoeTxt)
-    || (shoeHsl.h >= 12 && shoeHsl.h <= 52 && shoeHsl.s >= 16 && shoeHsl.l >= 14 && shoeHsl.l <= 68);
-  const isGreyWhiteNeutral = /\b(grey|gray|white|off-white|cream|ivory|stone|black|navy|charcoal)\b/.test(shoeTxt)
-    || shoeHsl.s <= 14 || shoeHsl.l <= 16 || shoeHsl.l >= 85;
+  const extraShoeColors = [shoe.secondaryColor, shoe.tertiaryColor].filter(Boolean);
+
+  const isCanvasOrSkateSneaker = /\b(canvas|skate|swoosh|vulcanized|vans|converse|fabric sneaker|mesh|knit sneaker|woven|slip-on)\b/.test(shoeTxt);
   const isHeavyBoot = /\b(boot|boots|combat|hiking|work boot|caterpillar|padded ankle|ankle boot|heavy)\b/.test(shoeTxt);
   const isCleanLeatherBoot = /\b(chelsea|chukka|dress boot)\b/.test(shoeTxt) && !/\b(caterpillar|padded|work boot|combat|hiking|green|colorblock)\b/.test(shoeTxt);
   const isCleanSneakerOrLoafer = /\b(sneaker|sneakers|loafer|loafers|derby|oxford|brogue|boat shoe|deck shoe|espadrille|minimalist|leather sneaker|suede sneaker)\b/.test(shoeTxt);
-  const shoeSeason = shoe.season || inferItemSeasonSuitability(shoe);
+
+  const isWhiteOrOffWhiteSneaker = !/\b(all[- ]?black|black\s+(?:leather|sneaker|shoe|boot))\b/.test(shoeTitle)
+    && (shoeHsl.l >= 78 || (/\b(white|off-white|cream|ivory)\b/.test(shoeTitle) && shoeHsl.l >= 65));
+  const isGumOrWarmSole = /\b(gum\s*sole|gum\s*outsole|brown\s*sole|tan\s*sole|caramel\s*sole|honey\s*sole|gum\s*bottom)\b/.test(shoeTxt)
+    || (isWhiteOrOffWhiteSneaker && extraShoeColors.some(c => {
+      const h = hexToHSL(c);
+      return h.h >= 15 && h.h <= 48 && h.s >= 20 && h.l >= 22 && h.l <= 68;
+    }));
+  const isBlackShoe = !isWhiteOrOffWhiteSneaker && (shoeHsl.l <= 20 || /\bblack\b/.test(shoeTitle));
+  const isBlackWithWhiteSole = isBlackShoe && (
+    /\b(white\s+(?:sole|midsole|outsole|trim|bottom)|contrast\s+(?:white\s+)?sole)\b/.test(shoeTxt)
+    || extraShoeColors.some(c => hexToHSL(c).l >= 78)
+  );
+  const isDeepDarkBrownLeather = !isCanvasOrSkateSneaker && !isHeavyBoot
+    && (/\b(dark brown|espresso|chocolate|mahogany|oxblood|cordovan)\b/.test(shoeTxt)
+      || (shoeHsl.h >= 10 && shoeHsl.h <= 45 && shoeHsl.s >= 16 && shoeHsl.l >= 10 && shoeHsl.l <= 30))
+    && /\b(leather|suede|loafer|derby|oxford|brogue|chelsea|chukka|dress|boot)\b/.test(shoeTxt);
+  const isWarmBrownLeather = !isCanvasOrSkateSneaker && !isHeavyBoot
+    && /\b(leather|suede|loafer|derby|oxford|brogue|chelsea|chukka|boat shoe|dress shoe)\b/.test(shoeTxt)
+    && (/\b(brown|cognac|tan|camel|espresso|chestnut|mahogany|amber)\b/.test(shoeTxt)
+      || (shoeHsl.h >= 12 && shoeHsl.h <= 52 && shoeHsl.s >= 16 && shoeHsl.l >= 14 && shoeHsl.l <= 55));
+  const isTanCamelBrownShoe = /\b(tan|camel|brown|khaki|sand|beige|chestnut|caramel|taupe)\b/.test(shoeTitle)
+    || (shoeHsl.h >= 14 && shoeHsl.h <= 52 && shoeHsl.s >= 16 && shoeHsl.l >= 22 && shoeHsl.l <= 76);
+  const isGreyWhiteNeutral = /\b(grey|gray|white|off-white|cream|ivory|stone|black|navy|charcoal)\b/.test(shoeTitle)
+    || shoeHsl.s <= 14 || shoeHsl.l <= 16 || shoeHsl.l >= 82;
+
+  const botShoeDist = (bottom?.color && shoe.color) ? colorDistanceHSL(bottom.color, shoe.color) : 99;
+  const botShoeLDiff = (bottom?.color && shoe.color) ? Math.abs(botHsl.l - shoeHsl.l) : 50;
 
   // 1. Avoid matchy-matchy colored shoes matching a colored top (e.g., green boots + teal/green shirt)
   const visibleTop = midLayer || top;
@@ -10253,20 +10287,21 @@ function scoreShoeAndBeltForOutfit(top, midLayer, outer, bottom, shoe, beltRec, 
     if (!shoeIsNeutral && hueDiff <= 50) {
       score -= 44;
       notes.push('too matchy with top color');
-    } else if (isWarmBrownLeather || isGreyWhiteNeutral) {
+    } else if (isWhiteOrOffWhiteSneaker || isWarmBrownLeather || isGreyWhiteNeutral) {
       score += 18;
-      notes.push('neutral/earth footwear lets the top stand out');
+      notes.push('clean neutral footwear lets the top stand out');
     }
-  } else if (isWarmBrownLeather || isGreyWhiteNeutral) {
+  } else if (isWhiteOrOffWhiteSneaker || isWarmBrownLeather || isGreyWhiteNeutral) {
     score += 12;
-    notes.push('versatile neutral/earth footwear');
+    notes.push('versatile neutral footwear');
   }
 
   // 2. Season & weather suitability for boots vs sneakers/loafers
-  if ((sInfo.id === 'spring' || sInfo.id === 'summer') && temp >= 16) {
+  const shoeSeason = shoe.season || inferItemSeasonSuitability(shoe);
+  if ((sInfo.id === 'spring' || sInfo.id === 'summer') && temp >= 15) {
     if (isHeavyBoot && !isCleanLeatherBoot) {
-      score -= (topLen === 'short' || topLen === 'sleeveless' || (!midLayer && !outer)) ? 42 : 26;
-      notes.push('heavy autumn/winter boot for mild spring/summer weather');
+      score -= (topLen === 'short' || topLen === 'sleeveless' || (!midLayer && !outer)) ? 44 : 28;
+      notes.push('heavy boot for mild spring/summer weather');
     } else if (shoeSeason === 'autumn-winter' || shoeSeason === 'winter') {
       score -= 22;
     } else if (isCleanSneakerOrLoafer) {
@@ -10275,47 +10310,93 @@ function scoreShoeAndBeltForOutfit(top, midLayer, outer, bottom, shoe, beltRec, 
     }
   }
 
-  // 3. Bottom <-> Shoe color & formality anchoring (e.g., tan chinos + warm brown leather or clean grey/white sneakers)
-  const isTanKhakiBottom = /\b(tan|khaki|beige|sand|stone|camel|chino|chinos)\b/.test(botTxt)
-    || (bottom?.color && (() => { const bh = hexToHSL(bottom.color); return bh.h >= 22 && bh.h <= 55 && bh.l >= 42 && bh.l <= 82; })());
+  // 3. Bottom <-> Shoe VISUAL SEPARATION, SOLE TIE-IN & WEIGHT BALANCE
+  const isTanKhakiBottom = /\b(tan|khaki|beige|sand|stone|camel)\b/.test(botTxt)
+    || (bottom?.color && botHsl.h >= 20 && botHsl.h <= 55 && botHsl.s >= 14 && botHsl.l >= 40 && botHsl.l <= 82);
+  const topStack = [top, midLayer, outer].filter(Boolean);
+  const hasDarkUpperAnchor = topStack.some(it => it?.color && hexToHSL(it.color).l <= 26);
+
   if (isTanKhakiBottom) {
-    if (isWarmBrownLeather && !isHeavyBoot) {
+    if (isWhiteOrOffWhiteSneaker) {
+      score += isGumOrWarmSole ? 46 : 34;
+      notes.unshift(isGumOrWarmSole
+        ? 'crisp white brightens the outfit while the gum sole ties directly into your tan pants'
+        : 'crisp white adds clean contrast and visual separation against tan pants');
+    } else if (isBlackWithWhiteSole) {
+      score += 26;
+      notes.unshift('white midsole keeps dark shoes balanced and light against tan pants');
+    } else if (isDeepDarkBrownLeather) {
       score += 22;
-      notes.push('warm brown leather anchors tan pants sharply');
+      notes.unshift('deep dark leather creates crisp tonal contrast against light tan pants');
+    } else if (isTanCamelBrownShoe && (isCanvasOrSkateSneaker || botShoeDist < 48 || botShoeLDiff < 24 || !isDeepDarkBrownLeather)) {
+      // CRITICAL RULE: Tan/camel/brown sneakers blend into tan chinos instead of creating visual separation!
+      score -= (isCanvasOrSkateSneaker ? 44 : 36);
+      notes.unshift('too close in color to tan chinos — legs and feet blend together without visual separation');
+    } else if (isBlackShoe && !isBlackWithWhiteSole && !hasDarkUpperAnchor) {
+      score -= 34;
+      notes.unshift('solid all-black feels visually heavy against light tan pants and a soft light top');
     } else if (isGreyWhiteNeutral && isCleanSneakerOrLoafer) {
       score += 14;
-      notes.push('clean neutral sneakers pair effortlessly with tan pants');
+      notes.push('clean neutral footwear pairs smoothly with tan pants');
     } else if (!shoeIsNeutral && !isWarmBrownLeather) {
       score -= 18;
     }
+  } else {
+    // General pant-to-shoe blending guard for non-black bottoms (e.g. olive shoes on olive pants, grey on matching grey)
+    if (bottom?.color && botHsl.l > 22 && !isBlackShoe && !isWhiteOrOffWhiteSneaker && botShoeDist < 26 && botShoeLDiff < 15) {
+      score -= 28;
+      notes.unshift('too close in shade to pants — lacks crisp visual separation at the ankle');
+    } else if (isWhiteOrOffWhiteSneaker && isCleanSneakerOrLoafer) {
+      score += 18;
+      notes.push('crisp white sneaker creates clean separation against darker pants');
+    } else if (isWarmBrownLeather && botHsl.h >= 195 && botHsl.h <= 255) {
+      score += 20;
+      notes.push('warm leather anchors navy/indigo bottoms sharply');
+    }
   }
 
-  // Penalize colorblock/loud rugged shoes on smart-casual+ workdays
+  // Penalize loud logos, canvas skate shoes, or rugged work boots on smart-casual+ workdays
   if (formalityScore(targetFormality) >= 2) {
     if (shoe.pattern === 'colorblock' || /\b(caterpillar|work boot|hiking boot|combat boot)\b/.test(shoeTxt)) {
-      score -= 20;
+      score -= 22;
     }
-    if ((isWarmBrownLeather || isCleanLeatherBoot || /\b(loafer|derby|oxford|brogue)\b/.test(shoeTxt)) && !/\b(work boot|hiking|combat|caterpillar)\b/.test(shoeTxt)) {
+    if (isCanvasOrSkateSneaker || shoe.pattern === 'logo' || /\b(swoosh|skate)\b/.test(shoeTxt)) {
+      score -= 16;
+      notes.push('casual skate/logo sneaker is less refined for smart-casual');
+    }
+    if ((isDeepDarkBrownLeather || isWarmBrownLeather || isCleanLeatherBoot || /\b(loafer|derby|oxford|brogue|minimalist)\b/.test(shoeTxt)) && !isCanvasOrSkateSneaker && !/\b(work boot|hiking|combat|caterpillar)\b/.test(shoeTxt)) {
       score += 12;
     }
   }
 
-  // 4. Belt <-> Shoe coordination
+  // 4. Belt <-> Shoe coordination (NEVER let belt inventory drag a crisp white sneaker down behind brown skate shoes!)
   const beltItem = beltRec && beltRec.beltItem ? beltRec.beltItem : null;
   if (beltItem && !isDrawstringOrAthleticBottom(bottom)) {
     const beltDist = colorDistanceHSL(beltItem.color || '#333333', shoe.color || '#333333');
     const beltTxt = `${beltItem.name || ''} ${beltItem.subType || ''}`.toLowerCase();
     const beltIsWarmLeather = /\b(brown|cognac|tan|burgundy|oxblood|chestnut|espresso|mahogany)\b/.test(beltTxt);
-    if (beltRec.colorMatchClose || beltDist < 32) {
-      score += 22;
+    const beltIsBlack = /\b(black|charcoal)\b/.test(beltTxt) || hexToHSL(beltItem.color || '#333').l <= 20;
+
+    if (isWhiteOrOffWhiteSneaker || (isGreyWhiteNeutral && isCleanSneakerOrLoafer)) {
+      // With crisp white/neutral sneakers, warm leather OR black leather belts anchor the waist cleanly (never expect a white belt!)
+      if (beltIsWarmLeather && (isTanKhakiBottom || isGumOrWarmSole || botHsl.h >= 195 && botHsl.h <= 255)) {
+        score += 16;
+        notes.push(`warm ${beltItem.name} anchors the waist cleanly with crisp sneakers`);
+      } else if (beltIsBlack && botHsl.l <= 30) {
+        score += 16;
+      } else {
+        score += 10;
+      }
+    } else if (beltRec.colorMatchClose || beltDist < 32) {
+      score += 18;
       notes.push(`harmonizes with ${beltItem.name}`);
-    } else if (beltIsWarmLeather && isWarmBrownLeather) {
-      score += 16;
+    } else if (beltIsWarmLeather && (isDeepDarkBrownLeather || isWarmBrownLeather)) {
+      score += 14;
       notes.push(`warm leather harmony with ${beltItem.name}`);
-    } else if (beltIsWarmLeather && isGreyWhiteNeutral && isCleanSneakerOrLoafer) {
-      score += 6;
+    } else if (beltIsBlack && isBlackShoe) {
+      score += 16;
     } else if (!shoeIsNeutral && beltDist > 55) {
-      score -= 20;
+      score -= 18;
       notes.push(`clashes with ${beltItem.name}`);
     }
   }
@@ -11345,10 +11426,10 @@ function generateOutfit(options = {}) {
     personalEval: evalResult.personalEval,
     isNeverWorn: evalResult.isNeverWorn,
     rotationStatus: evalResult.rotationStatus || null,
-    rankedShoes: orderedRankedShoes.slice(0, 3).map((r, i) => ({
+    rankedShoes: orderedRankedShoes.slice(0, 6).map((r, i) => ({
       shoeId: r.shoe.id,
       rank: i + 1,
-      verdict: i === 0 ? 'Best Choice' : (i === 1 ? 'Runner-Up' : '3rd Option'),
+      verdict: i === 0 ? 'Best Choice' : (i === 1 ? 'Runner-Up' : (r.score < 85 ? 'Skip' : `Option #${i + 1}`)),
       reason: r.reason
     })),
     blueprint
@@ -11375,7 +11456,7 @@ function saveDailyMainLock(outfit, forceNewTimestamp = false) {
     archiveLockEntryToWearLog(existing, 'main', todayStr);
   }
   if (!forceNewTimestamp && existing && existing.date === todayStr &&
-      existing.engineVersion === 2 &&
+      existing.engineVersion === 3 &&
       existing.weatherReady === weatherReady &&
       existing.seasonId === seasonId &&
       existing.topId === outfit.top.id &&
@@ -11390,7 +11471,7 @@ function saveDailyMainLock(outfit, forceNewTimestamp = false) {
     return;
   }
   const lock = {
-    engineVersion: 2,
+    engineVersion: 3,
     date: todayStr,
     updatedAt: Date.now(),
     source,
@@ -11422,8 +11503,8 @@ function hydrateDailyMainLock(lock, ctx) {
     }
     return null;
   }
-  // Upgrade smoothly from legacy pre-rotation locks once
-  if (!lock.engineVersion || lock.engineVersion < 2) return null;
+  // Upgrade smoothly from legacy locks once
+  if (!lock.engineVersion || lock.engineVersion < 3) return null;
   // If a provisional local lock was created before live weather loaded, regenerate cleanly now that weather arrived
   if (lock.source === 'local' && lock.weatherReady === false && weather && typeof weather.temp === 'number') {
     return null;
@@ -12216,11 +12297,14 @@ function renderOutfit() {
   const imageMatchColor = imageMatchPct >= 82 ? '#6ee7b7' : (imageMatchPct >= 65 ? '#fcd34d' : '#fca5a5');
   const hasGeminiKeyConfigured = Boolean((localStorage.getItem('wtw_gemini_apikey') || '').trim());
   const aiModelLabel = outfit.aiDailyMeta?.modelUsed ? ` · ${outfit.aiDailyMeta.modelUsed}` : '';
-  const aiVisualTag = outfit.aiDailyMeta?.usedPhotos ? ' · 📷 Visual' : '';
+  const aiThinkingTag = outfit.aiDailyMeta?.usedThinking ? ' · 🧠' : '';
+  const aiVisualTag = outfit.aiDailyMeta?.usedPhotos
+    ? ` · 📷 Visual${outfit.aiDailyMeta?.photosUsedCount ? ` (${outfit.aiDailyMeta.photosUsedCount})` : ''}`
+    : (outfit.aiDailyMeta ? ' · 📝 Text' : '');
   const aiStatusPillHtml = aiDailyOutfitInFlight
     ? `<span id="ai-daily-status-pill" class="badge" style="background:rgba(56,189,248,0.16); color:#7dd3fc; border:1px solid rgba(56,189,248,0.4); font-size:0.74rem; padding:4px 10px;">⏳ 🤖 ${escapeHtml(aiDailyProgressStep || 'AI 3-Step Stylist deciding...')}</span>`
     : outfit.aiDailyMeta
-      ? `<span id="ai-daily-status-pill" class="badge" style="background:rgba(0,229,192,0.14); color:#00e5c0; border:1px solid rgba(0,229,192,0.35); font-size:0.74rem; padding:4px 10px;">🤖 3-Step AI Stylist${escapeHtml(aiModelLabel)}${aiVisualTag}</span>`
+      ? `<span id="ai-daily-status-pill" class="badge" style="background:rgba(0,229,192,0.14); color:#00e5c0; border:1px solid rgba(0,229,192,0.35); font-size:0.74rem; padding:4px 10px;">🤖 3-Step AI Stylist${escapeHtml(aiModelLabel)}${aiThinkingTag}${aiVisualTag}</span>`
       : (!hasGeminiKeyConfigured
         ? `<button type="button" id="ai-daily-status-pill" class="badge" onclick="switchTab('settings')" style="background:rgba(251,191,36,0.14); color:#fcd34d; border:1px solid rgba(251,191,36,0.35); font-size:0.74rem; padding:4px 10px; cursor:pointer;" title="Add your Gemini API key in Settings to enable 3-Step AI decisions">⚙️ Local 3-Step Fallback · Add Gemini Key</button>`
         : (aiDailyLastError
@@ -13211,18 +13295,39 @@ function orderCandidatesForAIVariety(items, cooldownInfo = null) {
   });
 }
 
+function extractGeminiResponseText(data) {
+  const parts = data?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts) || parts.length === 0) return '';
+  // On Gemini 2.5 / 3.x thinking models, thought parts have { thought: true, text: "..." }.
+  // Always read the actual non-thought output parts first!
+  const answerParts = parts.filter(p => p && typeof p.text === 'string' && !p.thought);
+  if (answerParts.length > 0) {
+    return answerParts.map(p => p.text).join('\n').trim();
+  }
+  return parts.filter(p => p && typeof p.text === 'string').map(p => p.text).join('\n').trim();
+}
+
 function parseGeminiJsonObject(data) {
-  const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const raw = extractGeminiResponseText(data)
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```\s*$/i, '')
+    .trim();
+  if (!raw) return null;
+  try {
+    const direct = JSON.parse(raw);
+    if (direct && typeof direct === 'object' && !Array.isArray(direct)) return direct;
+  } catch {}
   const jm = raw.match(/\{[\s\S]*\}/);
   if (!jm) return null;
   try {
-    return JSON.parse(jm[0]);
+    const obj = JSON.parse(jm[0]);
+    return (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : null;
   } catch {
     return null;
   }
 }
 
-async function loadSafePhotoPart(item, maxDim = 256, timeoutMs = 2600) {
+async function loadSafePhotoPart(item, maxDim = 512, timeoutMs = 6000) {
   if (!item || typeof photoSrcToGeminiPart !== 'function') return null;
   const src = item.image || item.imageUrl || null;
   if (!src) return null;
@@ -13347,6 +13452,9 @@ function hydrateAIDailyOutfitFromPicked(picked, currentTemp) {
       mode: picked.mode || '3-step',
       modelUsed: picked.modelUsed || '',
       usedPhotos: !!picked.usedPhotos,
+      usedComparisonBoard: !!picked.usedComparisonBoard,
+      usedThinking: !!picked.usedThinking,
+      photosUsedCount: typeof picked.photosUsedCount === 'number' ? picked.photosUsedCount : 0,
       alignmentScore: typeof picked.image_alignment_score === 'number' ? picked.image_alignment_score : 88,
       alignmentNote: picked.image_alignment_note || '',
       reason: picked.decision_reason || '',
@@ -13356,7 +13464,7 @@ function hydrateAIDailyOutfitFromPicked(picked, currentTemp) {
         shoeReason: picked.shoeReason || '',
         beltReason: picked.beltReason || ''
       },
-      shoeRanking: validRanking.slice(0, 4)
+      shoeRanking: validRanking.slice(0, 6)
     }
   };
   outfit.decisionProfile = generateHowToWearGuide(outfit, bp);
@@ -13372,7 +13480,7 @@ function getAIDailyOutfitCacheKey() {
   const form = (typeof getDayFormality === 'function') ? getDayFormality() : 'casual';
   const arch = (userProfile && userProfile.personaArchetype) || 'quiet-luxury';
   const moodKey = typeof currentMood === 'string' ? currentMood : 'calm';
-  return `${todayStr}|${cityKey}|${sInfo.id}|${sInfo.hemisphere}|${tempBand}|${mainCond}|${layerOverride}|${form}|${arch}|${moodKey}|v4rot`;
+  return `${todayStr}|${cityKey}|${sInfo.id}|${sInfo.hemisphere}|${tempBand}|${mainCond}|${layerOverride}|${form}|${arch}|${moodKey}|v5ai`;
 }
 
 function restoreCachedAIDailyOutfit(cacheKey) {
@@ -13409,7 +13517,7 @@ function maybeTriggerAIDailyOutfit(forceRefresh = false, avoidIds = []) {
   // If today's lock came from AI (e.g. synced from another device) and matches today's context, adopt it without re-spending tokens
   if (!forceRefresh) {
     const existingLock = getDailyMainLock();
-    if (existingLock && existingLock.engineVersion >= 2 && existingLock.date === getOutfitDayKey() && existingLock.source === 'ai' && existingLock.aiDailyMeta && existingLock.layerOverride === layerOverride && existingLock.formality === getDayFormality() && (!existingLock.mood || existingLock.mood === currentMood)) {
+    if (existingLock && existingLock.engineVersion >= 3 && existingLock.date === getOutfitDayKey() && existingLock.source === 'ai' && existingLock.aiDailyMeta && existingLock.layerOverride === layerOverride && existingLock.formality === getDayFormality() && (!existingLock.mood || existingLock.mood === currentMood)) {
       return;
     }
   }
@@ -13419,11 +13527,11 @@ function maybeTriggerAIDailyOutfit(forceRefresh = false, avoidIds = []) {
   runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds });
 }
 
-/* ===== 3-STEP CHAINED MULTIMODAL AI STYLIST =====
-   Step 1: Choose Best Top (+ Layers if 2/3 Layers)
-   Step 2: Choose Best Matching Bottom for the Locked Top
-   Step 3: Head-to-Head Multimodal Comparison of Shoes & Belt for Locked Top + Bottom
-   ================================================ */
+/* ===== 3-STEP CHAINED MULTIMODAL AI STYLIST (Deep Thinking + Side-by-Side Visual Boards) =====
+   Step 1: Check User Profile & Rotation -> Choose Best Unused / Rested Top (+ Layers if 2/3 Layers)
+   Step 2: Visual Comparison -> Choose Best Matching Unused / Rested Pants for the Locked Top
+   Step 3: Head-to-Head Multimodal Comparison Board -> Evaluate ALL Eligible Shoes First, Rank #1..#N, Then Match Best Belt
+   ============================================================================================= */
 
 async function runAIStage1Top({ geminiKey, pools, personalCtx, currentTemp, cond, wearContext, avoidIds }) {
   const { targetLayers, targetFormality, sInfo, baseTops, midLayers, outerShells, cooldownInfo } = pools;
@@ -13438,35 +13546,50 @@ async function runAIStage1Top({ geminiKey, pools, personalCtx, currentTemp, cond
       : `STRICT 3-LAYER MODE: Choose a Layer 1 base top (topId) + 1 midLayerId + 1 outerwearId.`;
 
   const promptLines = [
-    `You are Step 1 of a 3-step master stylist pipeline for WhaToWear.`,
-    `STEP 1 GOAL: Choose ONLY the single best Top (and compatible Layer 2/3 ONLY if requested below) for today. Do NOT worry about pants or shoes yet — Steps 2 and 3 will match them to your choice.`,
+    `You are Step 1 of a 3-step master fashion stylist consultation for WhaToWear.`,
+    `STEP 1 GOAL: Review the user's Personal Profile (complexion/season, undertone, contrast, face & body shape, desired style identity) and today's context, then pick the single BEST Top (plus compatible Layer 2/3 ONLY if requested) that the user has NOT worn lately.`,
     `Context: Date=${pools.refDateKey}, ${currentTemp}°C, ${cond}, Season: ${sInfo.name}, Target Formality: ${targetFormality}, Mood: ${currentMood || 'balanced'}.`,
     layerDirective,
     isWorkContext
-      ? `Workday Rule: Prefer crisp collared shirts (Oxford, Dress, Button-Up, Linen, Polo) or refined solid smart-casual tops (zero front wording, logos, or loud graphics).`
-      : `Casual Rule: Pick a flattering, weather-appropriate Layer 1 base top that suits the user's complexion and silhouette.`,
+      ? `Workday Rule: Prefer refined smart-casual collared tops (Oxford, Dress, Button-Up, Linen Shirt, Polo) or clean elevated solid tops (zero front wording, logos, or loud graphics).`
+      : `Casual Rule: Pick a flattering, weather-appropriate Layer 1 base top that illuminates the user's complexion and fits their silhouette.`,
     `Layer 1 Rule: topId MUST be chosen strictly from baseTops below (never a sweater, hoodie, sweatshirt, quarter-zip, pullover, or jacket).`,
-    `ROTATION & VARIETY RULE: Pieces worn in the last 7 days have already been rested out of the pool whenever fresh options exist. Actively rotate across the user's full wardrobe — prioritize pieces with wearCount: 0 or the lowest wearCount and daysSinceWorn: "never-or-7d+" rather than repeating the same safe grey tee every time!`,
+    `ROTATION & VARIETY RULE: Pieces worn in the last 7 days have already been rested out whenever fresh alternatives exist. Prioritize pieces with daysSinceWorn: "never-or-7d+" and lowest wearCount — rotate across the whole wardrobe rather than repeating the same safe grey t-shirt.`,
     wearContext.yesterdayIds.length ? `NEVER repeat yesterday's pieces if any alternative exists: ${JSON.stringify(wearContext.yesterdayIds)}.` : '',
-    wearContext.recent7DayIds.length ? `Recently worn within last 7 days (avoid unless no rested option exists): ${JSON.stringify(wearContext.recent7DayIds)}.` : '',
+    wearContext.recent7DayIds.length ? `Worn within the last 7 days (avoid unless no rested option exists): ${JSON.stringify(wearContext.recent7DayIds)}.` : '',
     avoidIds.length ? `Strictly avoid these item IDs (user shuffled or disliked them): ${JSON.stringify(avoidIds)}.` : '',
     personalCtx,
     `Eligible rested baseTops (randomized order): ${JSON.stringify(compactWardrobeForAI(variedBaseTops, cooldownInfo))}`,
     targetLayers >= 2 && variedMidLayers.length ? `Eligible rested midLayers (Layer 2): ${JSON.stringify(compactWardrobeForAI(variedMidLayers, cooldownInfo))}` : '',
-    targetLayers >= 2 && variedOuterShells.length ? `Eligible rested outerShells (Layer 3 / light jacket): ${JSON.stringify(compactWardrobeForAI(variedOuterShells, cooldownInfo))}` : '',
-    `Return ONLY valid JSON with exact keys: {"topId": "<exact id from baseTops>", "midLayerId": "<exact id or null>", "outerwearId": "<exact id or null>", "topReason": "1 concise sentence explaining why this top/layer stack flatters the user and fits today's weather & occasion"}`
+    targetLayers >= 2 && variedOuterShells.length ? `Eligible rested outerShells (Layer 3 / jacket): ${JSON.stringify(compactWardrobeForAI(variedOuterShells, cooldownInfo))}` : '',
+    `Think step-by-step FIRST inside "topShortlist" (compare your top 3 candidates against profile colors, silhouette, weather, and freshness), THEN pick the winner. Return ONLY valid JSON with exact keys:`,
+    `{`,
+    `  "profileFitSummary": "1 short sentence summarizing the colors/cuts that flatter this user today",`,
+    `  "topShortlist": [{"topId": "<id>", "pros": "...", "cons": "..."}],`,
+    `  "topId": "<exact winning id from baseTops>",`,
+    `  "midLayerId": "<exact id or null>",`,
+    `  "outerwearId": "<exact id or null>",`,
+    `  "topReason": "1 concise sentence explaining why this top/layer stack flatters the user's profile and fits today's weather & occasion"`,
+    `}`
   ].filter(Boolean);
 
   const data = await callGeminiGenerateContent(geminiKey, {
     parts: [{ text: promptLines.join('\n') }],
-    temperature: 0.55,
+    temperature: 0.5,
     responseMimeType: 'application/json',
-    preferQuality: true
+    preferQuality: true,
+    thinkingBudget: 1536
   });
-  const parsed = parseGeminiJsonObject(data) || {};
+  const parsed = parseGeminiJsonObject(data);
+  if (!parsed || !parsed.topId) {
+    throw new Error('AI Stage 1 returned incomplete JSON (missing topId)');
+  }
   const findIn = (list, id) => (id ? list.find(x => x.id === id) || null : null);
 
-  let top = findIn(variedBaseTops, parsed.topId) || variedBaseTops[0];
+  const top = findIn(variedBaseTops, parsed.topId);
+  if (!top) {
+    throw new Error(`AI Stage 1 selected unavailable topId "${parsed.topId}"`);
+  }
   let midLayer = targetLayers >= 2 ? findIn(variedMidLayers, parsed.midLayerId) : null;
   let outerwear = targetLayers >= 2 ? findIn(variedOuterShells, parsed.outerwearId) : null;
 
@@ -13484,83 +13607,164 @@ async function runAIStage1Top({ geminiKey, pools, personalCtx, currentTemp, cond
     midLayer,
     outerwear,
     topReason: parsed.topReason || `Selected ${top.name} for ${currentTemp}°C ${sInfo.name} ${targetFormality} style.`,
-    usedModel: data?._usedModel || ''
+    usedModel: data?._usedModel || '',
+    usedThinking: Boolean(data?._usedThinking)
   };
 }
 
 async function runAIStage2Bottom({ geminiKey, pools, personalCtx, currentTemp, cond, wearContext, lockedTopStack, avoidIds }) {
   const { targetFormality, sInfo, bottoms, cooldownInfo } = pools;
   const variedBottoms = orderCandidatesForAIVariety(bottoms, cooldownInfo);
+  const visualBottoms = variedBottoms.slice(0, 8);
+
+  // Load 512px photos of locked top stack + candidate pants to build a side-by-side visual board
+  const lockedSpec = [
+    { tag: 'LOCKED TOP', caption: lockedTopStack.top.name, color: lockedTopStack.top.color, item: lockedTopStack.top },
+    lockedTopStack.midLayer ? { tag: 'LOCKED MID', caption: lockedTopStack.midLayer.name, color: lockedTopStack.midLayer.color, item: lockedTopStack.midLayer } : null,
+    lockedTopStack.outerwear ? { tag: 'LOCKED OUTER', caption: lockedTopStack.outerwear.name, color: lockedTopStack.outerwear.color, item: lockedTopStack.outerwear } : null
+  ].filter(Boolean);
+  const candSpec = visualBottoms.map((b, idx) => ({
+    tag: `[P${idx + 1}]`,
+    caption: b.name,
+    color: b.color,
+    item: b
+  }));
+
+  const [lockedParts, candParts] = await Promise.all([
+    Promise.all(lockedSpec.map(async s => ({ ...s, part: await loadSafePhotoPart(s.item, 512, 6000) }))),
+    Promise.all(candSpec.map(async s => ({ ...s, part: await loadSafePhotoPart(s.item, 512, 6000) })))
+  ]);
+  const boardRes = typeof buildVisualComparisonBoardPart === 'function'
+    ? await buildVisualComparisonBoardPart({
+        lockedTiles: lockedParts,
+        candidateTiles: candParts,
+        boardTitle: 'STEP 2 VISUAL COMPARISON: LOCKED TOP (LEFT) vs CANDIDATE PANTS [P1..PN] (RIGHT)'
+      })
+    : { boardPart: null, realPhotoCount: 0 };
+
   const lockedSummary = {
     top: compactWardrobeForAI([lockedTopStack.top], cooldownInfo)[0],
     midLayer: lockedTopStack.midLayer ? compactWardrobeForAI([lockedTopStack.midLayer], cooldownInfo)[0] : null,
     outerwear: lockedTopStack.outerwear ? compactWardrobeForAI([lockedTopStack.outerwear], cooldownInfo)[0] : null
   };
+  const labeledBottoms = variedBottoms.map((b, idx) => ({
+    boardLabel: idx < visualBottoms.length ? `[P${idx + 1}]` : null,
+    ...compactWardrobeForAI([b], cooldownInfo)[0]
+  }));
 
   const promptLines = [
-    `You are Step 2 of a 3-step master stylist pipeline for WhaToWear.`,
-    `STEP 2 GOAL: The Top (and any upper layers) is ALREADY LOCKED below. Choose the single BEST matching Bottom (pants/chinos/jeans/trousers/shorts) from eligibleBottoms that creates the sharpest, most harmonious outfit with this exact Top.`,
+    `You are Step 2 of a 3-step master fashion stylist consultation for WhaToWear.`,
+    `STEP 2 GOAL: The Top (and any upper layers) is ALREADY LOCKED below (and shown on the LEFT of the attached visual board when available). Compare ALL eligible rested pants/bottoms and choose the single BEST matching pair that creates the sharpest, most harmonious outfit.`,
     `Context: Date=${pools.refDateKey}, ${currentTemp}°C, ${cond}, Season: ${sInfo.name}, Target Formality: ${targetFormality}, Mood: ${currentMood || 'balanced'}.`,
     `LOCKED TOP STACK: ${JSON.stringify(lockedSummary)}`,
-    `Matching & Variety Rules: Ensure clean tonal contrast (don't wash out or clash hues), match formality level (e.g., chinos/trousers/dark clean denim for smart-casual), match fabric weight & season, flatter the user's body silhouette, and favor less-worn / freshly rested pants over repeatedly picking the exact same pair.`,
+    `Matching & Rotation Rules:`,
+    `1. Create crisp, intentional tonal contrast between top and pants (avoid washed-out near-identical tones unless intentionally monochrome dark).`,
+    `2. Match formality, fabric weight, season, and the user's body silhouette proportions.`,
+    `3. Prefer rested pants not worn lately (daysSinceWorn: "never-or-7d+", lowest wearCount) — never repeat yesterday's pants.`,
     wearContext.yesterdayIds.length ? `NEVER repeat yesterday's bottom if any alternative exists: ${JSON.stringify(wearContext.yesterdayIds)}.` : '',
     wearContext.recentBottomIds.length ? `Recently worn bottom IDs within last 7 days (avoid unless no rested option fits): ${JSON.stringify(wearContext.recentBottomIds)}.` : '',
     avoidIds.length ? `Strictly avoid these item IDs: ${JSON.stringify(avoidIds)}.` : '',
     personalCtx,
-    `Eligible rested bottoms (randomized order): ${JSON.stringify(compactWardrobeForAI(variedBottoms, cooldownInfo))}`,
-    `Return ONLY valid JSON with exact keys: {"bottomId": "<exact id from eligible bottoms>", "bottomReason": "1 concise sentence explaining why these pants/bottoms best match the locked top"}`
+    `Eligible rested bottoms: ${JSON.stringify(labeledBottoms)}`,
+    `Evaluate the top contenders FIRST inside "pantEvaluations", THEN pick the winner. Return ONLY valid JSON with exact keys:`,
+    `{`,
+    `  "pantEvaluations": [{"bottomId": "<id>", "contrastAndHarmony": "...", "score": 90}],`,
+    `  "bottomId": "<exact winning id from eligible bottoms>",`,
+    `  "bottomReason": "1 concise sentence explaining why these pants best match the locked top"`,
+    `}`
   ].filter(Boolean);
 
+  const parts = [];
+  if (boardRes.boardPart) {
+    parts.push({ text: 'SIDE-BY-SIDE VISUAL BOARD (Locked Top on Left vs Candidate Pants [P1..PN] on Right):' });
+    parts.push(boardRes.boardPart);
+  }
+  parts.push({ text: promptLines.join('\n') });
+
   const data = await callGeminiGenerateContent(geminiKey, {
-    parts: [{ text: promptLines.join('\n') }],
-    temperature: 0.45,
+    parts,
+    temperature: 0.4,
     responseMimeType: 'application/json',
-    preferQuality: true
+    preferQuality: true,
+    thinkingBudget: 1536
   });
-  const parsed = parseGeminiJsonObject(data) || {};
-  const bottom = variedBottoms.find(b => b.id === parsed.bottomId) || variedBottoms[0];
+  const parsed = parseGeminiJsonObject(data);
+  if (!parsed || !parsed.bottomId) {
+    throw new Error('AI Stage 2 returned incomplete JSON (missing bottomId)');
+  }
+  const bottom = variedBottoms.find(b => b.id === parsed.bottomId);
+  if (!bottom) {
+    throw new Error(`AI Stage 2 selected unavailable bottomId "${parsed.bottomId}"`);
+  }
 
   return {
     bottom,
     bottomReason: parsed.bottomReason || `Paired ${bottom.name} to balance ${lockedTopStack.top.name}.`,
-    usedModel: data?._usedModel || ''
+    usedModel: data?._usedModel || '',
+    usedThinking: Boolean(data?._usedThinking),
+    usedPhotos: boardRes.realPhotoCount >= 2
   };
 }
 
 async function runAIStage3ShoesAndBelt({ geminiKey, pools, personalCtx, currentTemp, cond, wearContext, lockedTopStack, lockedBottom, avoidIds }) {
-  const { targetFormality, sInfo, shoes, allShoesAllowed, belts, allEligibleBelts, nonBeltAccessories, blueprint, cooldownInfo, refDateKey } = pools;
-  const shoePoolBase = shoes.length > 0 ? shoes : allShoesAllowed;
+  const { targetFormality, sInfo, shoes, allShoesAllowed, belts, allEligibleBelts, nonBeltAccessories, cooldownInfo, refDateKey } = pools;
   const avoidSet = new Set(Array.isArray(avoidIds) ? avoidIds : []);
-  const shoeCandidatesNonAvoid = shoePoolBase.filter(s => !avoidSet.has(s.id));
-  const shoeCandidates = shoeCandidatesNonAvoid.length > 0 ? shoeCandidatesNonAvoid : shoePoolBase;
 
-  // Order shoe candidates with local pre-ranking INCLUDING 7-day rotation cooldown & wear balance (never skipWearLog!)
-  const preRanked = rankShoesForLockedOutfit(
-    lockedTopStack.top, lockedTopStack.midLayer, lockedTopStack.outerwear,
-    lockedBottom, shoeCandidates, belts,
-    { allEligibleBelts, blueprint, targetFormality, seasonInfo: sInfo, cooldownInfo, referenceDateKey: refDateKey }
-  );
-  const orderedShoes = preRanked.map(r => r.shoe);
-  const visualShoes = orderedShoes.slice(0, 8);
+  // CRITICAL: Give Gemini ALL eligible non-gym, non-sandal, rotation-eligible shoes (merging allShoesAllowed + shoes)
+  // so narrow weather/formality tags NEVER hide great options like White Sneakers with Gum Sole!
+  const mergedShoeMap = new Map();
+  [...(allShoesAllowed || []), ...(shoes || [])].forEach(sh => {
+    if (sh && sh.id && !mergedShoeMap.has(sh.id)) mergedShoeMap.set(sh.id, sh);
+  });
+  const mergedShoesAll = Array.from(mergedShoeMap.values());
+  const nonAvoidShoes = mergedShoesAll.filter(s => !avoidSet.has(s.id));
+  const shoeCandidatesRaw = nonAvoidShoes.length > 0 ? nonAvoidShoes : mergedShoesAll;
+  // Do NOT pre-sort by local heuristics (which can bias Gemini's index-0 preference); order neutrally by rotation freshness
+  const orderedShoes = orderCandidatesForAIVariety(shoeCandidatesRaw, cooldownInfo);
+  const visualShoes = orderedShoes.slice(0, 10);
+
   const needsBelt = !isDrawstringOrAthleticBottom(lockedBottom);
-  const beltSource = belts.length > 0 ? belts : (allEligibleBelts || []);
-  const eligibleBelts = needsBelt ? beltSource.filter(b => !avoidSet.has(b.id)) : [];
+  const beltSource = (allEligibleBelts && allEligibleBelts.length > 0) ? allEligibleBelts : (belts || []);
+  const eligibleBeltsNonAvoid = needsBelt ? beltSource.filter(b => !avoidSet.has(b.id)) : [];
+  const eligibleBelts = needsBelt ? (eligibleBeltsNonAvoid.length > 0 ? eligibleBeltsNonAvoid : beltSource) : [];
   const visualBelts = eligibleBelts.slice(0, 4);
 
-  // Load compact 256px garment photos in parallel so Gemini can SEE the actual colors, textures, soles, and shapes
-  const visualItems = [
-    { role: `LOCKED TOP (${lockedTopStack.top.name})`, item: lockedTopStack.top },
-    lockedTopStack.midLayer ? { role: `LOCKED MID-LAYER (${lockedTopStack.midLayer.name})`, item: lockedTopStack.midLayer } : null,
-    lockedTopStack.outerwear ? { role: `LOCKED OUTERWEAR (${lockedTopStack.outerwear.name})`, item: lockedTopStack.outerwear } : null,
-    { role: `LOCKED BOTTOM (${lockedBottom.name})`, item: lockedBottom },
-    ...visualShoes.map(sh => ({ role: `CANDIDATE SHOE id="${sh.id}" (${sh.name})`, item: sh })),
-    ...visualBelts.map(b => ({ role: `CANDIDATE BELT id="${b.id}" (${b.name})`, item: b }))
+  // Load crisp 512px photos in parallel so Gemini can clearly see gum soles, white midsoles, canvas vs leather, and exact color separation!
+  const lockedSpec = [
+    { tag: 'LOCKED TOP', caption: lockedTopStack.top.name, color: lockedTopStack.top.color, item: lockedTopStack.top },
+    lockedTopStack.midLayer ? { tag: 'LOCKED MID', caption: lockedTopStack.midLayer.name, color: lockedTopStack.midLayer.color, item: lockedTopStack.midLayer } : null,
+    lockedTopStack.outerwear ? { tag: 'LOCKED OUTER', caption: lockedTopStack.outerwear.name, color: lockedTopStack.outerwear.color, item: lockedTopStack.outerwear } : null,
+    { tag: 'LOCKED PANTS', caption: lockedBottom.name, color: lockedBottom.color, item: lockedBottom }
   ].filter(Boolean);
+  const shoeSpec = visualShoes.map((sh, idx) => ({
+    tag: `[S${idx + 1}]`,
+    caption: sh.name,
+    color: sh.color,
+    item: sh
+  }));
+  const beltSpec = visualBelts.map((b, idx) => ({
+    tag: `[B${idx + 1}]`,
+    caption: b.name,
+    color: b.color,
+    item: b
+  }));
 
-  const loadedPhotos = await Promise.all(
-    visualItems.map(async v => ({ role: v.role, part: await loadSafePhotoPart(v.item, 256, 2600) }))
-  );
-  const validPhotos = loadedPhotos.filter(p => p.part);
+  const [lockedParts, shoeParts, beltParts] = await Promise.all([
+    Promise.all(lockedSpec.map(async s => ({ ...s, part: await loadSafePhotoPart(s.item, 512, 6500) }))),
+    Promise.all(shoeSpec.map(async s => ({ ...s, part: await loadSafePhotoPart(s.item, 512, 6500) }))),
+    Promise.all(beltSpec.map(async s => ({ ...s, part: await loadSafePhotoPart(s.item, 512, 6500) })))
+  ]);
+
+  const boardRes = typeof buildVisualComparisonBoardPart === 'function'
+    ? await buildVisualComparisonBoardPart({
+        lockedTiles: lockedParts,
+        candidateTiles: shoeParts,
+        secondaryTiles: beltParts,
+        boardTitle: 'HEAD-TO-HEAD FOOTWEAR & BELT COMPARISON: LOCKED OUTFIT (LEFT) vs CANDIDATE SHOES [S1..SN] (RIGHT)'
+      })
+    : { boardPart: null, realPhotoCount: 0 };
+
+  const allLoadedIndividual = [...lockedParts, ...shoeParts, ...beltParts].filter(p => p.part);
 
   const lockedSummary = {
     top: compactWardrobeForAI([lockedTopStack.top], cooldownInfo)[0],
@@ -13568,58 +13772,105 @@ async function runAIStage3ShoesAndBelt({ geminiKey, pools, personalCtx, currentT
     outerwear: lockedTopStack.outerwear ? compactWardrobeForAI([lockedTopStack.outerwear], cooldownInfo)[0] : null,
     bottom: compactWardrobeForAI([lockedBottom], cooldownInfo)[0]
   };
+  const labeledShoes = orderedShoes.map((sh, idx) => ({
+    boardLabel: idx < visualShoes.length ? `[S${idx + 1}]` : null,
+    ...compactWardrobeForAI([sh], cooldownInfo)[0]
+  }));
+  const labeledBelts = eligibleBelts.map((b, idx) => ({
+    boardLabel: idx < visualBelts.length ? `[B${idx + 1}]` : null,
+    ...compactWardrobeForAI([b], cooldownInfo)[0]
+  }));
 
   const promptLines = [
-    `You are Step 3 (Final Footwear & Belt Specialist) of a 3-step master stylist pipeline for WhaToWear.`,
-    `STEP 3 GOAL: The Top and Bottom are ALREADY LOCKED below. Compare ALL candidate shoes head-to-head and pick the #1 BEST SHOES and BEST MATCHING BELT (plus optional accessory) for this exact outfit.`,
+    `You are Step 3 (Expert Footwear & Belt Stylist) in a 3-step master stylist consultation for WhaToWear.`,
+    `STEP 3 GOAL: The Top and Pants are ALREADY LOCKED (shown on the LEFT of the attached comparison board). Visually compare EVERY candidate shoe [S1..SN] head-to-head against the exact Top + Pants — exactly as if the user stood in front of a mirror asking which pair of shoes looks sharpest with this outfit — then choose the #1 BEST SHOES and BEST MATCHING BELT.`,
     `Context: Date=${refDateKey}, ${currentTemp}°C, ${cond}, Season: ${sInfo.name}, Target Formality: ${targetFormality}, Mood: ${currentMood || 'balanced'}.`,
-    `LOCKED OUTFIT (Top + Bottom): ${JSON.stringify(lockedSummary)}`,
-    `CRITICAL STYLING & ROTATION RULES FOR SHOES & BELT:`,
-    `1. Visually inspect the attached garment photos (if present) alongside descriptions — judge real color tones, leather finish, sole color, and shoe chunkiness.`,
-    `2. NEVER be overly "matchy-matchy" with bright/colored footwear matching a colored shirt (e.g., SKIP green boots when wearing a green/teal top — neutral or warm earth-tone shoes like brown leather, tan, grey, white, black, or navy look far sharper and let the top stand out).`,
-    `3. RESPECT SEASON & WEIGHT: On Spring/Summer mild or warm days (16°C+, especially with a short-sleeve tee or 1 top layer), strongly prefer clean leather/suede sneakers, loafers, derbies, or crisp neutral sneakers over heavy Autumn/Winter or chunky ankle/work boots.`,
-    `4. ROTATE FOOTWEAR: NEVER pick shoes worn yesterday, and prefer rested shoes (daysSinceWorn: "never-or-7d+" and lowest wearCount) when two pairs look comparably great with the outfit!`,
-    `5. COORDINATE BELT & SHOES: Match belt tone to the winning shoes & bottoms (e.g. warm brown/cognac/burgundy leather with brown/earth shoes, black with black). ${needsBelt ? 'Pick the best beltId from eligibleBelts (or null if none exist).' : 'The locked bottom is elastic/drawstring/athletic — you MUST return beltId: null.'}`,
-    `6. Rank the top 3 shoe options (or all available if fewer than 3) in shoeRanking with rank 1 = your winning shoeId, explaining concisely why #1 wins and how #2 / #3 compare.`,
-    wearContext && wearContext.yesterdayIds.length ? `NEVER pick yesterday's shoe/belt IDs: ${JSON.stringify(wearContext.yesterdayIds)}.` : '',
-    wearContext && wearContext.recentShoeIds.length ? `Shoes worn within the last 7 days (avoid unless no rested option matches): ${JSON.stringify(wearContext.recentShoeIds)}.` : '',
+    `LOCKED OUTFIT (Top + Pants): ${JSON.stringify(lockedSummary)}`,
+    `MASTER STYLING CRITERIA (APPLY RIGOROUSLY — THINK LIKE A REAL HUMAN STYLIST):`,
+    `1. PANT-TO-SHOE VISUAL SEPARATION (CRITICAL): Inspect how each shoe separates from the locked pants. AVOID / rank LOW shoes whose color is too close to the pants (for example, tan, camel, or light-to-mid brown sneakers with tan/khaki chinos make legs and feet blend together instead of creating clean visual separation — SKIP those!).`,
+    `2. BRIGHTNESS, SOLE COLOR & TIE-IN DETAILS: Pay close attention to real visual details on the photos and descriptions: crisp white/off-white sneakers brighten muted tops + tan chinos, and a brown/gum sole ties directly into warm chinos; a white midsole keeps black sneakers lighter and sportier against light pants.`,
+    `3. VISUAL WEIGHT BALANCE: Solid all-black leather shoes can look too heavy against light tan chinos and a soft grey/light casual top (unless dark/black anchors exist up top). On mild Spring/Summer days (15°C+), prefer clean low-profile sneakers, loafers, or derbies over heavy/chunky autumn/winter boots.`,
+    `4. REFINEMENT & MATERIAL: Distinguish genuine dress/minimalist leather or clean suede sneakers/loafers from casual canvas skate shoes with prominent logos/swooshes. Prefer cleaner, sharper silhouettes for smart-casual.`,
+    `5. NO MATCHY-MATCHY COLORED SHOES: Never match bright/colored shoes to a colored shirt (e.g. skip green boots with a green/teal top). Clean neutral/white/contrast footwear lets the outfit breathe.`,
+    `6. PICK THE BEST SHOES FIRST, THEN MATCH THE BELT: NEVER downgrade the shoe choice just to match an existing belt! Pick the #1 shoe for the Top + Pants FIRST. Then pick the belt that best harmonizes with the waist, pants, and winning shoes (note: with crisp white or gum-sole sneakers + tan/navy chinos, a warm brown, cognac, tan, or burgundy leather belt works great to anchor the waist). ${needsBelt ? 'Pick the best beltId from eligibleBelts (or null if none exist).' : 'The locked bottom is elastic/drawstring/athletic — you MUST return beltId: null.'}`,
+    `7. ROTATION: NEVER pick yesterday's shoe if a strong alternative exists, and use freshness (daysSinceWorn / lowest wearCount) as a tie-breaker between comparably great pairs.`,
+    wearContext && wearContext.yesterdayIds.length ? `Yesterday's worn IDs (do NOT repeat): ${JSON.stringify(wearContext.yesterdayIds)}.` : '',
+    wearContext && wearContext.recentShoeIds.length ? `Shoes worn within last 7 days (prefer rested options unless clearly superior): ${JSON.stringify(wearContext.recentShoeIds)}.` : '',
     personalCtx,
-    `Eligible rested shoes (compare ALL of these): ${JSON.stringify(compactWardrobeForAI(orderedShoes, cooldownInfo))}`,
-    needsBelt ? `Eligible belts: ${JSON.stringify(compactWardrobeForAI(eligibleBelts, cooldownInfo))}` : `Eligible belts: [] (no belt needed)`,
+    `ALL Eligible Candidate Shoes to compare head-to-head: ${JSON.stringify(labeledShoes)}`,
+    needsBelt ? `Eligible Belts: ${JSON.stringify(labeledBelts)}` : `Eligible Belts: [] (no belt needed)`,
     nonBeltAccessories.length ? `Optional non-belt accessories: ${JSON.stringify(compactWardrobeForAI(orderCandidatesForAIVariety(nonBeltAccessories, cooldownInfo).slice(0, 6), cooldownInfo))}` : '',
+    `IMPORTANT OUTPUT ORDER: Evaluate EVERY single candidate shoe FIRST inside "shoeEvaluations", THEN sort ALL compared shoes from best (#1) to worst (#N) in "shoeRanking", and ONLY THEN set "shoeId" equal to rank #1!`,
     `Return ONLY valid JSON with exact keys:`,
     `{`,
-    `  "shoeId": "<exact winning id from eligible shoes>",`,
+    `  "shoeEvaluations": [`,
+    `    {"shoeId": "<id>", "visualRead": "actual color, material & sole color seen", "separationFromPants": "clean separation vs blends in vs too heavy", "verdict": "Best Choice | Runner-Up | Heavy / Situational | Skip", "reason": "1 sharp concrete sentence", "score": 92}`,
+    `  ],`,
+    `  "shoeRanking": [`,
+    `    {"shoeId": "<#1 best id>", "rank": 1, "verdict": "Best Choice", "reason": "short concrete reason why #1 wins"},`,
+    `    {"shoeId": "<#2 id>", "rank": 2, "verdict": "Runner-Up", "reason": "short concrete comparison"},`,
+    `    {"shoeId": "<#3 id>", "rank": 3, "verdict": "Situational / Heavy", "reason": "short concrete critique"},`,
+    `    {"shoeId": "<#4 id>", "rank": 4, "verdict": "Skip", "reason": "short concrete reason to skip"}`,
+    `  ],`,
+    `  "shoeId": "<exact id of rank #1 winning shoe>",`,
+    `  "beltEvaluation": "1 sentence on why this belt best anchors the waist with the locked pants and winning shoes",`,
     `  "beltId": "<exact id from eligible belts, or null>",`,
     `  "accessoryId": "<exact id from optional accessories, or null>",`,
-    `  "shoeReason": "1 concise sentence explaining why this #1 shoe is the best match for this top + bottom",`,
-    `  "beltReason": "1 concise sentence explaining why this belt coordinates with the shoes & bottom (or why no belt)",`,
-    `  "shoeRanking": [`,
-    `    {"shoeId": "<#1 id>", "rank": 1, "verdict": "Best Choice", "reason": "short concrete reason"},`,
-    `    {"shoeId": "<#2 id>", "rank": 2, "verdict": "Runner-Up", "reason": "short concrete reason"},`,
-    `    {"shoeId": "<#3 id>", "rank": 3, "verdict": "Skip / 3rd", "reason": "short concrete reason"}`,
-    `  ],`,
-    `  "image_alignment_score": 88,`,
+    `  "shoeReason": "1 concise sentence explaining why the #1 shoe beats the other options for this exact top + pants",`,
+    `  "beltReason": "1 concise sentence explaining how the belt ties the look together (or why no belt)",`,
+    `  "image_alignment_score": 90,`,
     `  "image_alignment_note": "1 concise sentence on how this complete look aligns with the user's Personal Image",`,
     `  "decision_reason": "1 concise sentence summarizing why the complete Top -> Pants -> Shoes & Belt combination works today"`,
     `}`
   ].filter(Boolean);
 
   const parts = [];
-  validPhotos.forEach(p => {
-    parts.push({ text: p.role });
+  if (boardRes.boardPart) {
+    parts.push({ text: 'PRIMARY VISUAL COMPARISON BOARD — Inspect Locked Top + Pants (LEFT) side-by-side against ALL Candidate Shoes [S1..SN] (RIGHT) and Belts [B1..BM] (BOTTOM):' });
+    parts.push(boardRes.boardPart);
+  }
+  // Also attach crisp close-up photos of the locked pieces + candidate shoes (up to 8) for sole/texture detail
+  const closeups = [...lockedParts, ...shoeParts.slice(0, 8)].filter(p => p.part);
+  closeups.forEach(p => {
+    parts.push({ text: `${p.tag} (${p.caption})` });
     parts.push(p.part);
   });
   parts.push({ text: promptLines.join('\n') });
 
   const data = await callGeminiGenerateContent(geminiKey, {
     parts,
-    temperature: 0.35,
+    temperature: 0.25,
     responseMimeType: 'application/json',
-    preferQuality: true
+    preferQuality: true,
+    thinkingBudget: 2560
   });
-  const parsed = parseGeminiJsonObject(data) || {};
-  const shoe = orderedShoes.find(s => s.id === parsed.shoeId) || orderedShoes[0];
+  const parsed = parseGeminiJsonObject(data);
+  if (!parsed) {
+    throw new Error('AI Stage 3 returned unparseable JSON response');
+  }
+
+  // Build normalized full ranking from shoeRanking (or fall back to shoeEvaluations sorted by score)
+  let rawRanking = Array.isArray(parsed.shoeRanking) ? parsed.shoeRanking : [];
+  if (rawRanking.length === 0 && Array.isArray(parsed.shoeEvaluations) && parsed.shoeEvaluations.length > 0) {
+    rawRanking = [...parsed.shoeEvaluations]
+      .sort((a, b) => (Number(b?.score) || 0) - (Number(a?.score) || 0))
+      .map((ev, idx) => ({
+        shoeId: ev.shoeId,
+        rank: idx + 1,
+        verdict: ev.verdict || (idx === 0 ? 'Best Choice' : (idx === 1 ? 'Runner-Up' : 'Skip')),
+        reason: ev.reason || ev.separationFromPants || ''
+      }));
+  }
+
+  // Ensure winning shoe matches rank #1 consistently
+  const rank1Id = rawRanking[0]?.shoeId || null;
+  const shoe = orderedShoes.find(s => s.id === parsed.shoeId)
+    || orderedShoes.find(s => s.id === rank1Id)
+    || null;
+  if (!shoe) {
+    throw new Error(`AI Stage 3 returned invalid shoeId "${parsed.shoeId || ''}"`);
+  }
+
   const belt = needsBelt ? (eligibleBelts.find(b => b.id === parsed.beltId) || null) : null;
   const accessory = nonBeltAccessories.find(a => a.id === parsed.accessoryId) || null;
 
@@ -13627,14 +13878,17 @@ async function runAIStage3ShoesAndBelt({ geminiKey, pools, personalCtx, currentT
     shoe,
     belt,
     accessory,
-    shoeReason: parsed.shoeReason || `Selected ${shoe.name} as best footwear match.`,
-    beltReason: parsed.beltReason || (belt ? `Paired ${belt.name} to anchor waist and footwear.` : (needsBelt ? '' : 'No belt needed for elastic/drawstring waist.')),
-    shoeRanking: Array.isArray(parsed.shoeRanking) ? parsed.shoeRanking : [],
-    alignmentScore: typeof parsed.image_alignment_score === 'number' ? parsed.image_alignment_score : 88,
+    shoeReason: parsed.shoeReason || rawRanking.find(r => r.shoeId === shoe.id)?.reason || `Selected ${shoe.name} as best footwear match.`,
+    beltReason: parsed.beltReason || parsed.beltEvaluation || (belt ? `Paired ${belt.name} to anchor waist and footwear.` : (needsBelt ? '' : 'No belt needed for elastic/drawstring waist.')),
+    shoeRanking: rawRanking,
+    alignmentScore: typeof parsed.image_alignment_score === 'number' ? parsed.image_alignment_score : 90,
     alignmentNote: parsed.image_alignment_note || '',
     decisionReason: parsed.decision_reason || '',
     usedModel: data?._usedModel || '',
-    usedPhotos: validPhotos.length >= 2
+    usedThinking: Boolean(data?._usedThinking),
+    usedPhotos: allLoadedIndividual.length >= 2 || Boolean(boardRes.boardPart),
+    usedComparisonBoard: Boolean(boardRes.boardPart),
+    photosUsedCount: allLoadedIndividual.length
   };
 }
 
@@ -13679,10 +13933,11 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [], pa
         midLayer: lockedBase.midLayer || null,
         outerwear: lockedBase.outerwear || null,
         topReason: lockedBase.aiDailyMeta?.steps?.topReason || `Kept ${lockedBase.top.name} locked as Layer 1.`,
-        usedModel: ''
+        usedModel: '',
+        usedThinking: false
       };
     } else {
-      setAIProgressStatus('AI Step 1/3: Choosing best Top...');
+      setAIProgressStatus('AI Step 1/3: Checking profile & picking unused Top...');
       stage1 = await runAIStage1Top({ geminiKey, pools, personalCtx, currentTemp, cond, wearContext, avoidIds });
       if (runToken !== aiDailyRunToken) return;
     }
@@ -13692,15 +13947,16 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [], pa
       stage2 = {
         bottom: lockedBase.bottom,
         bottomReason: lockedBase.aiDailyMeta?.steps?.bottomReason || `Kept ${lockedBase.bottom.name} locked.`,
-        usedModel: ''
+        usedModel: '',
+        usedThinking: false
       };
     } else {
-      setAIProgressStatus(partialFrom === 'bottom' ? 'AI Step 2/3: Matching new Pants to Top...' : 'AI Step 2/3: Matching Pants to Top...');
+      setAIProgressStatus(partialFrom === 'bottom' ? 'AI Step 2/3: Visually matching new Pants to Top...' : 'AI Step 2/3: Visually matching Pants to Top...');
       stage2 = await runAIStage2Bottom({ geminiKey, pools, personalCtx, currentTemp, cond, wearContext, lockedTopStack: stage1, avoidIds });
       if (runToken !== aiDailyRunToken) return;
     }
 
-    setAIProgressStatus(partialFrom === 'shoe' ? 'AI comparing Shoes & Belt for your outfit...' : 'AI Step 3/3: Comparing Shoes & Belt...');
+    setAIProgressStatus(partialFrom === 'shoe' ? 'AI visually comparing all Shoes & Belts...' : 'AI Step 3/3: Visually comparing all Shoes & Belts...');
     const stage3 = await runAIStage3ShoesAndBelt({
       geminiKey, pools, personalCtx, currentTemp, cond, wearContext,
       lockedTopStack: stage1,
@@ -13727,12 +13983,16 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [], pa
       decision_reason: stage3.decisionReason,
       modelUsed: stage3.usedModel || stage2.usedModel || stage1.usedModel || '',
       usedPhotos: !!stage3.usedPhotos,
+      usedComparisonBoard: !!stage3.usedComparisonBoard,
+      usedThinking: Boolean(stage3.usedThinking || stage2.usedThinking || stage1.usedThinking),
+      photosUsedCount: stage3.photosUsedCount || 0,
       mode: '3-step'
     };
 
     const outfit = hydrateAIDailyOutfitFromPicked(picked, currentTemp);
     if (!outfit) {
       aiDailyLastError = 'AI returned incompatible pieces';
+      lastAIDailyAttemptKey = null;
       return;
     }
     activeAIDailyOutfit = { cacheKey, outfit };
@@ -13750,7 +14010,9 @@ async function runAIDailyOutfitDecision({ cacheKey, geminiKey, avoidIds = [], pa
     }
   } catch (e) {
     console.warn('3-Step AI daily outfit error:', e);
-    aiDailyLastError = String(e?.message || 'Gemini request failed').slice(0, 120);
+    aiDailyLastError = String(e?.message || 'Gemini request failed').slice(0, 140);
+    // Allow automatic retry later rather than staying permanently stuck on transient errors
+    if (lastAIDailyAttemptKey === cacheKey) lastAIDailyAttemptKey = null;
   } finally {
     if (runToken === aiDailyRunToken) {
       aiDailyOutfitInFlight = false;
@@ -18030,13 +18292,45 @@ function setSecondaryColorUI(slot, hexVal) {
 
 const _geminiModelCache = new Map();
 
+function scoreGeminiModelName(name, preferQuality = false) {
+  const n = String(name || '').toLowerCase();
+  // Version weight: 3.x > 2.5 > 2.0 > 1.5
+  let ver = 10;
+  if (/gemini-3(\.\d+)?/.test(n)) ver = 40;
+  else if (/gemini-2\.5/.test(n)) ver = 30;
+  else if (/gemini-2\.0/.test(n)) ver = 20;
+  else if (/gemini-1\.5/.test(n)) ver = 10;
+
+  const isPro = /\bpro\b|-pro/.test(n);
+  const isFlashLite = /flash-lite/.test(n);
+  const isFlash = !isFlashLite && /flash/.test(n);
+  const isExpOrOldPreview = /(exp|preview-0\d-\d\d)/.test(n);
+
+  let tier = 0;
+  if (preferQuality) {
+    // For stylist & visual judgment: 2.5-pro / 3-pro FIRST, then 2.5-flash, then 2.0-flash, then flash-lite
+    if (isPro) tier = 30;
+    else if (isFlash) tier = 22;
+    else if (isFlashLite) tier = 10;
+    else tier = 12;
+  } else {
+    // For quick lightweight tagging: flash-lite -> flash -> pro
+    if (isFlashLite) tier = 30;
+    else if (isFlash) tier = 24;
+    else if (isPro) tier = 14;
+    else tier = 10;
+  }
+  const stabilityAdj = isExpOrOldPreview ? -2 : 2;
+  return ver * 2 + tier + stabilityAdj;
+}
+
 async function getGeminiCandidateModels(geminiKey, preferQuality = false) {
-  const cacheId = `${geminiKey}|${preferQuality ? 'q' : 'f'}`;
+  const cacheId = `${geminiKey}|${preferQuality ? 'q2' : 'f2'}`;
   const cached = _geminiModelCache.get(cacheId);
   if (cached && (Date.now() - cached.ts) < 600000) return cached.models;
   let candidateModels = preferQuality
-    ? ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-flash-latest']
-    : ['gemini-2.5-flash-lite', 'gemini-2.0-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-latest'];
+    ? ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash-lite']
+    : ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash-lite', 'gemini-2.0-flash'];
   try {
     const mRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(geminiKey)}`);
     if (mRes.ok) {
@@ -18044,14 +18338,12 @@ async function getGeminiCandidateModels(geminiKey, preferQuality = false) {
       const available = (mData.models || [])
         .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
         .map(m => String(m.name || '').replace(/^models\//, ''))
-        .filter(n => /gemini/i.test(n) && !/embedding|imagen|veo|tts|audio|live|thinking|image/i.test(n));
+        .filter(n => /gemini/i.test(n) && !/embedding|imagen|veo|tts|audio|live|image|robotics|computer-use|aqa|learnlm/i.test(n));
       if (available.length > 0) {
-        const flashLite = available.filter(n => /flash-lite/i.test(n));
-        const flash = available.filter(n => !flashLite.includes(n) && /2\.5-flash|2\.0-flash|flash-latest|flash/i.test(n));
-        const others = available.filter(n => !flashLite.includes(n) && !flash.includes(n));
-        candidateModels = preferQuality
-          ? [...new Set([...flash, ...flashLite, ...others])].slice(0, 8)
-          : [...new Set([...flashLite, ...flash, ...others])].slice(0, 8);
+        const ranked = [...new Set(available)].sort((a, b) =>
+          scoreGeminiModelName(b, preferQuality) - scoreGeminiModelName(a, preferQuality)
+        );
+        candidateModels = ranked.slice(0, 8);
       }
     }
   } catch (_) {}
@@ -18059,33 +18351,56 @@ async function getGeminiCandidateModels(geminiKey, preferQuality = false) {
   return candidateModels;
 }
 
-async function callGeminiGenerateContent(geminiKey, { parts, temperature = 0.3, responseMimeType = 'application/json', signal = undefined, preferQuality = false } = {}) {
+async function callGeminiGenerateContent(geminiKey, { parts, temperature = 0.3, responseMimeType = 'application/json', signal = undefined, preferQuality = false, thinkingBudget = 0 } = {}) {
   const candidateModels = await getGeminiCandidateModels(geminiKey, preferQuality);
   const errors = [];
   for (const modelName of candidateModels) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(geminiKey)}`;
-    const fetchOpts = {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const supportsThinking = /gemini-(2\.5|3)/i.test(modelName) && !/flash-lite/i.test(modelName);
+    const attemptPayloads = [];
+    const baseGenConfig = { temperature, responseMimeType };
+    if (supportsThinking && typeof thinkingBudget === 'number' && thinkingBudget > 0) {
+      attemptPayloads.push({
         contents: [{ parts }],
-        generationConfig: { temperature, responseMimeType }
-      })
-    };
-    if (signal) fetchOpts.signal = signal;
-    const res = await fetch(url, fetchOpts);
-    if (res.ok) {
-      const json = await res.json();
-      if (json && typeof json === 'object') json._usedModel = modelName;
-      return json;
+        generationConfig: { ...baseGenConfig, thinkingConfig: { thinkingBudget } }
+      });
     }
-    let errDetail = `HTTP ${res.status}`;
-    try {
-      const errJson = await res.json();
-      if (errJson?.error?.message) errDetail = `HTTP ${res.status}: ${errJson.error.message}`;
-    } catch (_) {}
-    errors.push(`${modelName}: ${errDetail}`);
-    if (res.status === 401 || res.status === 403) break;
+    attemptPayloads.push({
+      contents: [{ parts }],
+      generationConfig: baseGenConfig
+    });
+
+    for (let aIdx = 0; aIdx < attemptPayloads.length; aIdx++) {
+      const fetchOpts = {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(attemptPayloads[aIdx])
+      };
+      if (signal) fetchOpts.signal = signal;
+      const res = await fetch(url, fetchOpts);
+      if (res.ok) {
+        const json = await res.json();
+        if (json && typeof json === 'object') {
+          json._usedModel = modelName;
+          json._usedThinking = Boolean(attemptPayloads[aIdx].generationConfig.thinkingConfig);
+        }
+        return json;
+      }
+      let errDetail = `HTTP ${res.status}`;
+      try {
+        const errJson = await res.json();
+        if (errJson?.error?.message) errDetail = `HTTP ${res.status}: ${errJson.error.message}`;
+      } catch (_) {}
+      // If thinkingConfig triggered a 400 on this model, retry same model without thinkingConfig
+      if (aIdx === 0 && attemptPayloads.length > 1 && res.status === 400 && /thinking/i.test(errDetail)) {
+        continue;
+      }
+      errors.push(`${modelName}: ${errDetail}`);
+      if (res.status === 401 || res.status === 403) {
+        throw new Error(errors[0] || 'Gemini API authentication failed');
+      }
+      break;
+    }
   }
   throw new Error(errors[0] || 'No Gemini model responded');
 }
@@ -23590,7 +23905,7 @@ function togglePersonaCollapse(forceState) {
   }
 }
 
-async function photoSrcToGeminiPart(src, maxDim = 768, itemId = null) {
+async function photoSrcToGeminiPart(src, maxDim = 512, itemId = null) {
   if (!src) return null;
   let dataUrl = src;
   if (/^https?:\/\//i.test(src)) {
@@ -23610,6 +23925,9 @@ async function photoSrcToGeminiPart(src, maxDim = 768, itemId = null) {
             r.onerror = reject;
             r.readAsDataURL(blob);
           });
+          if (itemId && typeof cacheItemPhotoDataUrl === 'function' && /^data:image\//i.test(String(dataUrl || ''))) {
+            cacheItemPhotoDataUrl(itemId, dataUrl).catch(() => {});
+          }
         }
       } catch (e) {
         // Fall through to Image load attempt
@@ -23632,7 +23950,7 @@ async function photoSrcToGeminiPart(src, maxDim = 768, itemId = null) {
         c.height = h;
         const ctx = c.getContext('2d');
         ctx.drawImage(img, 0, 0, w, h);
-        const jpegUrl = c.toDataURL('image/jpeg', 0.85);
+        const jpegUrl = c.toDataURL('image/jpeg', 0.88);
         const m = /^data:([^;]+);base64,(.+)$/.exec(jpegUrl);
         resolve(m ? { inlineData: { mimeType: m[1], data: m[2] } } : null);
       } catch {
@@ -23646,6 +23964,145 @@ async function photoSrcToGeminiPart(src, maxDim = 768, itemId = null) {
     };
     img.src = dataUrl;
   });
+}
+
+async function loadImageElementFromGeminiPart(part) {
+  if (!part || !part.inlineData || !part.inlineData.data) return null;
+  return await new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = `data:${part.inlineData.mimeType || 'image/jpeg'};base64,${part.inlineData.data}`;
+  });
+}
+
+async function buildVisualComparisonBoardPart({ lockedTiles = [], candidateTiles = [], secondaryTiles = [], boardTitle = 'SIDE-BY-SIDE VISUAL STYLING COMPARISON' } = {}) {
+  try {
+    const allTiles = [...lockedTiles, ...candidateTiles, ...secondaryTiles];
+    const imgs = await Promise.all(allTiles.map(t => loadImageElementFromGeminiPart(t.part)));
+    const imgByTile = new Map();
+    let realPhotoCount = 0;
+    allTiles.forEach((t, idx) => {
+      if (imgs[idx]) {
+        imgByTile.set(t, imgs[idx]);
+        realPhotoCount++;
+      }
+    });
+    if (realPhotoCount < 2) return { boardPart: null, realPhotoCount };
+
+    const pad = 18;
+    const headerH = 42;
+    const leftW = 310;
+    const candCols = candidateTiles.length <= 2 ? 2 : (candidateTiles.length <= 6 ? 3 : 4);
+    const candCellW = 240;
+    const candCellH = 225;
+    const candRows = Math.max(1, Math.ceil(candidateTiles.length / candCols));
+    const rightW = candCols * candCellW + (candCols + 1) * pad;
+    const secH = secondaryTiles.length > 0 ? 150 : 0;
+    const leftCellH = Math.min(250, Math.max(175, Math.floor((candRows * (candCellH + pad) + secH) / Math.max(1, lockedTiles.length)) - pad));
+    const contentH = Math.max(
+      lockedTiles.length * (leftCellH + pad) + pad,
+      candRows * (candCellH + pad) + pad + (secH ? secH + pad : 0)
+    );
+    const W = leftW + rightW + pad * 2;
+    const H = headerH + contentH + pad;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return { boardPart: null, realPhotoCount };
+
+    // Neutral light studio mat so BOTH dark leather shoes AND crisp white sneakers show true contrast
+    ctx.fillStyle = '#f1f3f5';
+    ctx.fillRect(0, 0, W, H);
+
+    // Top bar
+    ctx.fillStyle = '#111827';
+    ctx.fillRect(0, 0, W, headerH);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText(boardTitle, pad, 27);
+
+    const drawTile = (tile, x, y, w, h, badgeBg) => {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, w, h);
+
+      const labelH = 38;
+      const imgAreaH = h - labelH - 8;
+      const img = imgByTile.get(tile);
+      if (img) {
+        const scale = Math.min((w - 12) / Math.max(1, img.width), (imgAreaH - 6) / Math.max(1, img.height));
+        const dw = Math.round(img.width * scale);
+        const dh = Math.round(img.height * scale);
+        const dx = x + Math.round((w - dw) / 2);
+        const dy = y + 4 + Math.round((imgAreaH - dh) / 2);
+        ctx.drawImage(img, dx, dy, dw, dh);
+      } else {
+        ctx.fillStyle = tile.color || '#94a3b8';
+        ctx.fillRect(x + 16, y + 16, w - 32, imgAreaH - 24);
+      }
+
+      // Badge tag (e.g. [S1] or LOCKED TOP)
+      ctx.fillStyle = badgeBg || '#0f172a';
+      ctx.fillRect(x + 6, y + 6, Math.min(w - 12, Math.max(54, tile.tag.length * 9 + 16)), 22);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillText(tile.tag, x + 12, y + 21);
+
+      // Footer text with swatch
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(x + 1, y + h - labelH, w - 2, labelH - 1);
+      if (tile.color) {
+        ctx.fillStyle = tile.color;
+        ctx.fillRect(x + 8, y + h - labelH + 10, 14, 14);
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 8, y + h - labelH + 10, 14, 14);
+      }
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 12px sans-serif';
+      const caption = String(tile.caption || '').slice(0, 30);
+      ctx.fillText(caption, x + (tile.color ? 28 : 8), y + h - labelH + 21);
+    };
+
+    // Draw Locked Outfit Column on Left
+    lockedTiles.forEach((tile, i) => {
+      drawTile(tile, pad, headerH + pad + i * (leftCellH + pad), leftW - pad, leftCellH, '#047857');
+    });
+
+    // Draw Candidate Grid on Right
+    const rightX0 = leftW + pad;
+    candidateTiles.forEach((tile, i) => {
+      const col = i % candCols;
+      const row = Math.floor(i / candCols);
+      const tx = rightX0 + col * (candCellW + pad);
+      const ty = headerH + pad + row * (candCellH + pad);
+      drawTile(tile, tx, ty, candCellW, candCellH, '#1d4ed8');
+    });
+
+    // Draw Optional Secondary Row (e.g., Candidate Belts) below Candidate Grid
+    if (secondaryTiles.length > 0) {
+      const secY = headerH + pad + candRows * (candCellH + pad);
+      const secW = Math.min(220, Math.floor((rightW - pad * (secondaryTiles.length + 1)) / Math.max(1, secondaryTiles.length)));
+      secondaryTiles.forEach((tile, i) => {
+        drawTile(tile, rightX0 + i * (secW + pad), secY, secW, secH, '#7c3aed');
+      });
+    }
+
+    const jpegUrl = canvas.toDataURL('image/jpeg', 0.88);
+    const m = /^data:([^;]+);base64,(.+)$/.exec(jpegUrl);
+    return {
+      boardPart: m ? { inlineData: { mimeType: m[1], data: m[2] } } : null,
+      realPhotoCount
+    };
+  } catch (err) {
+    console.warn('Comparison board build failed:', err);
+    return { boardPart: null, realPhotoCount: 0 };
+  }
 }
 
 function buildMasterPersonalContextForAI() {
