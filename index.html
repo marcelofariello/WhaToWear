@@ -6496,6 +6496,7 @@ function normalizeRemoteWardrobeItem(raw, scope) {
     disabled: Boolean(raw.disabled),
     formality: raw.formality || 'casual',
     wearCount: raw.wearCount || 0,
+    lastWornDate: raw.lastWornDate || null,
     image: imgUrl,
     imageUrl: imgUrl,
     imageTransform: raw.imageTransform || null,
@@ -6604,7 +6605,16 @@ function setupCloudRealtimeListener() {
       const localExLock = safeJSON('wtw_exercise_outfit_today', null);
       const hasNewerExLock = data.dailyExerciseLock && data.dailyExerciseLock.date === todayStr &&
         (!localExLock || localExLock.date !== todayStr || Number(data.dailyExerciseLock.updatedAt || 0) > Number(localExLock.updatedAt || 0));
-      if (data.updatedAt && data.updatedAt <= localUpdatedAt && failedCloudSyncItems.length === 0 && !hasNewerTrip && !hasUnseenFeedback && !hasNewerMainLock && !hasNewerExLock) {
+      const localWearIds = new Set((typeof getWearLog === 'function' ? getWearLog() : []).map(e => e && (e.id || `${e.date}|${e.context || 'main'}|${e.topId || ''}|${e.bottomId || ''}|${e.shoeId || ''}`)));
+      const hasUnseenWearLog = Array.isArray(data.wearLog) && data.wearLog.some(e => {
+        if (!e || !e.date) return false;
+        const k = e.id || `${e.date}|${e.context || 'main'}|${e.topId || ''}|${e.bottomId || ''}|${e.shoeId || ''}`;
+        return !localWearIds.has(k);
+      });
+      const hasPastRemoteLockToArchive =
+        (data.dailyMainLock && data.dailyMainLock.date && data.dailyMainLock.date < todayStr) ||
+        (data.dailyExerciseLock && data.dailyExerciseLock.date && data.dailyExerciseLock.date < todayStr);
+      if (data.updatedAt && data.updatedAt <= localUpdatedAt && failedCloudSyncItems.length === 0 && !hasNewerTrip && !hasUnseenFeedback && !hasNewerMainLock && !hasNewerExLock && !hasUnseenWearLog && !hasPastRemoteLockToArchive) {
         if (!doc.metadata?.fromCache) {
           setCloudStatusUI('connected', 'Cloud Synced');
         }
@@ -6702,18 +6712,36 @@ function applyRemoteCloudData(data, opts = {}) {
     }
 
     const todayStr = getOutfitDayKey();
-    if (data.dailyMainLock && data.dailyMainLock.date === todayStr) {
-      const localMain = safeJSON('wtw_daily_main_lock', null);
-      if (!localMain || localMain.date !== todayStr || Number(data.dailyMainLock.updatedAt || 0) > Number(localMain.updatedAt || 0)) {
-        try { localStorage.setItem('wtw_daily_main_lock', JSON.stringify(data.dailyMainLock)); } catch {}
-        activeAIDailyOutfit = null;
+    if (typeof archiveStaleDailyLocksIfNeeded === 'function') archiveStaleDailyLocksIfNeeded(todayStr);
+    if (Array.isArray(data.wearLog) && typeof mergeWearLogs === 'function') {
+      const wearClearedAt = Math.max(
+        parseInt(localStorage.getItem('wtw_wear_log_cleared_at') || '0', 10),
+        Number(data.wearLogClearedAt || 0)
+      );
+      if (wearClearedAt) localStorage.setItem('wtw_wear_log_cleared_at', String(wearClearedAt));
+      const mergedWear = mergeWearLogs(getWearLog(), data.wearLog, wearClearedAt);
+      saveWearLog(mergedWear, { sync: false });
+    }
+    if (data.dailyMainLock && data.dailyMainLock.date) {
+      if (data.dailyMainLock.date < todayStr && typeof archiveLockEntryToWearLog === 'function') {
+        archiveLockEntryToWearLog(data.dailyMainLock, 'main', todayStr);
+      } else if (data.dailyMainLock.date === todayStr) {
+        const localMain = safeJSON('wtw_daily_main_lock', null);
+        if (!localMain || localMain.date !== todayStr || Number(data.dailyMainLock.updatedAt || 0) > Number(localMain.updatedAt || 0)) {
+          try { localStorage.setItem('wtw_daily_main_lock', JSON.stringify(data.dailyMainLock)); } catch {}
+          activeAIDailyOutfit = null;
+        }
       }
     }
-    if (data.dailyExerciseLock && data.dailyExerciseLock.date === todayStr) {
-      const localEx = safeJSON('wtw_exercise_outfit_today', null);
-      if (!localEx || localEx.date !== todayStr || Number(data.dailyExerciseLock.updatedAt || 0) > Number(localEx.updatedAt || 0)) {
-        try { localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify(data.dailyExerciseLock)); } catch {}
-        activeExerciseOutfit = null;
+    if (data.dailyExerciseLock && data.dailyExerciseLock.date) {
+      if (data.dailyExerciseLock.date < todayStr && typeof archiveLockEntryToWearLog === 'function') {
+        archiveLockEntryToWearLog(data.dailyExerciseLock, 'exercise', todayStr);
+      } else if (data.dailyExerciseLock.date === todayStr) {
+        const localEx = safeJSON('wtw_exercise_outfit_today', null);
+        if (!localEx || localEx.date !== todayStr || Number(data.dailyExerciseLock.updatedAt || 0) > Number(localEx.updatedAt || 0)) {
+          try { localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify(data.dailyExerciseLock)); } catch {}
+          activeExerciseOutfit = null;
+        }
       }
     }
 
@@ -7136,6 +7164,7 @@ function sanitizeWardrobeItemForFirestore(item, scope, timestamp) {
     aiFitUpdatedAt: typeof item.aiFitUpdatedAt === 'number' ? item.aiFitUpdatedAt : null,
     disabled: Boolean(item.disabled),
     wearCount: typeof item.wearCount === 'number' ? item.wearCount : 0,
+    lastWornDate: item.lastWornDate || null,
     imageTransform: item.imageTransform || null,
     formality: item.formality,
     image: candidateUrl,
@@ -7400,6 +7429,8 @@ async function syncWardrobeItemsToCloud(itemsToSync, { deletedIds = [], onProgre
           tripUpdatedAt: parseInt(localStorage.getItem('wtw_trip_updated_at') || '0', 10) || now,
           dailyMainLock: safeJSON('wtw_daily_main_lock', null),
           dailyExerciseLock: safeJSON('wtw_exercise_outfit_today', null),
+          wearLog: typeof getWearLog === 'function' ? getWearLog().slice(0, 60) : [],
+          wearLogClearedAt: parseInt(localStorage.getItem('wtw_wear_log_cleared_at') || '0', 10),
           feedbackLog: getFeedbackLog(),
           feedbackClearedAt: parseInt(localStorage.getItem('wtw_feedback_cleared_at') || '0', 10)
         };
@@ -8732,15 +8763,397 @@ function isColorNameMatch(hex, powerColors) {
 }
 
 /* ================================================================
-   WARDROBE MAXIMIZER & USAGE ENGINE
+   WARDROBE MAXIMIZER, 7-DAY ROTATION COOLDOWN & USAGE ENGINE
    ================================================================ */
+
+const ROTATION_COOLDOWN_DAYS = 7;
+
+function calendarDaysBetween(olderIso, newerIso) {
+  if (!olderIso || !newerIso) return null;
+  const a = new Date(String(olderIso).slice(0, 10) + 'T12:00:00');
+  const b = new Date(String(newerIso).slice(0, 10) + 'T12:00:00');
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return null;
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+
+function normalizeWearLogEntry(raw) {
+  if (!raw || typeof raw !== 'object' || !raw.date) return null;
+  const date = String(raw.date).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const context = raw.context === 'exercise' ? 'exercise' : 'main';
+  const source = raw.source === 'auto-shown' ? 'auto-shown' : 'logged';
+  const topId = raw.topId || null;
+  const midLayerId = raw.midLayerId || null;
+  const secondLayerId = raw.secondLayerId || null;
+  const outerId = raw.outerId || raw.outerwearId || null;
+  const bottomId = raw.bottomId || null;
+  const shoeId = raw.shoeId || null;
+  const beltId = raw.beltId || null;
+  const accessoryId = raw.accessoryId || null;
+  if (!topId && !bottomId && !shoeId && !midLayerId && !secondLayerId && !outerId) return null;
+  const timestamp = Number(raw.timestamp) || new Date(date + 'T12:00:00').getTime() || Date.now();
+  const id = raw.id || `${date}|${context}|${topId || ''}|${bottomId || ''}|${shoeId || ''}`;
+  return {
+    id,
+    date,
+    context,
+    source,
+    topId,
+    midLayerId,
+    secondLayerId,
+    outerId,
+    bottomId,
+    shoeId,
+    beltId,
+    accessoryId,
+    timestamp
+  };
+}
+
+function extractEntryItemIds(entry) {
+  if (!entry || typeof entry !== 'object') return [];
+  return [
+    entry.topId,
+    entry.midLayerId,
+    entry.secondLayerId,
+    entry.outerId || entry.outerwearId,
+    entry.bottomId,
+    entry.shoeId,
+    entry.beltId,
+    entry.accessoryId
+  ].filter(Boolean);
+}
 
 function getWearLog() {
   try {
-    return JSON.parse(localStorage.getItem('wtw_wear_log') || '[]');
+    const raw = JSON.parse(localStorage.getItem('wtw_wear_log') || '[]');
+    if (!Array.isArray(raw)) return [];
+    return raw.map(normalizeWearLogEntry).filter(Boolean);
   } catch {
     return [];
   }
+}
+
+function saveWearLog(log, opts = {}) {
+  const clean = (Array.isArray(log) ? log : [])
+    .map(normalizeWearLogEntry)
+    .filter(Boolean)
+    .sort((a, b) => (b.date.localeCompare(a.date) || (b.timestamp - a.timestamp)))
+    .slice(0, 80);
+  try { localStorage.setItem('wtw_wear_log', JSON.stringify(clean)); } catch {}
+  if (opts.sync && !isApplyingRemoteCloudData && typeof syncDailyOutfitsToCloud === 'function') {
+    syncDailyOutfitsToCloud();
+  }
+  return clean;
+}
+
+function mergeWearLogs(localLog, remoteLog, clearedAt = 0) {
+  const byKey = new Map();
+  const loggedDayCtx = new Set();
+  const combined = [...(localLog || []), ...(remoteLog || [])]
+    .map(normalizeWearLogEntry)
+    .filter(e => e && (!clearedAt || (e.timestamp || 0) > clearedAt));
+
+  combined.forEach(e => {
+    if (e.source === 'logged') loggedDayCtx.add(`${e.date}|${e.context}`);
+  });
+
+  combined.forEach(e => {
+    // If an explicit logged entry exists for this (date, context), skip auto-shown placeholder
+    if (e.source === 'auto-shown' && loggedDayCtx.has(`${e.date}|${e.context}`)) return;
+    const key = e.source === 'auto-shown'
+      ? `${e.date}|${e.context}|auto`
+      : `${e.date}|${e.context}|${e.topId || ''}|${e.bottomId || ''}|${e.shoeId || ''}`;
+    const prev = byKey.get(key);
+    if (!prev || (e.source === 'logged' && prev.source !== 'logged') || (e.timestamp >= prev.timestamp)) {
+      byKey.set(key, e);
+    }
+  });
+
+  return Array.from(byKey.values())
+    .sort((a, b) => (b.date.localeCompare(a.date) || (b.timestamp - a.timestamp)))
+    .slice(0, 80);
+}
+
+function upsertWearLogEntry(rawEntry, opts = {}) {
+  const entry = normalizeWearLogEntry(rawEntry);
+  if (!entry) return getWearLog();
+  const log = getWearLog();
+  // Remove superseded auto-shown entries for same date+context when logging explicitly, or replace same-key entry
+  const filtered = log.filter(e => {
+    if (!e) return false;
+    if (entry.source === 'logged' && e.date === entry.date && e.context === entry.context && e.source === 'auto-shown') {
+      return false;
+    }
+    if (entry.source === 'auto-shown' && e.date === entry.date && e.context === entry.context) {
+      return false;
+    }
+    if (e.date === entry.date && e.context === entry.context && e.topId === entry.topId && e.bottomId === entry.bottomId && (e.shoeId || null) === (entry.shoeId || null)) {
+      return false;
+    }
+    return true;
+  });
+  filtered.unshift(entry);
+  return saveWearLog(filtered, opts);
+}
+
+function archiveLockEntryToWearLog(lock, context = 'main', todayStr = getOutfitDayKey()) {
+  if (!lock || !lock.date || lock.date >= todayStr) return false;
+  const ctx = context === 'exercise' ? 'exercise' : 'main';
+  const existing = getWearLog();
+  if (existing.some(e => e && e.date === lock.date && e.context === ctx)) {
+    return false;
+  }
+  const entry = normalizeWearLogEntry({
+    date: lock.date,
+    context: ctx,
+    source: 'auto-shown',
+    topId: lock.topId || null,
+    midLayerId: lock.midLayerId || null,
+    secondLayerId: lock.secondLayerId || null,
+    outerId: lock.outerwearId || lock.outerId || null,
+    bottomId: lock.bottomId || null,
+    shoeId: lock.shoeId || null,
+    beltId: lock.beltId || null,
+    accessoryId: lock.accessoryId || null,
+    timestamp: Number(lock.updatedAt) || new Date(lock.date + 'T18:00:00').getTime()
+  });
+  if (!entry) return false;
+  upsertWearLogEntry(entry, { sync: false });
+  return true;
+}
+
+function archiveStaleDailyLocksIfNeeded(todayStr = getOutfitDayKey()) {
+  let changed = false;
+  const mainLock = safeJSON('wtw_daily_main_lock', null);
+  if (mainLock && mainLock.date && mainLock.date < todayStr) {
+    if (archiveLockEntryToWearLog(mainLock, 'main', todayStr)) changed = true;
+  }
+  const exLock = safeJSON('wtw_exercise_outfit_today', null);
+  if (exLock && exLock.date && exLock.date < todayStr) {
+    if (archiveLockEntryToWearLog(exLock, 'exercise', todayStr)) changed = true;
+  }
+  return changed;
+}
+
+function buildRotationCooldownMap(referenceDateKey = null, opts = {}) {
+  const refDate = referenceDateKey || (typeof getOutfitDayKey === 'function' ? getOutfitDayKey() : new Date().toISOString().slice(0, 10));
+  const cooldownDays = typeof opts.cooldownDays === 'number' ? opts.cooldownDays : ROTATION_COOLDOWN_DAYS;
+  const context = opts.context || 'main'; // 'main' | 'exercise' | 'both'
+
+  if (!opts.skipAutoArchive) {
+    archiveStaleDailyLocksIfNeeded(typeof getOutfitDayKey === 'function' ? getOutfitDayKey() : refDate);
+  }
+
+  const itemDaysAgo = new Map();
+  const itemLastDate = new Map();
+  const comboDaysAgo = new Map();
+  const fullComboDaysAgo = new Map();
+
+  const recordItemWear = (id, daysAgo, dateStr) => {
+    if (!id || daysAgo == null || daysAgo < 0) return;
+    const prev = itemDaysAgo.get(id);
+    if (prev == null || daysAgo < prev) {
+      itemDaysAgo.set(id, daysAgo);
+      if (dateStr) itemLastDate.set(id, dateStr);
+    }
+  };
+
+  const ingestEntry = (entry) => {
+    if (!entry || !entry.date) return;
+    const diff = calendarDaysBetween(entry.date, refDate);
+    if (diff == null) return;
+    const entryCtx = entry.context === 'exercise' ? 'exercise' : 'main';
+    // Strictly prior days (diff >= 1) apply cooldown across all pieces (including cross-context shared sneakers/tees).
+    // Same day (diff === 0) ONLY blocks cross-context pieces (e.g. today's workout gear shouldn't be worn for work).
+    if (diff === 0) {
+      if (context !== 'both' && entryCtx !== context) {
+        extractEntryItemIds(entry).forEach(id => recordItemWear(id, 0, entry.date));
+      }
+      return;
+    }
+    if (diff < 1) return;
+    extractEntryItemIds(entry).forEach(id => recordItemWear(id, diff, entry.date));
+    if (entryCtx === context || context === 'both') {
+      if (entry.topId && entry.bottomId) {
+        const ck = `${entry.topId}|${entry.bottomId}`;
+        const prevC = comboDaysAgo.get(ck);
+        if (prevC == null || diff < prevC) comboDaysAgo.set(ck, diff);
+        if (entry.shoeId) {
+          const fk = `${entry.topId}|${entry.bottomId}|${entry.shoeId}`;
+          const prevF = fullComboDaysAgo.get(fk);
+          if (prevF == null || diff < prevF) fullComboDaysAgo.set(fk, diff);
+        }
+      }
+    }
+  };
+
+  // 1. Persisted wear log (both explicit logged wears and auto-archived previous days)
+  getWearLog().forEach(ingestEntry);
+
+  // 2. Extra entries (e.g. today's locked outfits when computing Tomorrow Preview)
+  if (Array.isArray(opts.extraEntries)) {
+    opts.extraEntries.forEach(e => ingestEntry(normalizeWearLogEntry(e) || e));
+  }
+
+  // 3. Same-day cross-context avoidance (avoid today's workout pieces in main outfit, and vice versa)
+  if (context === 'main' && !opts.skipSameDayCrossContext) {
+    const exSaved = safeJSON('wtw_exercise_outfit_today', null);
+    if (exSaved && exSaved.date === refDate) {
+      [exSaved.topId, exSaved.secondLayerId, exSaved.bottomId, exSaved.shoeId].filter(Boolean)
+        .forEach(id => recordItemWear(id, 0, refDate));
+    }
+  } else if (context === 'exercise' && !opts.skipSameDayCrossContext) {
+    const mainSaved = safeJSON('wtw_daily_main_lock', null);
+    if (mainSaved && mainSaved.date === refDate) {
+      [mainSaved.topId, mainSaved.midLayerId, mainSaved.outerwearId, mainSaved.bottomId, mainSaved.shoeId].filter(Boolean)
+        .forEach(id => recordItemWear(id, 0, refDate));
+    }
+  }
+
+  // 4. Recent Trip Mode days strictly prior to refDate (so returning home respects trip outfits)
+  if (typeof trip === 'object' && trip && Array.isArray(trip.days) && Array.isArray(trip.plan)) {
+    trip.days.forEach((d, idx) => {
+      if (!d || !d.date || d.date >= refDate) return;
+      const p = trip.plan[idx];
+      if (!p) return;
+      if (p.items) {
+        ingestEntry({
+          date: d.date,
+          context: 'main',
+          topId: p.items.top,
+          midLayerId: p.items.mid,
+          outerId: p.items.outer,
+          bottomId: p.items.bottom,
+          shoeId: p.items.shoe,
+          beltId: p.items.belt,
+          accessoryId: p.items.acc
+        });
+      }
+      if (p.exercise) {
+        ingestEntry({
+          date: d.date,
+          context: 'exercise',
+          topId: p.exercise.top,
+          secondLayerId: p.exercise.secondLayer,
+          bottomId: p.exercise.bottom,
+          shoeId: p.exercise.shoe
+        });
+      }
+    });
+  }
+
+  // 5. Fallback: item.lastWornDate synced per garment in Firestore
+  (wardrobe || []).forEach(it => {
+    if (it && it.id && it.lastWornDate && it.lastWornDate < refDate) {
+      const diff = calendarDaysBetween(it.lastWornDate, refDate);
+      if (diff != null && diff >= 1) recordItemWear(it.id, diff, it.lastWornDate);
+    }
+  });
+
+  const yesterdayIds = new Set();
+  const cooldownIds = new Set();
+  const sameDayOtherIds = new Set();
+  itemDaysAgo.forEach((days, id) => {
+    if (days === 0) sameDayOtherIds.add(id);
+    if (days === 1) yesterdayIds.add(id);
+    if (days < cooldownDays) cooldownIds.add(id);
+  });
+
+  return {
+    refDate,
+    cooldownDays,
+    itemDaysAgo,
+    itemLastDate,
+    yesterdayIds,
+    cooldownIds,
+    sameDayOtherIds,
+    comboDaysAgo,
+    fullComboDaysAgo
+  };
+}
+
+function filterByRotationCooldown(candidates, cooldownInfo, opts = {}) {
+  const list = Array.isArray(candidates) ? candidates : [];
+  if (list.length <= 1 || !cooldownInfo || !(cooldownInfo.itemDaysAgo instanceof Map)) return list;
+  const cooldownDays = typeof opts.cooldownDays === 'number' ? opts.cooldownDays : (cooldownInfo.cooldownDays || ROTATION_COOLDOWN_DAYS);
+  const daysOf = (it) => cooldownInfo.itemDaysAgo.get(it.id);
+
+  // Tier 0 (Ideal): Never worn OR rested for >= 7 full days
+  const rested = list.filter(it => {
+    const d = daysOf(it);
+    return d == null || d >= cooldownDays;
+  });
+  if (rested.length > 0) return rested;
+
+  // Tier 1 (Graceful small-wardrobe step-down): NEVER repeat yesterday (days === 1) or same-day cross-context (days === 0)
+  const notConsecutive = list.filter(it => {
+    const d = daysOf(it);
+    return d == null || d >= 2;
+  });
+  if (notConsecutive.length > 0) {
+    const maxDays = Math.max(...notConsecutive.map(it => daysOf(it) ?? 999));
+    // Prefer the longest-rested pieces (within 1 day of max rest so style matching still has room)
+    const longestRested = notConsecutive.filter(it => (daysOf(it) ?? 999) >= Math.max(2, maxDays - 1));
+    return longestRested.length > 0 ? longestRested : notConsecutive;
+  }
+
+  // Tier 2: Every candidate was worn yesterday or same-day cross-context; prefer non-yesterday if any
+  const notYesterday = list.filter(it => daysOf(it) !== 1);
+  return notYesterday.length > 0 ? notYesterday : list;
+}
+
+function getRotationPenaltyForItem(item, cooldownInfo, weight = 1) {
+  if (!item || !cooldownInfo || !(cooldownInfo.itemDaysAgo instanceof Map)) return 0;
+  const d = cooldownInfo.itemDaysAgo.get(item.id);
+  if (d == null) return 14 * weight; // Completely fresh / never worn recently
+  if (d >= (cooldownInfo.cooldownDays || ROTATION_COOLDOWN_DAYS)) return 10 * weight; // Full 7+ day rest completed
+  if (d === 1) return -240 * weight; // Consecutive day hard penalty
+  if (d === 0) return -160 * weight; // Same-day cross-context penalty
+  // Days 2..6 inside 7-day cooldown: steeper penalty the more recently worn
+  return -(95 - d * 12) * weight;
+}
+
+function getItemCooldownBadgeInfo(item, referenceDateKey = null) {
+  if (!item || !item.id) return null;
+  const cd = buildRotationCooldownMap(referenceDateKey || getOutfitDayKey(), { context: 'both', skipSameDayCrossContext: true });
+  const daysAgo = cd.itemDaysAgo.get(item.id);
+  if (daysAgo == null || daysAgo >= ROTATION_COOLDOWN_DAYS || daysAgo < 1) return null;
+  const daysLeft = Math.max(1, ROTATION_COOLDOWN_DAYS - daysAgo);
+  return {
+    daysAgo,
+    daysLeft,
+    lastDate: cd.itemLastDate.get(item.id) || null,
+    label: daysAgo === 1
+      ? `⏳ Worn Yesterday · Rests ${daysLeft}d`
+      : `⏳ Worn ${daysAgo}d ago · Rests ${daysLeft}d`
+  };
+}
+
+function clearRotationCooldown() {
+  if (!confirm('Reset the 7-day rotation cooldown (e.g. after doing laundry)? Your total wear counts stay intact, and all pieces become immediately available again.')) {
+    return;
+  }
+  const now = Date.now();
+  try {
+    localStorage.setItem('wtw_wear_log_cleared_at', String(now));
+    localStorage.setItem('wtw_wear_log', '[]');
+    localStorage.removeItem('wtw_daily_main_lock');
+    localStorage.removeItem('wtw_ai_daily_outfit');
+    localStorage.removeItem('wtw_exercise_outfit_today');
+  } catch {}
+  (wardrobe || []).forEach(it => {
+    if (it && it.lastWornDate) it.lastWornDate = null;
+  });
+  if (typeof activeAIDailyOutfit !== 'undefined') activeAIDailyOutfit = null;
+  if (typeof lastAIDailyAttemptKey !== 'undefined') lastAIDailyAttemptKey = null;
+  if (typeof activeExerciseOutfit !== 'undefined') activeExerciseOutfit = null;
+  saveData();
+  if (typeof syncDailyOutfitsToCloud === 'function') syncDailyOutfitsToCloud();
+  renderWardrobe();
+  renderOutfit();
+  renderWardrobeIllusionSection();
+  toast('🧺 7-day rotation cooldown cleared! All pieces are fresh & available again.');
 }
 
 function getItemWearCount(item) {
@@ -8751,10 +9164,8 @@ function getItemWearCount(item) {
   const log = getWearLog();
   let count = 0;
   for (const entry of log) {
-    if (!entry) continue;
-    if (entry.topId === item.id || entry.midLayerId === item.id || entry.bottomId === item.id ||
-        entry.outerId === item.id || entry.beltId === item.id || entry.shoeId === item.id ||
-        entry.accessoryId === item.id) {
+    if (!entry || entry.source === 'auto-shown') continue;
+    if (extractEntryItemIds(entry).includes(item.id)) {
       count++;
     }
   }
@@ -8765,6 +9176,7 @@ function incrementItemWear(itemId) {
   const item = wardrobe.find(w => w.id === itemId);
   if (!item) return;
   item.wearCount = getItemWearCount(item) + 1;
+  item.lastWornDate = getOutfitDayKey();
   saveLocalDataOnly();
   renderWardrobe();
   if (typeof syncWardrobeItemsToCloud === 'function') {
@@ -8777,34 +9189,39 @@ function isOutfitLoggedToday(outfit) {
   if (!outfit || !outfit.top || !outfit.bottom) return false;
   const todayStr = getOutfitDayKey();
   const log = getWearLog();
-  return log.some(e => e && e.date === todayStr && e.topId === outfit.top.id && e.bottomId === outfit.bottom.id);
+  return log.some(e => e && e.source === 'logged' && e.context !== 'exercise' && e.date === todayStr && e.topId === outfit.top.id && e.bottomId === outfit.bottom.id);
 }
 
 function applyWearDelta(itemIds, delta, logEntry = null) {
   const uniqueIds = Array.from(new Set((itemIds || []).filter(Boolean)));
   const updatedItems = [];
+  const entryDate = (logEntry && logEntry.date) || getOutfitDayKey();
   uniqueIds.forEach(id => {
     const it = wardrobe.find(w => w.id === id);
     if (it) {
       const current = getItemWearCount(it);
       it.wearCount = Math.max(0, current + delta);
+      if (delta > 0 && (!it.lastWornDate || entryDate >= it.lastWornDate)) {
+        it.lastWornDate = entryDate;
+      }
       updatedItems.push(it);
     }
   });
   if (logEntry) {
-    const log = getWearLog();
+    const ctx = logEntry.context === 'exercise' ? 'exercise' : 'main';
     if (delta > 0) {
-      log.unshift({ ...logEntry, timestamp: Date.now() });
-      if (log.length > 40) log.pop();
+      upsertWearLogEntry({ ...logEntry, context: ctx, source: 'logged', timestamp: Date.now() }, { sync: true });
     } else if (delta < 0) {
+      const log = getWearLog();
       const idx = log.findIndex(e =>
         e && e.date === logEntry.date &&
+        e.context === ctx &&
         e.topId === logEntry.topId &&
         e.bottomId === logEntry.bottomId
       );
       if (idx !== -1) log.splice(idx, 1);
+      saveWearLog(log, { sync: true });
     }
-    try { localStorage.setItem('wtw_wear_log', JSON.stringify(log)); } catch {}
   }
   if (updatedItems.length > 0) {
     saveLocalDataOnly();
@@ -8818,7 +9235,7 @@ function applyWearDelta(itemIds, delta, logEntry = null) {
 function logWearToday(topId, bottomId, outerId, midLayerId, beltId, shoeId, accessoryId) {
   const todayStr = getOutfitDayKey();
   const log = getWearLog();
-  const alreadyLogged = log.some(e => e && e.date === todayStr && e.topId === topId && e.bottomId === bottomId);
+  const alreadyLogged = log.some(e => e && e.source === 'logged' && e.context !== 'exercise' && e.date === todayStr && e.topId === topId && e.bottomId === bottomId);
   if (alreadyLogged) {
     toast('✓ Today’s outfit is already counted in your wear history.');
     return;
@@ -8827,6 +9244,8 @@ function logWearToday(topId, bottomId, outerId, midLayerId, beltId, shoeId, acce
   const wornIds = [topId, midLayerId, bottomId, outerId, beltId, shoeId, accessoryId].filter(Boolean);
   const updatedItems = applyWearDelta(wornIds, 1, {
     date: todayStr,
+    context: 'main',
+    source: 'logged',
     topId,
     midLayerId: midLayerId || null,
     bottomId,
@@ -8854,7 +9273,7 @@ function logWearToday(topId, bottomId, outerId, midLayerId, beltId, shoeId, acce
     btn.classList.add('logged');
     btn.innerHTML = `✓ Logged (${countLabel})`;
   }
-  toast(`📌 Outfit logged! Counted ${countLabel} & updated wardrobe wear counts.`);
+  toast(`📌 Outfit logged! Counted ${countLabel} — these pieces will rest for ${ROTATION_COOLDOWN_DAYS} days.`);
   renderWardrobeIllusionSection();
   renderWardrobe();
 }
@@ -10671,7 +11090,9 @@ async function syncDailyOutfitsToCloud() {
       vaultKey: scope.vaultKey,
       userId: scope.userId,
       dailyMainLock: getDailyMainLock(),
-      dailyExerciseLock: safeJSON('wtw_exercise_outfit_today', null)
+      dailyExerciseLock: safeJSON('wtw_exercise_outfit_today', null),
+      wearLog: typeof getWearLog === 'function' ? getWearLog().slice(0, 60) : [],
+      wearLogClearedAt: parseInt(localStorage.getItem('wtw_wear_log_cleared_at') || '0', 10)
     }, { merge: true });
     localStorage.setItem('wtw_cloud_updated_at', String(now));
   } catch (err) {
@@ -23780,18 +24201,36 @@ async function pullFeedbackLogFromCloud() {
     if (!snap.exists) return;
     const data = snap.data() || {};
     const todayStr = getOutfitDayKey();
-    if (data.dailyMainLock && data.dailyMainLock.date === todayStr) {
-      const localMain = safeJSON('wtw_daily_main_lock', null);
-      if (!localMain || localMain.date !== todayStr || Number(data.dailyMainLock.updatedAt || 0) > Number(localMain.updatedAt || 0)) {
-        try { localStorage.setItem('wtw_daily_main_lock', JSON.stringify(data.dailyMainLock)); } catch {}
-        activeAIDailyOutfit = null;
+    if (typeof archiveStaleDailyLocksIfNeeded === 'function') archiveStaleDailyLocksIfNeeded(todayStr);
+    if (Array.isArray(data.wearLog) && typeof mergeWearLogs === 'function') {
+      const wearClearedAt = Math.max(
+        parseInt(localStorage.getItem('wtw_wear_log_cleared_at') || '0', 10),
+        Number(data.wearLogClearedAt || 0)
+      );
+      if (wearClearedAt) localStorage.setItem('wtw_wear_log_cleared_at', String(wearClearedAt));
+      const mergedWear = mergeWearLogs(getWearLog(), data.wearLog, wearClearedAt);
+      saveWearLog(mergedWear, { sync: false });
+    }
+    if (data.dailyMainLock && data.dailyMainLock.date) {
+      if (data.dailyMainLock.date < todayStr && typeof archiveLockEntryToWearLog === 'function') {
+        archiveLockEntryToWearLog(data.dailyMainLock, 'main', todayStr);
+      } else if (data.dailyMainLock.date === todayStr) {
+        const localMain = safeJSON('wtw_daily_main_lock', null);
+        if (!localMain || localMain.date !== todayStr || Number(data.dailyMainLock.updatedAt || 0) > Number(localMain.updatedAt || 0)) {
+          try { localStorage.setItem('wtw_daily_main_lock', JSON.stringify(data.dailyMainLock)); } catch {}
+          activeAIDailyOutfit = null;
+        }
       }
     }
-    if (data.dailyExerciseLock && data.dailyExerciseLock.date === todayStr) {
-      const localEx = safeJSON('wtw_exercise_outfit_today', null);
-      if (!localEx || localEx.date !== todayStr || Number(data.dailyExerciseLock.updatedAt || 0) > Number(localEx.updatedAt || 0)) {
-        try { localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify(data.dailyExerciseLock)); } catch {}
-        activeExerciseOutfit = null;
+    if (data.dailyExerciseLock && data.dailyExerciseLock.date) {
+      if (data.dailyExerciseLock.date < todayStr && typeof archiveLockEntryToWearLog === 'function') {
+        archiveLockEntryToWearLog(data.dailyExerciseLock, 'exercise', todayStr);
+      } else if (data.dailyExerciseLock.date === todayStr) {
+        const localEx = safeJSON('wtw_exercise_outfit_today', null);
+        if (!localEx || localEx.date !== todayStr || Number(data.dailyExerciseLock.updatedAt || 0) > Number(localEx.updatedAt || 0)) {
+          try { localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify(data.dailyExerciseLock)); } catch {}
+          activeExerciseOutfit = null;
+        }
       }
     }
 
