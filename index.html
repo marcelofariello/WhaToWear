@@ -8660,8 +8660,9 @@ function isWorkDisallowedItem(it, targetFormality) {
   if (isGymOrLoungeItem(it) || isStrictSportPiece(it) || isGraphicOrBrandedItem(it)) {
     return true;
   }
-  const text = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''}`.toLowerCase();
-  if (it.category === 'tops' && /\b(athletic|sport(?!\s*(?:coat|jacket))|gym|training|running|workout|dry-?fit|dri-?fit|performance|jersey|singlet|tank\s*top|sleeveless)\b/.test(text)) {
+  const rawWorkText = `${it.name || ''} ${it.subType || ''} ${it.aiDescription || ''}`.toLowerCase();
+  const text = typeof stripCottonJerseyFabricText === 'function' ? stripCottonJerseyFabricText(rawWorkText) : rawWorkText;
+  if (it.category === 'tops' && /\b(athletic|sport(?!\s*(?:coat|jacket))|sports(?!\s*(?:coat|jacket))|soccer|football|futsal|gym|training|running|workout|dry-?fit|dri-?fit|climacool|aeroready|performance|jersey|singlet|tank\s*top|sleeveless)\b/.test(text)) {
     return true;
   }
   if (fScore >= 2.5 && it.category === 'tops' && /\b(hoodie|sweatshirt|t-shirt|tee)\b/.test(text)) {
@@ -12577,14 +12578,33 @@ function stripStylingPairingText(raw) {
   return String(raw || '').toLowerCase().replace(rx, ' ');
 }
 
+function stripCottonJerseyFabricText(raw) {
+  // Normal casual cotton T-shirts are often described as "cotton jersey", "heathered jersey", or "jersey knit".
+  // Strip everyday fabric-weave terms so they NEVER falsely match sports/soccer jerseys!
+  return String(raw || '')
+    .toLowerCase()
+    .replace(/\b(?:cotton|heathered|heather|soft|lightweight|heavyweight|midweight|knit|knitted|slub|combed|organic|pima|supima|tri-?blend|melange|brushed|stretch|ribbed|ring-?spun|single|double)(?:\s+(?:cotton|heathered|knit|blend))*\s+jersey(?:\s+(?:knit|fabric|cotton|tee|t-?shirt))?\b/g, ' cotton knit ')
+    .replace(/\bjersey\s+(?:knit|fabric|cotton|weave)\b/g, ' cotton knit ');
+}
+
 function isStrictSportPiece(it) {
   if (!it) return false;
   if (it.aiActivity === 'exercise') return true;
   if (it.formality === 'athleisure') return true;
-  const titleTxt = `${it.formality || ''} ${it.subType || ''} ${it.name || ''}`.toLowerCase();
-  const descTxt = stripStylingPairingText(it.aiDescription || '');
+  const titleTxt = stripCottonJerseyFabricText(`${it.formality || ''} ${it.subType || ''} ${it.name || ''}`);
+  const descTxt = stripCottonJerseyFabricText(stripStylingPairingText(it.aiDescription || ''));
   const txt = `${titleTxt} ${descTxt}`;
-  return /\b(athleisure|athletic|sport(?!\s*(?:coat|jacket))|sports(?!\s*(?:coat|jacket))|gym|running|training|workout|jogger|joggers|track|sweatpant|sweatpants|sweatshorts|performance|dry-?fit|dri-?fit|moisture[- ]?wicking|compression|singlet|jersey|trainer|running shoe|mesh)\b/i.test(txt);
+
+  if (/\b(athleisure|athletic|activewear|sportswear|fitness|crossfit|sport(?!\s*(?:coat|jacket))|sports(?!\s*(?:coat|jacket))|soccer|football|f[uú]tbol|futsal|rugby|basketball|cricket|cycling|marathon|gym|running|training|workout|jogger|joggers|track|sweatpant|sweatpants|sweatshorts|performance|dry-?fit|dri-?fit|climacool|climalite|aeroready|heatgear|moisture[- ]?wicking|quick[- ]?dry|breathable\s+polyester|technical\s+(?:fabric|knit|tee|t-?shirt|top|shirt)|tech\s+(?:tee|t-?shirt|top|shirt)|compression|singlet|jersey|soccer\s+kit|football\s+kit|match\s+kit|team\s+kit|home\s+kit|away\s+kit|third\s+kit|club\s+(?:crest|badge)|team\s+(?:crest|badge)|national\s+team|world\s+cup|trainer|running\s+shoe|metcon)\b/i.test(txt)) {
+    return true;
+  }
+  if (isShoeCategoryItem(it) && /\bmesh\b/i.test(txt)) {
+    return true;
+  }
+  if (/\b(?:athletic|sport|breathable|ventilated|polyester|performance)\s+mesh\b|\bmesh\s+(?:panel|panels|insert|inserts|vent|vents|back|shorts|tank|singlet)\b/i.test(txt)) {
+    return true;
+  }
+  return false;
 }
 
 function isNonExerciseBaseTop(it) {
@@ -12596,20 +12616,28 @@ function isNonExerciseBaseTop(it) {
   if (typeof getTopLayerTier === 'function' && getTopLayerTier(it) !== 'base') return true;
 
   const titleTxt = `${it.name || ''} ${it.subType || ''}`.toLowerCase();
-  const descTxt = stripStylingPairingText(it.aiDescription || '');
-  const fullTxt = `${titleTxt} ${descTxt}`;
+  const descTxt = stripCottonJerseyFabricText(stripStylingPairingText(it.aiDescription || ''));
+  const fullTxt = `${stripCottonJerseyFabricText(titleTxt)} ${descTxt}`;
 
   if (/\b(sweatshirt|hoodie|pullover|quarter[- ]?zip|half[- ]?zip|1\/4[- ]?zip|1\/2[- ]?zip|zip[- ]?up|sweater|cardigan|fleece|jumper|knitwear|turtleneck|mock[- ]?neck|overshirt|shacket|vest|gilet|waistcoat|blazer|jacket|coat|poncho|cape|shrug|bolero)\b/.test(titleTxt)) {
     return true;
   }
 
+  // Allow dedicated soccer/football/athletic jerseys even if they have a polo-style collar
+  const isDedicatedSoccerOrSportJersey = it.aiActivity === 'exercise'
+    || it.formality === 'athleisure'
+    || /\b(soccer|football|f[uú]tbol|futsal|rugby|basketball|jersey|match\s+kit|team\s+kit|home\s+kit|away\s+kit|dri-?fit|dry-?fit|climacool|aeroready|athletic|performance)\b/i.test(fullTxt);
+
   // Reject non-exercise street / formal / collared / button-up / knit tops for workout Layer 1
-  if (/\b(dress shirt|oxford|ocbd|poplin|twill|tuxedo shirt|button[- ]?up|button[- ]?down|blouse|linen shirt|chambray|denim shirt|flannel|corduroy|camp[- ]?collar|cuban|mandarin|knitted polo|polo shirt|polo|henley|bodysuit|tunic|corset|cashmere|merino|wool|cable[- ]?knit)\b/.test(titleTxt)) {
+  if (/\b(dress shirt|oxford|ocbd|poplin|twill|tuxedo shirt|button[- ]?up|button[- ]?down|blouse|linen shirt|chambray|denim shirt|flannel|corduroy|camp[- ]?collar|cuban|mandarin|knitted polo|henley|bodysuit|tunic|corset|cashmere|merino|wool|cable[- ]?knit)\b/.test(titleTxt)) {
+    return true;
+  }
+  if (!isDedicatedSoccerOrSportJersey && /\b(polo shirt|polo)\b/.test(titleTxt)) {
     return true;
   }
 
-  const isExplicitWorkoutBaseTitle = /\b(t-?shirt|tee|tank|singlet|athletic top|performance top|running top|workout top|gym top|compression|crop top|sports bra|jersey|racerback)\b/.test(titleTxt);
-  if (!isExplicitWorkoutBaseTitle && /\b(sweatshirt|hoodie|pullover|quarter[- ]?zip|half[- ]?zip|1\/4[- ]?zip|1\/2[- ]?zip|sweater|cardigan|fleece|knitwear|button[- ]?down|button[- ]?up|dress shirt|oxford|polo|blouse|flannel|overshirt)\b/.test(fullTxt)) {
+  const isExplicitWorkoutBaseTitle = /\b(t-?shirt|tee|tank|singlet|athletic top|performance top|running top|workout top|gym top|compression|crop top|sports bra|jersey|soccer|football|racerback)\b/.test(titleTxt);
+  if (!isExplicitWorkoutBaseTitle && !isDedicatedSoccerOrSportJersey && /\b(sweatshirt|hoodie|pullover|quarter[- ]?zip|half[- ]?zip|1\/4[- ]?zip|1\/2[- ]?zip|sweater|cardigan|fleece|knitwear|button[- ]?down|button[- ]?up|dress shirt|oxford|polo|blouse|flannel|overshirt)\b/.test(fullTxt)) {
     return true;
   }
 
@@ -12732,7 +12760,10 @@ function generateExerciseOutfit(avoidIds = [], opts = {}) {
   };
   const preferSport = (list, cat) => {
     const strict = list.filter(isStrictSportPiece);
+    // For tops (athletic, performance & soccer shirts): ALWAYS stay strictly inside dedicated sport/soccer tops
+    // whenever any non-yesterday OR available sport top exists — never fall back to everyday casual cotton T-shirts!
     if (strict.some(isFreshAvailable)) return strict;
+    if (cat === 'tops' && strict.some(isAvailable)) return strict;
     const broader = list.filter(isExerciseCandidate);
     if (broader.some(isFreshAvailable)) return broader;
     if (cat === 'shoes') {
@@ -12811,7 +12842,11 @@ function generateExerciseOutfit(avoidIds = [], opts = {}) {
   };
 
   const scoreTop = (t) => {
-    let s = isStrictSportPiece(t) ? 26 : 14;
+    let s = isStrictSportPiece(t) ? 48 : 10;
+    const tTxt = stripCottonJerseyFabricText(`${t.name || ''} ${t.subType || ''} ${t.aiDescription || ''}`);
+    if (/\b(soccer|football|f[uú]tbol|futsal|jersey|dri-?fit|dry-?fit|climacool|aeroready|performance|athletic|running|training|workout)\b/i.test(tTxt)) {
+      s += 8;
+    }
     const len = getItemLength(t);
     if ((morningTemp >= 14 || exerciseSecondLayer || exercisePreferShorts) && (len === 'short' || len === 'sleeveless')) {
       s += 12;
@@ -12876,7 +12911,7 @@ function saveExerciseOutfitState(ex) {
   }
   try {
     localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
-      engineVersion: 2,
+      engineVersion: 3,
       date: todayStr,
       updatedAt: Date.now(),
       topId: ex.top.id,
@@ -12945,6 +12980,11 @@ function swapDislikedExercisePiece(itemId, excludedIds) {
         return true;
       };
       const findAlt = (src) => {
+        const sportStrictAlt = src.find(w =>
+          matchesSlotCat(w) && w.id !== itemId && w.id !== ex.secondLayer?.id
+          && !isItemDisliked(w) && !isSwimwearItem(w) && isSlotValid(w) && isStrictSportPiece(w)
+        );
+        if (sportStrictAlt) return sportStrictAlt;
         const strictAlt = src.find(w =>
           matchesSlotCat(w) && w.id !== itemId && w.id !== ex.secondLayer?.id
           && !isItemDisliked(w) && !isSwimwearItem(w) && isSlotValid(w)
@@ -13037,7 +13077,7 @@ function renderExerciseOutfit() {
       const saved = safeJSON('wtw_exercise_outfit_today', null);
       if (saved && saved.date && saved.date < todayStr && typeof archiveLockEntryToWearLog === 'function') {
         archiveLockEntryToWearLog(saved, 'exercise', todayStr);
-      } else if (saved && saved.date === todayStr && saved.engineVersion >= 2) {
+      } else if (saved && saved.date === todayStr && saved.engineVersion >= 3) {
         const top = wardrobe.find(w => w.id === saved.topId);
         const secondLayer = saved.secondLayerId ? wardrobe.find(w => w.id === saved.secondLayerId) : null;
         const bottom = wardrobe.find(w => w.id === saved.bottomId);
@@ -13049,12 +13089,18 @@ function renderExerciseOutfit() {
     } catch {}
   }
 
+  const todayExDisliked = typeof getTodayDislikedIds === 'function' ? getTodayDislikedIds() : new Set();
   const hasValidExBaseTop = wardrobe.some(w => w.category === 'tops' && !isItemDisliked(w) && !isNonExerciseBaseTop(w));
+  const hasStrictSportTop = wardrobe.some(w =>
+    w.category === 'tops' && !isItemDisliked(w) && !todayExDisliked.has(w.id)
+    && !isNonExerciseBaseTop(w) && isStrictSportPiece(w)
+  );
   const hasValidExSecondLayer = wardrobe.some(w => isExerciseSecondLayerCandidate(w) && w.id !== activeExerciseOutfit?.top?.id);
   const topInvalid = !!(activeExerciseOutfit?.top && (
     isItemDisliked(activeExerciseOutfit.top)
     || isSwimwearItem(activeExerciseOutfit.top)
     || (hasValidExBaseTop && isNonExerciseBaseTop(activeExerciseOutfit.top))
+    || (hasStrictSportTop && !isStrictSportPiece(activeExerciseOutfit.top))
   ));
   const secondLayerInvalid = !!(activeExerciseOutfit?.secondLayer && (
     isItemDisliked(activeExerciseOutfit.secondLayer)
@@ -23213,7 +23259,9 @@ function pickTripExerciseOutfit(day, items, exUsage, prevEx, recentPlans = []) {
   const wantSecondLayer = morningTemp < 15 || (typeof exerciseSecondLayer !== 'undefined' && exerciseSecondLayer);
 
   const top = pickBest(exTops, t => {
-    let s = isStrictSportPiece(t) ? 26 : 14;
+    let s = isStrictSportPiece(t) ? 48 : 10;
+    const tTxt = stripCottonJerseyFabricText(`${t.name || ''} ${t.subType || ''} ${t.aiDescription || ''}`);
+    if (/\b(soccer|football|f[uú]tbol|futsal|jersey|dri-?fit|dry-?fit|climacool|aeroready|performance|athletic|running|training|workout)\b/i.test(tTxt)) s += 8;
     const len = getItemLength(t);
     if ((morningTemp >= 14 || wantSecondLayer || preferShorts) && (len === 'short' || len === 'sleeveless')) s += 10;
     else if (morningTemp < 12 && !preferShorts && !wantSecondLayer && len === 'long') s += 8;
