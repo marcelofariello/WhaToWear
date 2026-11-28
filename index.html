@@ -3832,6 +3832,7 @@ input[type="text"]:focus, select:focus, textarea:focus {
           <option value="fit-asc">⚠️ Fit Rank: Low → High (Declutter)</option>
           <option value="wear-desc">👕 Most Worn</option>
           <option value="wear-asc">🧺 Least Worn</option>
+          <option value="disabled-oldest">🚫 Disabled Longest First</option>
         </select>
         <button type="button" class="btn btn-secondary btn-sm" id="btn-ai-reassess-ranks" onclick="reassessWardrobeRanksWithAI()" title="Re-rank every wardrobe item (1-10) with AI against your Persona, Color, Silhouette & Desired Style">🤖 AI Reassess Ranks</button>
         <button type="button" class="btn btn-secondary btn-sm" id="btn-ai-tag-wardrobe" onclick="aiTagWardrobeSmartAttributes()" title="Tag every item with AI layer tier, activity (everyday/work/exercise/swim), and comfortable °C range to prevent absurd outfits">🧠 AI Smart-Tag Rules</button>
@@ -4888,10 +4889,37 @@ function isShoeCategoryItem(it) {
   return /\b(sneaker|sneakers|running shoe|running shoes|trainer|trainers|tennis shoe|athletic shoe|cross-trainer|walking shoe|boot|boots|loafer|loafers|oxford|oxfords|derby|brogue|sandal|sandals|heel|heels|pumps|flats)\b/.test(sub);
 }
 
+function getDisabledDurationInfo(it) {
+  if (!it || (!it.disabled && !isItemDisliked(it))) return null;
+  const rawTs = (typeof it.disabledAt === 'number' && it.disabledAt > 0)
+    ? it.disabledAt
+    : (it.disabled && typeof it.updatedAt === 'number' && it.updatedAt > 0 ? it.updatedAt : null);
+  if (!rawTs) {
+    return { ts: null, days: null, isLongDisabled: false, shortLabel: 'Disabled earlier', dateLabel: 'Unknown date' };
+  }
+  const elapsedMs = Math.max(0, Date.now() - rawTs);
+  const hours = Math.floor(elapsedMs / 3600000);
+  const days = Math.floor(elapsedMs / 86400000);
+  const dateLabel = new Date(rawTs).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  let shortLabel;
+  if (hours < 1) shortLabel = 'just now';
+  else if (hours < 24) shortLabel = `${hours}h ago`;
+  else if (days === 1) shortLabel = '1d ago';
+  else shortLabel = `${days}d ago`;
+  return {
+    ts: rawTs,
+    days,
+    isLongDisabled: days >= 14,
+    shortLabel,
+    dateLabel
+  };
+}
+
 function toggleWardrobeItemDisabled(itemId) {
   const it = wardrobe.find(w => w.id === itemId);
   if (!it) return;
   it.disabled = !it.disabled;
+  it.disabledAt = it.disabled ? Date.now() : null;
   saveData();
 
   // If just disabled and currently worn in Today's outfit, swap only that piece out
@@ -4909,6 +4937,25 @@ function toggleWardrobeItemDisabled(itemId) {
   toast(it.disabled
     ? `🚫 Disabled "${it.name}" — won't be suggested until you enable it.`
     : `✅ Enabled "${it.name}" — back in your outfit rotation!`);
+}
+
+function enableAllDisabledWardrobeItems() {
+  const disabledItems = (wardrobe || []).filter(w => w && w.disabled === true);
+  if (disabledItems.length === 0) {
+    toast('No directly disabled items to enable.');
+    return;
+  }
+  if (!confirm(`Re-enable all ${disabledItems.length} disabled wardrobe piece${disabledItems.length === 1 ? '' : 's'} so they return to your outfit rotation?`)) {
+    return;
+  }
+  disabledItems.forEach(it => {
+    it.disabled = false;
+    it.disabledAt = null;
+  });
+  saveData();
+  renderWardrobe();
+  renderOutfit();
+  toast(`✅ Re-enabled ${disabledItems.length} piece${disabledItems.length === 1 ? '' : 's'} back into rotation!`);
 }
 
 function persistDislikes() {
@@ -6504,6 +6551,7 @@ function normalizeRemoteWardrobeItem(raw, scope) {
     aiFitReason: raw.aiFitReason || null,
     aiFitUpdatedAt: typeof raw.aiFitUpdatedAt === 'number' ? raw.aiFitUpdatedAt : null,
     disabled: Boolean(raw.disabled),
+    disabledAt: typeof raw.disabledAt === 'number' ? raw.disabledAt : null,
     formality: raw.formality || 'casual',
     wearCount: raw.wearCount || 0,
     lastWornDate: raw.lastWornDate || null,
@@ -7219,6 +7267,7 @@ function sanitizeWardrobeItemForFirestore(item, scope, timestamp) {
     aiFitReason: item.aiFitReason || null,
     aiFitUpdatedAt: typeof item.aiFitUpdatedAt === 'number' ? item.aiFitUpdatedAt : null,
     disabled: Boolean(item.disabled),
+    disabledAt: (item.disabled && typeof item.disabledAt === 'number') ? item.disabledAt : null,
     wearCount: typeof item.wearCount === 'number' ? item.wearCount : 0,
     lastWornDate: item.lastWornDate || null,
     imageTransform: item.imageTransform || null,
@@ -15820,10 +15869,27 @@ function renderFilters() {
   if (!group) return;
   const cfg = getStyleConfig();
   const categories = ['all', ...Object.keys(cfg.categories)];
-  group.innerHTML = categories.map(c => {
+  const disabledItems = (wardrobe || []).filter(it => it && (it.disabled === true || isItemDisliked(it)));
+  const disabledCount = disabledItems.length;
+  const longDisabledCount = disabledItems.filter(it => {
+    const info = typeof getDisabledDurationInfo === 'function' ? getDisabledDurationInfo(it) : null;
+    return info && info.isLongDisabled;
+  }).length;
+  const catHtml = categories.map(c => {
     const label = c === 'all' ? 'All' : (getCategoryEmoji(c) + ' ' + getCategoryLabel(c));
     return `<button class="filter-chip ${activeFilter === c ? 'active' : ''}" onclick="setFilter('${escapeHtml(c)}')">${escapeHtml(label)}</button>`;
   }).join('');
+  const isDisActive = activeFilter === 'disabled';
+  const disStyle = !isDisActive && disabledCount > 0
+    ? (longDisabledCount > 0
+        ? 'border-color:rgba(245,158,11,0.55); color:#fbbf24; background:rgba(245,158,11,0.12);'
+        : 'border-color:rgba(248,113,113,0.45); color:#fca5a5; background:rgba(248,113,113,0.1);')
+    : '';
+  const disTitle = longDisabledCount > 0
+    ? `${disabledCount} disabled/blocked piece(s) — ${longDisabledCount} disabled for 14+ days`
+    : 'View disabled or blocked wardrobe pieces to make sure nothing stays off by mistake';
+  const disabledChipHtml = `<button class="filter-chip ${isDisActive ? 'active' : ''}" style="${disStyle}" onclick="setFilter('disabled')" title="${escapeHtml(disTitle)}">${longDisabledCount > 0 ? '⚠️ ' : '🚫 '}Disabled (${disabledCount})</button>`;
+  group.innerHTML = catHtml + disabledChipHtml;
 }
 
 function setFilter(f) {
@@ -15932,10 +15998,11 @@ async function reassessWardrobeRanksWithAI() {
 }
 
 function renderWardrobe() {
+  renderFilters();
   const grid = document.getElementById('wardrobe-grid');
   const empty = document.getElementById('wardrobe-empty');
   const tripCtx = (typeof getActiveTripContext === 'function') ? getActiveTripContext() : null;
-  const activeWardrobePool = tripCtx ? tripCtx.checklistItems : wardrobe;
+  const activeWardrobePool = (tripCtx && activeFilter !== 'disabled') ? tripCtx.checklistItems : wardrobe;
   let tripNoticeEl = document.getElementById('wardrobe-trip-notice');
   if (!tripNoticeEl && grid && grid.parentElement) {
     tripNoticeEl = document.createElement('div');
@@ -15943,7 +16010,22 @@ function renderWardrobe() {
     grid.parentElement.insertBefore(tripNoticeEl, grid);
   }
   if (tripNoticeEl) {
-    if (tripCtx) {
+    if (activeFilter === 'disabled') {
+      const allDisabled = (wardrobe || []).filter(it => it && (it.disabled === true || isItemDisliked(it)));
+      const directDisabledCount = allDisabled.filter(it => it.disabled === true).length;
+      const longCount = allDisabled.filter(it => getDisabledDurationInfo(it)?.isLongDisabled).length;
+      tripNoticeEl.innerHTML = allDisabled.length > 0
+        ? `<div class="card" style="margin-bottom:12px; padding:10px 14px; border:1px solid rgba(248,113,113,0.38); background:rgba(248,113,113,0.08); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+             <div style="font-size:0.82rem; color:var(--text);">
+               🚫 <strong>${allDisabled.length} Disabled / Blocked Piece${allDisabled.length === 1 ? '' : 's'}</strong> (sorted longest-disabled first so forgotten items stand out)${longCount > 0 ? ` · <span style="color:#fbbf24; font-weight:700;">⚠️ ${longCount} disabled 14+ days</span>` : ''}
+             </div>
+             <div style="display:flex; gap:8px; flex-wrap:wrap;">
+               ${directDisabledCount > 0 ? `<button type="button" class="btn btn-primary btn-sm" onclick="enableAllDisabledWardrobeItems()">✅ Enable All (${directDisabledCount})</button>` : ''}
+               <button type="button" class="btn btn-secondary btn-sm" onclick="setFilter('all')">← Show All Clothes</button>
+             </div>
+           </div>`
+        : '';
+    } else if (tripCtx) {
       tripNoticeEl.innerHTML = `
         <div class="trip-banner" style="margin-bottom:12px;">
           <span>🧳 <strong>Trip Wardrobe Active (${escapeHtml(tripCtx.trip.name || 'Your Trip')})</strong> — Showing ${tripCtx.checklistItems.length} packed checklist items only</span>
@@ -15957,7 +16039,11 @@ function renderWardrobe() {
       tripNoticeEl.innerHTML = '';
     }
   }
-  let items = activeFilter === 'all' ? [...activeWardrobePool] : activeWardrobePool.filter(it => it.category === activeFilter);
+  let items = activeFilter === 'all'
+    ? [...activeWardrobePool]
+    : activeFilter === 'disabled'
+      ? activeWardrobePool.filter(it => it && (it.disabled === true || isItemDisliked(it)))
+      : activeWardrobePool.filter(it => it.category === activeFilter);
 
   if (activeWardrobePool.length === 0) {
     grid.style.display = 'none';
@@ -15969,7 +16055,14 @@ function renderWardrobe() {
   grid.style.display = 'grid';
 
   if (items.length === 0) {
-    grid.innerHTML = `<p style="grid-column:1/-1; text-align:center; color:var(--text-secondary); padding:32px;">No items in this category.</p>`;
+    grid.innerHTML = activeFilter === 'disabled'
+      ? `<div style="grid-column:1/-1; text-align:center; padding:36px 20px; border-radius:14px; border:1px solid rgba(16,185,129,0.32); background:rgba(16,185,129,0.07);">
+           <div style="font-size:2rem; margin-bottom:6px;">✅</div>
+           <strong style="font-size:0.98rem; color:#6ee7b7; display:block; margin-bottom:4px;">Nothing disabled or blocked!</strong>
+           <span style="font-size:0.82rem; color:var(--text-secondary); display:block; margin-bottom:12px;">Every piece in your wardrobe is active in your outfit rotation.</span>
+           <button type="button" class="btn btn-secondary btn-sm" onclick="setFilter('all')">Show All Clothes</button>
+         </div>`
+      : `<p style="grid-column:1/-1; text-align:center; color:var(--text-secondary); padding:32px;">No items in this category.</p>`;
     return;
   }
 
@@ -15981,15 +16074,26 @@ function renderWardrobe() {
     item,
     wearCount: getItemWearCount(item),
     fit: computeItemPersonaFitRank(item, bp),
-    cooldownDaysAgo: wardrobeCooldownMap ? wardrobeCooldownMap.itemDaysAgo.get(item.id) : null
+    cooldownDaysAgo: wardrobeCooldownMap ? wardrobeCooldownMap.itemDaysAgo.get(item.id) : null,
+    disabledInfo: getDisabledDurationInfo(item)
   }));
 
   if (wardrobeSort === 'fit-desc') enriched.sort((a, b) => b.fit.score - a.fit.score);
   else if (wardrobeSort === 'fit-asc') enriched.sort((a, b) => a.fit.score - b.fit.score);
   else if (wardrobeSort === 'wear-desc') enriched.sort((a, b) => b.wearCount - a.wearCount);
   else if (wardrobeSort === 'wear-asc') enriched.sort((a, b) => a.wearCount - b.wearCount);
+  else if (wardrobeSort === 'disabled-oldest' || activeFilter === 'disabled') {
+    enriched.sort((a, b) => {
+      const aDis = (a.item.disabled === true || isItemDisliked(a.item)) ? 0 : 1;
+      const bDis = (b.item.disabled === true || isItemDisliked(b.item)) ? 0 : 1;
+      if (aDis !== bDis) return aDis - bDis;
+      const aTs = a.disabledInfo?.ts ?? Number.MAX_SAFE_INTEGER;
+      const bTs = b.disabledInfo?.ts ?? Number.MAX_SAFE_INTEGER;
+      return aTs - bTs; // oldest disabled (longest time off) first
+    });
+  }
 
-  grid.innerHTML = enriched.map(({ item, wearCount, fit, cooldownDaysAgo }, idx) => {
+  grid.innerHTML = enriched.map(({ item, wearCount, fit, cooldownDaysAgo, disabledInfo }, idx) => {
     const emoji = getCategoryEmoji(item.category);
     const len = getItemLength(item);
     const lenLabel = getLengthLabel(len, item.category);
@@ -16047,7 +16151,7 @@ function renderWardrobe() {
         <div class="card-sub">${escapeHtml(item.subType)}</div>
         ${item.aiDescription ? `<div style="font-size:0.72rem; color:var(--text-secondary); margin:-4px 0 8px; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;" title="${escapeHtml(item.aiDescription)}">🤖 ${escapeHtml(item.aiDescription)}</div>` : ''}
         <div class="card-badges">
-          ${isDisabled ? `<span class="badge" onclick="event.stopPropagation(); toggleWardrobeItemDisabled('${item.id}')" style="cursor:pointer; background:#fef2f2; color:#b91c1c; border:1px solid #fecaca;" title="Tap to re-enable">🚫 Disabled (Tap to Enable)</span>` : ''}
+          ${isDisabled ? `<span class="badge" onclick="event.stopPropagation(); toggleWardrobeItemDisabled('${item.id}')" style="cursor:pointer; ${disabledInfo?.isLongDisabled ? 'background:#fffbeb; color:#b45309; border:1px solid #fcd34d;' : 'background:#fef2f2; color:#b91c1c; border:1px solid #fecaca;'}" title="Disabled${disabledInfo?.ts ? ` since ${escapeHtml(disabledInfo.dateLabel)}` : ''} — tap to re-enable">${disabledInfo?.isLongDisabled ? '⚠️' : '🚫'} Disabled${disabledInfo?.shortLabel && disabledInfo.shortLabel !== 'Disabled earlier' ? ` · ${escapeHtml(disabledInfo.shortLabel)}` : ''} (Tap to Enable)</span>` : ''}
           ${dislikeReason ? `<span class="badge" onclick="event.stopPropagation(); unblockDislikedTerm('${safeDislikeReason}')" style="cursor:pointer; background:#fef2f2; color:#b91c1c; border:1px solid #fecaca;" title="Blocked by Dislike filter: ${escapeHtml(dislikeReason)}. Tap to unblock.">🚫 Blocked: "${escapeHtml(dislikeReason)}" (Tap to Unblock)</span>` : ''}
           <span class="badge badge-wear-count" onclick="event.stopPropagation(); incrementItemWear('${item.id}')" style="cursor:pointer;" title="Times worn (tap to add +1)">👕 Worn ${wearCount}×</span>
           ${(typeof cooldownDaysAgo === 'number' && cooldownDaysAgo >= 1 && cooldownDaysAgo < ROTATION_COOLDOWN_DAYS) ? `<span class="badge" style="background:rgba(245,158,11,0.16); color:#fbbf24; border:1px solid rgba(245,158,11,0.38);" title="Resting for 7-day rotation cooldown (last worn ${cooldownDaysAgo === 1 ? 'yesterday' : `${cooldownDaysAgo} days ago`})">⏳ ${cooldownDaysAgo === 1 ? 'Worn Yesterday' : `Worn ${cooldownDaysAgo}d ago`} · Rests ${ROTATION_COOLDOWN_DAYS - cooldownDaysAgo}d</span>` : ''}
