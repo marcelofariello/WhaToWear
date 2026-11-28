@@ -5327,23 +5327,15 @@ function dislikeOutfitPieceForToday(itemId, context = 'main') {
   renderOutfit();
   if (res.ok) {
     const newItem = res.updated && matchedSlot !== 'belt' ? res.updated[matchedSlot] : null;
-    const hasGemini = Boolean((localStorage.getItem('wtw_gemini_apikey') || '').trim());
-    const canAIRefine = hasGemini && res.updated && !res.updated.tripContext && !(typeof activeSpecialOccasion === 'object' && activeSpecialOccasion);
-    if (canAIRefine && typeof runAIPartialOutfitDecision === 'function') {
-      if (matchedSlot === 'shoe' || matchedSlot === 'belt') {
-        runAIPartialOutfitDecision('shoe', res.updated, excludedIds);
-      } else if (matchedSlot === 'bottom') {
-        runAIPartialOutfitDecision('bottom', res.updated, excludedIds);
-      } else if (matchedSlot === 'top' || matchedSlot === 'midLayer' || matchedSlot === 'outerwear') {
-        maybeTriggerAIDailyOutfit(true, Array.from(excludedIds));
-      }
+    if (typeof scheduleBackgroundNextDayVerification === 'function') {
+      scheduleBackgroundNextDayVerification({ delayMs: 1400 });
     }
     if (res.changedSlots.length >= 3) {
-      toast(`🔄 Removed ${oldName} & built a fresh outfit without it${canAIRefine ? ' · 🤖 AI refining...' : ''}`);
+      toast(`🔄 Removed ${oldName} & built a fresh outfit without it`);
     } else if (res.changedSlots.length > 1) {
-      toast(`🔄 Swapped ${oldName} + ${res.changedSlots[1]} to keep a great combination${canAIRefine ? ' · 🤖 AI refining...' : ' (rest stayed the same)'}`);
+      toast(`🔄 Swapped ${oldName} + ${res.changedSlots[1]} to keep a great combination (rest stayed the same)`);
     } else if (newItem) {
-      toast(`🔄 Swapped ${oldName} → ${newItem.name}${canAIRefine ? ' · 🤖 AI checking best match...' : ''}`);
+      toast(`🔄 Swapped ${oldName} → ${newItem.name} (kept the rest fixed)`);
     } else {
       toast(`🔄 Removed ${oldName} from today's look (kept the rest!)`);
     }
@@ -6043,6 +6035,16 @@ function loadData() {
   } catch {
     wardrobe = [];
   }
+  try {
+    const cachedWx = safeJSON('wtw_cached_weather', null);
+    const curCity = (localStorage.getItem('wtw_city') || '').trim().toLowerCase();
+    if (!weather && cachedWx && cachedWx.weather && typeof cachedWx.weather.temp === 'number') {
+      const ageMs = Date.now() - Number(cachedWx.savedAt || 0);
+      if (ageMs >= 0 && ageMs < 8 * 3600 * 1000 && (!curCity || cachedWx.city === curCity)) {
+        weather = cachedWx.weather;
+      }
+    }
+  } catch {}
 }
 
 function runRetroactiveWardrobeCleanup({ silent = false, skipSave = false } = {}) {
@@ -6604,6 +6606,7 @@ function setupCloudRealtimeListener() {
 
       const localUpdatedAt = parseInt(localStorage.getItem('wtw_cloud_updated_at') || '0', 10);
       const todayStr = getOutfitDayKey();
+      const tomorrowStr = addDays(todayStr, 1);
       const hasNewerTrip = data.trip && Number(data.tripUpdatedAt || 0) > parseInt(localStorage.getItem('wtw_trip_updated_at') || '0', 10);
       const localFeedbackIds = new Set((typeof getFeedbackLog === 'function' ? getFeedbackLog() : []).map(e => e.id));
       const hasUnseenFeedback = Array.isArray(data.feedbackLog) && data.feedbackLog.some(e => e && e.id && !localFeedbackIds.has(e.id));
@@ -6613,6 +6616,16 @@ function setupCloudRealtimeListener() {
       const localExLock = safeJSON('wtw_exercise_outfit_today', null);
       const hasNewerExLock = data.dailyExerciseLock && data.dailyExerciseLock.date === todayStr &&
         (!localExLock || localExLock.date !== todayStr || Number(data.dailyExerciseLock.updatedAt || 0) > Number(localExLock.updatedAt || 0));
+      const localNextMain = safeJSON('wtw_next_day_lock', null);
+      const hasNewerNextMainLock = Boolean(data.nextDayMainLock && (
+        (data.nextDayMainLock.date === todayStr && (!localMainLock || localMainLock.date !== todayStr || (localMainLock.source === 'local' && data.nextDayMainLock.aiVerified))) ||
+        (data.nextDayMainLock.date === tomorrowStr && (!localNextMain || localNextMain.date !== tomorrowStr || Number(data.nextDayMainLock.updatedAt || 0) > Number(localNextMain.updatedAt || 0)))
+      ));
+      const localNextEx = safeJSON('wtw_next_day_exercise_lock', null);
+      const hasNewerNextExLock = Boolean(data.nextDayExerciseLock && (
+        (data.nextDayExerciseLock.date === todayStr && (!localExLock || localExLock.date !== todayStr)) ||
+        (data.nextDayExerciseLock.date === tomorrowStr && (!localNextEx || localNextEx.date !== tomorrowStr || Number(data.nextDayExerciseLock.updatedAt || 0) > Number(localNextEx.updatedAt || 0)))
+      ));
       const localWearIds = new Set((typeof getWearLog === 'function' ? getWearLog() : []).map(e => e && (e.id || `${e.date}|${e.context || 'main'}|${e.topId || ''}|${e.bottomId || ''}|${e.shoeId || ''}`)));
       const hasUnseenWearLog = Array.isArray(data.wearLog) && data.wearLog.some(e => {
         if (!e || !e.date) return false;
@@ -6622,7 +6635,7 @@ function setupCloudRealtimeListener() {
       const hasPastRemoteLockToArchive =
         (data.dailyMainLock && data.dailyMainLock.date && data.dailyMainLock.date < todayStr) ||
         (data.dailyExerciseLock && data.dailyExerciseLock.date && data.dailyExerciseLock.date < todayStr);
-      if (data.updatedAt && data.updatedAt <= localUpdatedAt && failedCloudSyncItems.length === 0 && !hasNewerTrip && !hasUnseenFeedback && !hasNewerMainLock && !hasNewerExLock && !hasUnseenWearLog && !hasPastRemoteLockToArchive) {
+      if (data.updatedAt && data.updatedAt <= localUpdatedAt && failedCloudSyncItems.length === 0 && !hasNewerTrip && !hasUnseenFeedback && !hasNewerMainLock && !hasNewerExLock && !hasNewerNextMainLock && !hasNewerNextExLock && !hasUnseenWearLog && !hasPastRemoteLockToArchive) {
         if (!doc.metadata?.fromCache) {
           setCloudStatusUI('connected', 'Cloud Synced');
         }
@@ -6756,6 +6769,36 @@ function applyRemoteCloudData(data, opts = {}) {
           activeExerciseOutfit = null;
         }
       }
+    }
+    const tomorrowStr = addDays(todayStr, 1);
+    if (data.nextDayMainLock && data.nextDayMainLock.date) {
+      if (data.nextDayMainLock.date === todayStr) {
+        const localNext = safeJSON('wtw_next_day_lock', null);
+        if (!localNext || localNext.date !== todayStr || Number(data.nextDayMainLock.updatedAt || 0) >= Number(localNext.updatedAt || 0)) {
+          try { localStorage.setItem('wtw_next_day_lock', JSON.stringify(data.nextDayMainLock)); } catch {}
+        }
+      } else if (data.nextDayMainLock.date === tomorrowStr) {
+        const localNext = safeJSON('wtw_next_day_lock', null);
+        if (!localNext || localNext.date !== tomorrowStr || Number(data.nextDayMainLock.updatedAt || 0) > Number(localNext.updatedAt || 0)) {
+          try { localStorage.setItem('wtw_next_day_lock', JSON.stringify(data.nextDayMainLock)); } catch {}
+        }
+      }
+    }
+    if (data.nextDayExerciseLock && data.nextDayExerciseLock.date) {
+      if (data.nextDayExerciseLock.date === todayStr) {
+        const localNextEx = safeJSON('wtw_next_day_exercise_lock', null);
+        if (!localNextEx || localNextEx.date !== todayStr || Number(data.nextDayExerciseLock.updatedAt || 0) >= Number(localNextEx.updatedAt || 0)) {
+          try { localStorage.setItem('wtw_next_day_exercise_lock', JSON.stringify(data.nextDayExerciseLock)); } catch {}
+        }
+      } else if (data.nextDayExerciseLock.date === tomorrowStr) {
+        const localNextEx = safeJSON('wtw_next_day_exercise_lock', null);
+        if (!localNextEx || localNextEx.date !== tomorrowStr || Number(data.nextDayExerciseLock.updatedAt || 0) > Number(localNextEx.updatedAt || 0)) {
+          try { localStorage.setItem('wtw_next_day_exercise_lock', JSON.stringify(data.nextDayExerciseLock)); } catch {}
+        }
+      }
+    }
+    if (typeof promotePreparedNextDayOutfitsIfReady === 'function') {
+      promotePreparedNextDayOutfitsIfReady(todayStr);
     }
 
     if (Array.isArray(data.feedbackLog)) {
@@ -7442,6 +7485,8 @@ async function syncWardrobeItemsToCloud(itemsToSync, { deletedIds = [], onProgre
           tripUpdatedAt: parseInt(localStorage.getItem('wtw_trip_updated_at') || '0', 10) || now,
           dailyMainLock: safeJSON('wtw_daily_main_lock', null),
           dailyExerciseLock: safeJSON('wtw_exercise_outfit_today', null),
+          nextDayMainLock: safeJSON('wtw_next_day_lock', null),
+          nextDayExerciseLock: safeJSON('wtw_next_day_exercise_lock', null),
           wearLog: typeof getWearLog === 'function' ? getWearLog().slice(0, 60) : [],
           wearLogClearedAt: parseInt(localStorage.getItem('wtw_wear_log_cleared_at') || '0', 10),
           feedbackLog: getFeedbackLog(),
@@ -7833,6 +7878,14 @@ async function fetchWeather() {
       humidity: 50,
       hourly: null
     };
+  } else if (weather) {
+    try {
+      localStorage.setItem('wtw_cached_weather', JSON.stringify({
+        savedAt: Date.now(),
+        city: (city || '').trim().toLowerCase(),
+        weather
+      }));
+    } catch {}
   }
   } finally {
     weatherFetchInFlight = false;
@@ -7843,6 +7896,9 @@ async function fetchWeather() {
   renderDayContext();
   renderOutfit();
   renderShopRecommendations();
+  if (typeof scheduleBackgroundNextDayVerification === 'function') {
+    scheduleBackgroundNextDayVerification({ delayMs: 700 });
+  }
 }
 
 function quickSetCity() {
@@ -8006,6 +8062,7 @@ function setSeasonOverride(mode) {
   if (typeof lastAIDailyAttemptKey !== 'undefined') lastAIDailyAttemptKey = null;
   try { localStorage.removeItem('wtw_daily_main_lock'); } catch {}
   try { localStorage.removeItem('wtw_ai_daily_outfit'); } catch {}
+  try { localStorage.removeItem('wtw_next_day_lock'); } catch {}
   updateHeaderSeasonPill();
   renderWeather();
   renderDayContext();
@@ -8024,6 +8081,7 @@ function setOccasionOverride(formalityId) {
   if (typeof lastAIDailyAttemptKey !== 'undefined') lastAIDailyAttemptKey = null;
   try { localStorage.removeItem('wtw_daily_main_lock'); } catch {}
   try { localStorage.removeItem('wtw_ai_daily_outfit'); } catch {}
+  try { localStorage.removeItem('wtw_next_day_lock'); } catch {}
   renderDayContext();
   renderOutfit();
   if (occasionOverride === 'auto') {
@@ -8203,14 +8261,14 @@ function getRisingSign(dobStr, birthTimeStr, birthPlaceStr) {
   return ZODIAC_SIGNS[risingIdx] || sunSign;
 }
 
-function getNatalChart() {
+function getNatalChart(dateOverride = null) {
   const { dob, birthTime, birthPlace } = getSettings();
   if (!dob) return null;
 
   const sun = getZodiacInfo(dob);
   const moon = getMoonSign(dob, birthTime);
   const rising = getRisingSign(dob, birthTime, birthPlace);
-  const today = new Date();
+  const today = dateOverride instanceof Date ? dateOverride : (dateOverride ? new Date(dateOverride) : new Date());
   const planet = PLANETARY_RULERS[today.getDay()];
 
   const planetMoods = {
@@ -8271,6 +8329,15 @@ const MOODS = [
   { id: 'creative', icon: '🎨', label: 'Creative & Playful', desc: 'Expressive harmonies & statement accents' }
 ];
 
+function getEffectiveMoodForDate(dateInput = new Date()) {
+  if (!astralActive || localStorage.getItem('wtw_mood_user_locked')) {
+    return currentMood || 'energetic';
+  }
+  const chart = getNatalChart(dateInput);
+  if (chart && chart.recommendedMood) return chart.recommendedMood;
+  return currentMood || 'energetic';
+}
+
 function setMood(moodId) {
   currentMood = moodId;
   moodPreselectedByPlanet = false;
@@ -8278,6 +8345,7 @@ function setMood(moodId) {
   localStorage.setItem('wtw_mood_user_locked', 'true');
   if (typeof activeAIDailyOutfit !== 'undefined') activeAIDailyOutfit = null;
   try { localStorage.removeItem('wtw_daily_main_lock'); } catch {}
+  try { localStorage.removeItem('wtw_next_day_lock'); } catch {}
   renderMoodSection();
   renderOutfit();
   const m = MOODS.find(x => x.id === moodId);
@@ -9171,6 +9239,8 @@ function clearRotationCooldown() {
     localStorage.removeItem('wtw_daily_main_lock');
     localStorage.removeItem('wtw_ai_daily_outfit');
     localStorage.removeItem('wtw_exercise_outfit_today');
+    localStorage.removeItem('wtw_next_day_lock');
+    localStorage.removeItem('wtw_next_day_exercise_lock');
   } catch {}
   (wardrobe || []).forEach(it => {
     if (it && it.lastWornDate) it.lastWornDate = null;
@@ -9306,6 +9376,9 @@ function logWearToday(topId, bottomId, outerId, midLayerId, beltId, shoeId, acce
   toast(`📌 Outfit logged! Counted ${countLabel} — these pieces will rest for ${ROTATION_COOLDOWN_DAYS} days.`);
   renderWardrobeIllusionSection();
   renderWardrobe();
+  if (typeof scheduleBackgroundNextDayVerification === 'function') {
+    scheduleBackgroundNextDayVerification({ delayMs: 800 });
+  }
 }
 
 /* ===== Multi-Layer (Strict 3-Tier Top Hierarchy) & Belt Coordination Helpers ===== */
@@ -9941,6 +10014,7 @@ function setLayerOverride(mode) {
   if (typeof lastAIDailyAttemptKey !== 'undefined') lastAIDailyAttemptKey = null;
   try { localStorage.removeItem('wtw_daily_main_lock'); } catch {}
   try { localStorage.removeItem('wtw_ai_daily_outfit'); } catch {}
+  try { localStorage.removeItem('wtw_next_day_lock'); } catch {}
   if (typeof getActiveTripContext === 'function') {
     const tripCtx = getActiveTripContext();
     if (tripCtx && tripCtx.planEntry && !tripCtx.planEntry.worn && typeof pickTripOutfit === 'function') {
@@ -11151,6 +11225,9 @@ function generateOutfit(options = {}) {
 
   const previewOnly = !!(options && options.previewOnly);
   const targetDate = (options && options.targetDate) ? options.targetDate : null;
+  if (!previewOnly && !activeSpecialOccasion && typeof promotePreparedNextDayOutfitsIfReady === 'function') {
+    promotePreparedNextDayOutfitsIfReady();
+  }
   const pools = buildDailyOutfitCandidatePools(options);
   const {
     byCategory, targetFormality, sInfo, blueprint, layerInfo, targetLayers, wc,
@@ -11476,6 +11553,8 @@ function saveDailyMainLock(outfit, forceNewTimestamp = false) {
     date: todayStr,
     updatedAt: Date.now(),
     source,
+    precomputed: Boolean(outfit.precomputed || outfit.aiDailyMeta?.precomputed),
+    preparedOnDate: outfit.preparedOnDate || outfit.aiDailyMeta?.preparedOnDate || null,
     weatherReady,
     seasonId,
     targetLayers: outfit.targetLayers || 2,
@@ -11506,13 +11585,15 @@ function hydrateDailyMainLock(lock, ctx) {
   }
   // Upgrade smoothly from legacy locks once
   if (!lock.engineVersion || lock.engineVersion < 3) return null;
+  const isPrecomputedLock = Boolean(lock.precomputed || lock.aiDailyMeta?.precomputed);
   // If a provisional local lock was created before live weather loaded, regenerate cleanly now that weather arrived
-  if (lock.source === 'local' && lock.weatherReady === false && weather && typeof weather.temp === 'number') {
+  if (!isPrecomputedLock && lock.source === 'local' && lock.weatherReady === false && weather && typeof weather.temp === 'number') {
     return null;
   }
   if (lock.seasonId && ctx.sInfo && lock.seasonId !== ctx.sInfo.id) return null;
   if (lock.formality !== ctx.targetFormality || lock.layerOverride !== layerOverride) return null;
-  if (lock.mood && lock.mood !== currentMood) return null;
+  const userLockedMood = Boolean(localStorage.getItem('wtw_mood_user_locked'));
+  if (lock.mood && lock.mood !== currentMood && (!isPrecomputedLock || userLockedMood)) return null;
   const findById = (id) => id ? wardrobe.find(w => w.id === id) || null : null;
   const top = findById(lock.topId);
   const bottom = findById(lock.bottomId);
@@ -11567,6 +11648,11 @@ function hydrateDailyMainLock(lock, ctx) {
     blueprint: ctx.blueprint,
     targetFormality: ctx.targetFormality
   });
+  const actualLockedLayers = 1 + (midLayer ? 1 : 0) + (outerwear ? 1 : 0);
+  const resolvedLayers = (layerOverride === 'auto' && (lock.source === 'ai' || isPrecomputedLock))
+    ? (lock.targetLayers || actualLockedLayers)
+    : ctx.layerInfo.count;
+  const lockTag = isPrecomputedLock ? '⚡ Pre-verified & locked for today' : '🔒 Locked for today';
   const outfit = {
     top,
     midLayer,
@@ -11576,8 +11662,8 @@ function hydrateDailyMainLock(lock, ctx) {
     outerwear,
     beltRec,
     accessory,
-    targetLayers: ctx.layerInfo.count,
-    layerReason: `${ctx.layerInfo.reason} · 🔒 Locked for today`,
+    targetLayers: resolvedLayers,
+    layerReason: `${ctx.layerInfo.reason} · ${lockTag}`,
     seasonMessage: evalResult.seasonMsg || `${ctx.sInfo.icon} ${ctx.sInfo.name} in ${locName} (${ctx.sInfo.hemisphereLabel}) — ${ctx.sInfo.styleSummary}`,
     seasonInfo: evalResult.seasonInfo || ctx.sInfo,
     astralAligned: evalResult.astralAligned,
@@ -11587,7 +11673,10 @@ function hydrateDailyMainLock(lock, ctx) {
     isNeverWorn: evalResult.isNeverWorn,
     rotationStatus: evalResult.rotationStatus || null,
     aiDailyMeta: lock.aiDailyMeta || null,
+    rankedShoes: Array.isArray(lock.aiDailyMeta?.shoeRanking) ? lock.aiDailyMeta.shoeRanking : undefined,
     lockSource: lock.source || (lock.aiDailyMeta ? 'ai' : 'local'),
+    precomputed: isPrecomputedLock,
+    preparedOnDate: lock.preparedOnDate || lock.aiDailyMeta?.preparedOnDate || null,
     blueprint: ctx.blueprint
   };
   outfit.decisionProfile = generateHowToWearGuide(outfit, ctx.blueprint);
@@ -11606,6 +11695,8 @@ async function syncDailyOutfitsToCloud() {
       userId: scope.userId,
       dailyMainLock: getDailyMainLock(),
       dailyExerciseLock: safeJSON('wtw_exercise_outfit_today', null),
+      nextDayMainLock: safeJSON('wtw_next_day_lock', null),
+      nextDayExerciseLock: safeJSON('wtw_next_day_exercise_lock', null),
       wearLog: typeof getWearLog === 'function' ? getWearLog().slice(0, 60) : [],
       wearLogClearedAt: parseInt(localStorage.getItem('wtw_wear_log_cleared_at') || '0', 10)
     }, { merge: true });
@@ -12305,12 +12396,13 @@ function renderOutfit() {
   const aiStatusPillHtml = aiDailyOutfitInFlight
     ? `<span id="ai-daily-status-pill" class="badge" style="background:rgba(56,189,248,0.16); color:#7dd3fc; border:1px solid rgba(56,189,248,0.4); font-size:0.74rem; padding:4px 10px;">⏳ 🤖 ${escapeHtml(aiDailyProgressStep || 'AI 3-Step Stylist deciding...')}</span>`
     : outfit.aiDailyMeta
-      ? `<span id="ai-daily-status-pill" class="badge" style="background:rgba(0,229,192,0.14); color:#00e5c0; border:1px solid rgba(0,229,192,0.35); font-size:0.74rem; padding:4px 10px;">🤖 3-Step AI Stylist${escapeHtml(aiModelLabel)}${aiThinkingTag}${aiVisualTag}</span>`
+      ? `<span id="ai-daily-status-pill" class="badge" style="background:rgba(0,229,192,0.14); color:#00e5c0; border:1px solid rgba(0,229,192,0.35); font-size:0.74rem; padding:4px 10px;" title="${outfit.precomputed || outfit.aiDailyMeta.precomputed ? 'Pre-verified by 3-Step AI ahead of time and locked immediately with zero delay' : '3-Step AI Stylist verified'}">${outfit.precomputed || outfit.aiDailyMeta.precomputed ? '⚡ Pre-Verified AI' : '🤖 3-Step AI Stylist'}${escapeHtml(aiModelLabel)}${aiThinkingTag}${aiVisualTag}</span>`
       : (!hasGeminiKeyConfigured
-        ? `<button type="button" id="ai-daily-status-pill" class="badge" onclick="switchTab('settings')" style="background:rgba(251,191,36,0.14); color:#fcd34d; border:1px solid rgba(251,191,36,0.35); font-size:0.74rem; padding:4px 10px; cursor:pointer;" title="Add your Gemini API key in Settings to enable 3-Step AI decisions">⚙️ Local 3-Step Fallback · Add Gemini Key</button>`
+        ? `<button type="button" id="ai-daily-status-pill" class="badge" onclick="switchTab('settings')" style="background:rgba(251,191,36,0.14); color:#fcd34d; border:1px solid rgba(251,191,36,0.35); font-size:0.74rem; padding:4px 10px; cursor:pointer;" title="Add your Gemini API key in Settings so tomorrow's outfit is AI-verified in the background">🔒 Fixed Today · Add Gemini Key</button>`
         : (aiDailyLastError
           ? `<button type="button" id="ai-daily-status-pill" class="badge" onclick="askAIToRedecideOutfitNow()" style="background:rgba(248,113,113,0.15); color:#fca5a5; border:1px solid rgba(248,113,113,0.4); font-size:0.74rem; padding:4px 10px; cursor:pointer;" title="${escapeHtml(aiDailyLastError)}">⚠️ AI Error · Tap to Retry</button>`
-          : `<button type="button" id="ai-daily-status-pill" class="badge" onclick="askAIToRedecideOutfitNow()" style="background:rgba(148,163,184,0.14); color:#cbd5e1; border:1px solid rgba(148,163,184,0.3); font-size:0.74rem; padding:4px 10px; cursor:pointer;">⚙️ Local Preview · Tap for AI</button>`));
+          : `<span id="ai-daily-status-pill" class="badge" style="background:rgba(148,163,184,0.14); color:#cbd5e1; border:1px solid rgba(148,163,184,0.3); font-size:0.74rem; padding:4px 10px;" title="Today's outfit is locked and presented immediately without delay while tomorrow's outfit is AI-verified in the background">🔒 Fixed for Today · Instant</span>`));
+  const nextDayPillHtml = typeof buildNextDayAIStatusPillHtml === 'function' ? buildNextDayAIStatusPillHtml() : '';
 
   const aiSteps = outfit.aiDailyMeta?.steps || null;
   const shoeRankingList = (Array.isArray(outfit.aiDailyMeta?.shoeRanking) && outfit.aiDailyMeta.shoeRanking.length > 0)
@@ -12374,6 +12466,7 @@ function renderOutfit() {
         <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
           <span class="badge" style="background:rgba(15,23,42,0.65); color:${imageMatchColor}; border:1px solid rgba(255,255,255,0.16); font-size:0.74rem; padding:4px 10px; font-weight:700;" title="How close this outfit is to your Personal Image & Style">🎯 Image Match: ${imageMatchPct}%</span>
           ${aiStatusPillHtml}
+          ${nextDayPillHtml}
           ${freshnessHtml}
         </div>
       </div>
@@ -12405,10 +12498,11 @@ function renderOutfit() {
     </div>`;
 
   renderWardrobeIllusionSection();
-  if (typeof renderTomorrowPreview === 'function') renderTomorrowPreview();
   if (typeof renderExerciseOutfit === 'function') renderExerciseOutfit();
-  maybeTriggerAIDailyOutfit();
-  if (typeof maybeRunAIOutfitSanityCheck === 'function') maybeRunAIOutfitSanityCheck(outfit);
+  if (typeof renderTomorrowPreview === 'function') renderTomorrowPreview();
+  if (typeof scheduleBackgroundNextDayVerification === 'function') {
+    scheduleBackgroundNextDayVerification({ delayMs: 1200 });
+  }
 }
 
 function getTomorrowWeatherContext() {
@@ -12427,7 +12521,9 @@ function getTomorrowWeatherContext() {
 function renderTomorrowPreview() {
   const section = document.getElementById('tomorrow-preview-section');
   if (!section) return;
-  if (typeof isEveningPreviewWindow !== 'function' || !isEveningPreviewWindow() || wardrobe.length === 0) {
+  const eveningOpen = typeof isEveningPreviewWindow === 'function' && isEveningPreviewWindow();
+  const manualPeek = typeof showManualTomorrowPreview !== 'undefined' && showManualTomorrowPreview;
+  if ((!eveningOpen && !manualPeek) || wardrobe.length === 0) {
     section.innerHTML = '';
     return;
   }
@@ -12438,69 +12534,40 @@ function renderTomorrowPreview() {
   const tomorrowLabel = fmtDate(tomorrowKey);
   const tomorrowWx = getTomorrowWeatherContext();
   const tomorrowFormality = getDayFormality(tomorrowDate);
+  const extraWornEntries = typeof collectTodayActiveWornEntries === 'function'
+    ? collectTodayActiveWornEntries(todayKey)
+    : [];
 
-  // Treat today's currently shown/locked outfits as worn today so Tomorrow Preview NEVER repeats today's pieces
-  const extraWornEntries = [];
-  const curMain = (typeof window !== 'undefined' && window.lastRenderedMainOutfit) || null;
-  if (curMain && curMain.top && curMain.bottom) {
-    extraWornEntries.push({
-      date: todayKey,
-      context: 'main',
-      source: 'auto-shown',
-      topId: curMain.top.id,
-      midLayerId: curMain.midLayer?.id || null,
-      outerId: curMain.outerwear?.id || null,
-      bottomId: curMain.bottom.id,
-      shoeId: curMain.shoe?.id || null,
-      beltId: curMain.beltRec?.beltItem?.id || null,
-      accessoryId: curMain.accessory?.id || null
-    });
-  } else {
-    const savedMain = getDailyMainLock();
-    if (savedMain && savedMain.date === todayKey) {
-      extraWornEntries.push({ ...savedMain, context: 'main', source: 'auto-shown', outerId: savedMain.outerwearId || null });
-    }
-  }
-  const curEx = (typeof activeExerciseOutfit === 'object' && activeExerciseOutfit && activeExerciseOutfit.date === todayKey)
-    ? activeExerciseOutfit
+  const preparedBundle = typeof getHydratedPreparedTomorrowBundle === 'function'
+    ? getHydratedPreparedTomorrowBundle(todayKey)
     : null;
-  if (curEx && curEx.top && curEx.bottom) {
-    extraWornEntries.push({
-      date: todayKey,
-      context: 'exercise',
-      source: 'auto-shown',
-      topId: curEx.top.id,
-      secondLayerId: curEx.secondLayer?.id || null,
-      bottomId: curEx.bottom.id,
-      shoeId: curEx.shoe?.id || null
-    });
-  } else {
-    const savedEx = safeJSON('wtw_exercise_outfit_today', null);
-    if (savedEx && savedEx.date === todayKey) {
-      extraWornEntries.push({ ...savedEx, context: 'exercise', source: 'auto-shown' });
-    }
-  }
-
-  const previewOutfit = withWeather(tomorrowWx, () => generateOutfit({
-    previewOnly: true,
-    targetDate: tomorrowDate,
-    referenceDateKey: tomorrowKey,
-    extraWornEntries
-  }));
+  const previewOutfit = (preparedBundle && preparedBundle.mainOutfit)
+    ? preparedBundle.mainOutfit
+    : withWeather(tomorrowWx, () => generateOutfit({
+        previewOnly: true,
+        targetDate: tomorrowDate,
+        referenceDateKey: tomorrowKey,
+        extraWornEntries
+      }));
 
   if (!previewOutfit || !previewOutfit.top) {
     section.innerHTML = '';
     return;
   }
 
-  const previewEx = (typeof generateExerciseOutfit === 'function')
-    ? withWeather(tomorrowWx, () => generateExerciseOutfit([], {
-        previewOnly: true,
-        referenceDateKey: tomorrowKey,
-        extraWornEntries
-      }))
-    : null;
+  const previewEx = (preparedBundle && preparedBundle.exerciseOutfit)
+    ? preparedBundle.exerciseOutfit
+    : ((typeof generateExerciseOutfit === 'function')
+        ? withWeather(tomorrowWx, () => generateExerciseOutfit([], {
+            previewOnly: true,
+            targetDate: tomorrowDate,
+            referenceDateKey: tomorrowKey,
+            extraWornEntries
+          }))
+        : null);
 
+  const isAIVerified = Boolean(preparedBundle && preparedBundle.aiVerified);
+  const isInFlight = typeof nextDayAIInFlight !== 'undefined' && nextDayAIInFlight;
   const wxIcon = tomorrowWx.main === 'rain' ? '🌧️' : tomorrowWx.main === 'snow' ? '❄️' : tomorrowWx.main === 'clouds' ? '⛅' : '☀️';
   const tempRange = (typeof tomorrowWx.tmin === 'number' && typeof tomorrowWx.tmax === 'number')
     ? `${tomorrowWx.tmin}°–${tomorrowWx.tmax}°C`
@@ -12521,9 +12588,9 @@ function renderTomorrowPreview() {
   ].filter(p => p && p.item);
 
   const cardsHtml = pieces.map(({ role, item }) => {
-    const imgSrc = item.image || item.photo || '';
+    const imgSrc = (typeof getItemDisplayPhotoSrc === 'function' ? getItemDisplayPhotoSrc(item) : '') || item.image || item.photo || '';
     const thumb = imgSrc
-      ? `<img class="tomorrow-preview-thumb" src="${escapeHtml(imgSrc)}" alt="${escapeHtml(item.name)}">`
+      ? `<img class="tomorrow-preview-thumb" src="${escapeHtml(imgSrc)}" alt="${escapeHtml(item.name)}" style="${typeof getItemImageTransformStyle === 'function' ? getItemImageTransformStyle(item) : ''}">`
       : `<div class="tomorrow-preview-thumb">${getCategoryEmoji ? getCategoryEmoji(item.category) : '👕'}</div>`;
     return `
       <div class="tomorrow-preview-item">
@@ -12537,29 +12604,42 @@ function renderTomorrowPreview() {
   }).join('');
 
   const exNote = previewEx && previewEx.top && previewEx.bottom
-    ? `<span>🏃 <strong>Morning Exercise:</strong> ${escapeHtml(previewEx.top.name)}${previewEx.secondLayer ? ` + ${escapeHtml(previewEx.secondLayer.name)}` : ''} + ${escapeHtml(previewEx.bottom.name)}</span>`
+    ? `<span>🏃 <strong>Morning Exercise:</strong> ${escapeHtml(previewEx.top.name)}${previewEx.secondLayer ? ` + ${escapeHtml(previewEx.secondLayer.name)}` : ''} + ${escapeHtml(previewEx.bottom.name)} + ${escapeHtml(previewEx.shoe?.name || '')}</span>`
     : '';
+  const aiVerdictNote = previewOutfit.aiDailyMeta?.reason
+    ? `<div style="margin-top:8px; padding:7px 10px; border-radius:8px; background:rgba(0,229,192,0.08); border:1px solid rgba(0,229,192,0.25); font-size:0.75rem; color:var(--text-secondary);">🤖 <strong style="color:var(--text);">AI Verified for Tomorrow:</strong> ${escapeHtml(previewOutfit.aiDailyMeta.reason)}</div>`
+    : '';
+  const badgeLabel = isInFlight
+    ? `⏳ Verifying Tomorrow (${tomorrowLabel}) in Background...`
+    : (isAIVerified ? `🤖 AI-Verified for Tomorrow · ${tomorrowLabel}` : `🌙 Tomorrow Preview · ${tomorrowLabel}`);
 
   section.innerHTML = `
     <div class="tomorrow-preview-card">
       <div class="tomorrow-preview-header">
         <div>
-          <span class="tomorrow-preview-badge">🌙 Evening Preview · ${escapeHtml(tomorrowLabel)}</span>
-          <h3 style="margin:8px 0 2px; font-size:1.05rem; color:var(--text);">Plan Ahead for Tomorrow (${escapeHtml(formalityLabel)})</h3>
-          <div style="font-size:0.77rem; color:var(--text-secondary);">Shown from 8:00 PM local time so you can prep clothes the night before.</div>
+          <span class="tomorrow-preview-badge">${escapeHtml(badgeLabel)}</span>
+          <h3 style="margin:8px 0 2px; font-size:1.05rem; color:var(--text);">Prepared Ahead for Tomorrow (${escapeHtml(formalityLabel)})</h3>
+          <div style="font-size:0.77rem; color:var(--text-secondary);">${isAIVerified ? 'Pre-verified by 3-Step AI + Sanity Critic — will appear instantaneously when tomorrow starts.' : (eveningOpen ? 'Shown from 8:00 PM local time so you can prep clothes the night before.' : 'Background preview of tomorrow’s queued outfit.')}</div>
         </div>
-        <div class="tomorrow-preview-weather">
-          <span>${wxIcon}</span>
-          <strong>${escapeHtml(tempRange)}</strong>
-          <span>${escapeHtml(tomorrowWx.desc || tomorrowWx.main || '')}${escapeHtml(rainNote)}</span>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+          <div class="tomorrow-preview-weather">
+            <span>${wxIcon}</span>
+            <strong>${escapeHtml(tempRange)}</strong>
+            <span>${escapeHtml(tomorrowWx.desc || tomorrowWx.main || '')}${escapeHtml(rainNote)}</span>
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-secondary btn-sm" style="padding:3px 9px; font-size:0.71rem;" onclick="forceRebuildNextDayAIOutfit(true)" ${isInFlight ? 'disabled' : ''}>${isInFlight ? '⏳ Verifying...' : '🔄 Re-Verify Tomorrow'}</button>
+            ${!eveningOpen && manualPeek ? `<button type="button" class="btn btn-secondary btn-sm" style="padding:3px 9px; font-size:0.71rem;" onclick="toggleManualTomorrowPreview(false)">✕ Hide</button>` : ''}
+          </div>
         </div>
       </div>
       <div class="tomorrow-preview-grid">
         ${cardsHtml}
       </div>
+      ${aiVerdictNote}
       <div class="tomorrow-preview-footer">
-        ${exNote || '<span>✨ Ready to lay out tonight</span>'}
-        <span>Locks in as Today’s Look at 4:00 AM</span>
+        ${exNote || '<span>✨ Ready ahead of time with zero morning delay</span>'}
+        <span>⚡ Locks in instantly at 4:00 AM</span>
       </div>
     </div>`;
 }
@@ -12919,6 +12999,8 @@ function saveExerciseOutfitState(ex) {
       bottomId: ex.bottom.id,
       shoeId: ex.shoe.id,
       morningTemp: ex.morningTemp ?? 18,
+      aiVerified: !!ex.aiVerified,
+      precomputed: !!ex.precomputed,
       logged: !!ex.logged
     }));
   } catch {}
@@ -13073,6 +13155,9 @@ function renderExerciseOutfit() {
     }
   }
   if (!lockedFromTrip && (!activeExerciseOutfit || activeExerciseOutfit.date !== todayStr)) {
+    if (typeof promotePreparedNextDayOutfitsIfReady === 'function') {
+      promotePreparedNextDayOutfitsIfReady(todayStr);
+    }
     try {
       const saved = safeJSON('wtw_exercise_outfit_today', null);
       if (saved && saved.date && saved.date < todayStr && typeof archiveLockEntryToWearLog === 'function') {
@@ -13083,7 +13168,17 @@ function renderExerciseOutfit() {
         const bottom = wardrobe.find(w => w.id === saved.bottomId);
         const shoe = wardrobe.find(w => w.id === saved.shoeId);
         if (top && bottom && shoe) {
-          activeExerciseOutfit = { date: todayStr, top, secondLayer, bottom, shoe, morningTemp: saved.morningTemp ?? 18, logged: !!saved.logged };
+          activeExerciseOutfit = {
+            date: todayStr,
+            top,
+            secondLayer,
+            bottom,
+            shoe,
+            morningTemp: saved.morningTemp ?? 18,
+            aiVerified: !!saved.aiVerified,
+            precomputed: !!saved.precomputed,
+            logged: !!saved.logged
+          };
         }
       }
     } catch {}
@@ -13175,7 +13270,6 @@ function renderExerciseOutfit() {
       </div>
       <div class="outfit-items">${itemsHtml}</div>
     </div>`;
-  if (typeof maybeRunAIExerciseSanityCheck === 'function') maybeRunAIExerciseSanityCheck(ex);
 }
 
 function toggleExerciseSecondLayer() {
@@ -13245,6 +13339,9 @@ function shuffleExerciseOutfit() {
   activeExerciseOutfit = { date: todayStr, ...picked, logged: false };
   saveExerciseOutfitState(activeExerciseOutfit);
   renderExerciseOutfit();
+  if (typeof scheduleBackgroundNextDayVerification === 'function') {
+    scheduleBackgroundNextDayVerification({ delayMs: 1200 });
+  }
 }
 
 function logExerciseWearToday(topId, secondLayerId, bottomId, shoeId) {
@@ -13282,6 +13379,9 @@ function logExerciseWearToday(topId, secondLayerId, bottomId, shoeId) {
   }
   renderWardrobe();
   renderWardrobeIllusionSection();
+  if (typeof scheduleBackgroundNextDayVerification === 'function') {
+    scheduleBackgroundNextDayVerification({ delayMs: 800 });
+  }
   toast(`🏃 Workout logged! Counted ${updated.length} items worn — they'll rest for ${ROTATION_COOLDOWN_DAYS} days.`);
 }
 
@@ -13387,7 +13487,7 @@ async function loadSafePhotoPart(item, maxDim = 512, timeoutMs = 6000) {
   }
 }
 
-function hydrateAIDailyOutfitFromPicked(picked, currentTemp) {
+function hydrateAIDailyOutfitFromPicked(picked, currentTemp, hydrateOpts = {}) {
   if (!picked || !wardrobe || wardrobe.length < 3) return null;
   const findById = (id) => id ? wardrobe.find(w => w.id === id) || null : null;
   const top = findById(picked.topId);
@@ -13395,18 +13495,20 @@ function hydrateAIDailyOutfitFromPicked(picked, currentTemp) {
   const shoe = findById(picked.shoeId);
   if (!top || !bottom || !shoe) return null;
 
+  const targetDate = hydrateOpts.targetDate || null;
+  const wxOverride = hydrateOpts.wxOverride || null;
   const bp = buildPersonalStyleBlueprint();
-  const sInfo = getLocationSeasonInfo();
-  const layerInfo = getTargetTopLayers();
+  const sInfo = getLocationSeasonInfo(targetDate || undefined, wxOverride || undefined);
+  const effectiveLayerOverride = hydrateOpts.targetLayerOverride !== undefined ? hydrateOpts.targetLayerOverride : layerOverride;
   let midLayer = findById(picked.midLayerId);
   let outerwear = findById(picked.outerwearId);
-  const targetF = (typeof getDayFormality === 'function' ? getDayFormality() : 'casual').toLowerCase();
+  const targetF = String(hydrateOpts.targetFormality || (typeof getDayFormality === 'function' ? getDayFormality(targetDate || new Date()) : 'casual')).toLowerCase();
 
   // Strictly enforce manual layer override so 1-Layer mode never shows extra layers
-  if (layerOverride === '1') {
+  if (effectiveLayerOverride === '1') {
     midLayer = null;
     outerwear = null;
-  } else if (layerOverride === '2' && midLayer && outerwear) {
+  } else if (effectiveLayerOverride === '2' && midLayer && outerwear) {
     outerwear = null;
   }
 
@@ -13415,8 +13517,8 @@ function hydrateAIDailyOutfitFromPicked(picked, currentTemp) {
       return null;
     }
   }
-  if (!areShortsAllowedToday(targetF) && isShortsBottom(bottom)) return null;
-  if (!areSandalsAllowedToday(targetF) && isOpenToeOrSandalShoe(shoe)) return null;
+  if (!areShortsAllowedToday(targetF, targetDate) && isShortsBottom(bottom)) return null;
+  if (!areSandalsAllowedToday(targetF, targetDate) && isOpenToeOrSandalShoe(shoe)) return null;
   const hasBaseTop = wardrobe.some(w => w.category === 'tops' && isBaseTop(w) && !isItemDisliked(w));
   if (hasBaseTop && getTopLayerTier(top) !== 'base') return null;
   if (typeof isLayerPairCompatible === 'function' && !isLayerPairCompatible(top, midLayer, outerwear)) {
@@ -13438,13 +13540,17 @@ function hydrateAIDailyOutfitFromPicked(picked, currentTemp) {
     : baseBeltRec;
   const accessory = findById(picked.accessoryId);
   const actualLayers = 1 + (midLayer ? 1 : 0) + (outerwear ? 1 : 0);
-  const evalResult = evaluateOutfitScore(top, bottom, shoe, outerwear, accessory, {
+  const runScore = () => evaluateOutfitScore(top, bottom, shoe, outerwear, accessory, {
     midLayer,
     beltItem: beltRec.beltItem,
     beltRec,
     blueprint: bp,
-    targetFormality: targetF
+    targetFormality: targetF,
+    cooldownInfo: hydrateOpts.cooldownInfo || null,
+    referenceDateKey: hydrateOpts.referenceDateKey || null,
+    extraWornEntries: hydrateOpts.extraWornEntries || null
   });
+  const evalResult = wxOverride ? withWeather(wxOverride, runScore) : runScore();
 
   // Normalize ranked shoes list (keep only valid wardrobe IDs)
   const rawRanking = Array.isArray(picked.shoeRanking) ? picked.shoeRanking : [];
@@ -13472,7 +13578,8 @@ function hydrateAIDailyOutfitFromPicked(picked, currentTemp) {
   }
   validRanking.forEach((r, idx) => { r.rank = idx + 1; });
 
-  const locName = (weather && weather.city) ? weather.city.split(',')[0] : (getSettings().city || 'your location');
+  const activeWxForLabel = hydrateOpts.wxOverride || weather;
+  const locName = (activeWxForLabel && activeWxForLabel.city) ? activeWxForLabel.city.split(',')[0] : (getSettings().city || 'your location');
   const outfit = {
     top,
     midLayer,
@@ -13494,8 +13601,12 @@ function hydrateAIDailyOutfitFromPicked(picked, currentTemp) {
     personalEval: evalResult.personalEval,
     isNeverWorn: evalResult.isNeverWorn,
     rotationStatus: evalResult.rotationStatus || null,
+    precomputed: Boolean(picked.precomputed),
+    preparedOnDate: picked.preparedOnDate || null,
     aiDailyMeta: {
       mode: picked.mode || '3-step',
+      precomputed: Boolean(picked.precomputed),
+      preparedOnDate: picked.preparedOnDate || null,
       modelUsed: picked.modelUsed || '',
       usedPhotos: !!picked.usedPhotos,
       usedComparisonBoard: !!picked.usedComparisonBoard,
@@ -13579,7 +13690,7 @@ function maybeTriggerAIDailyOutfit(forceRefresh = false, avoidIds = []) {
    Step 3: Head-to-Head Multimodal Comparison Board -> Evaluate ALL Eligible Shoes First, Rank #1..#N, Then Match Best Belt
    ============================================================================================= */
 
-async function runAIStage1Top({ geminiKey, pools, personalCtx, currentTemp, cond, wearContext, avoidIds }) {
+async function runAIStage1Top({ geminiKey, pools, personalCtx, currentTemp, cond, wearContext, avoidIds, targetMood }) {
   const { targetLayers, targetFormality, sInfo, baseTops, midLayers, outerShells, cooldownInfo } = pools;
   const isWorkContext = formalityScore(targetFormality) >= 2;
   const variedBaseTops = orderCandidatesForAIVariety(baseTops, cooldownInfo);
@@ -13594,7 +13705,7 @@ async function runAIStage1Top({ geminiKey, pools, personalCtx, currentTemp, cond
   const promptLines = [
     `You are Step 1 of a 3-step master fashion stylist consultation for WhaToWear.`,
     `STEP 1 GOAL: Review the user's Personal Profile (complexion/season, undertone, contrast, face & body shape, desired style identity) and today's context, then pick the single BEST Top (plus compatible Layer 2/3 ONLY if requested) that the user has NOT worn lately.`,
-    `Context: Date=${pools.refDateKey}, ${currentTemp}°C, ${cond}, Season: ${sInfo.name}, Target Formality: ${targetFormality}, Mood: ${currentMood || 'balanced'}.`,
+    `Context: Date=${pools.refDateKey}, ${currentTemp}°C, ${cond}, Season: ${sInfo.name}, Target Formality: ${targetFormality}, Mood: ${targetMood || currentMood || 'balanced'}.`,
     layerDirective,
     isWorkContext
       ? `Workday Rule: Prefer refined smart-casual collared tops (Oxford, Dress, Button-Up, Linen Shirt, Polo) or clean elevated solid tops (zero front wording, logos, or loud graphics).`
@@ -13658,7 +13769,7 @@ async function runAIStage1Top({ geminiKey, pools, personalCtx, currentTemp, cond
   };
 }
 
-async function runAIStage2Bottom({ geminiKey, pools, personalCtx, currentTemp, cond, wearContext, lockedTopStack, avoidIds }) {
+async function runAIStage2Bottom({ geminiKey, pools, personalCtx, currentTemp, cond, wearContext, lockedTopStack, avoidIds, targetMood }) {
   const { targetFormality, sInfo, bottoms, cooldownInfo } = pools;
   const variedBottoms = orderCandidatesForAIVariety(bottoms, cooldownInfo);
   const visualBottoms = variedBottoms.slice(0, 8);
@@ -13701,7 +13812,7 @@ async function runAIStage2Bottom({ geminiKey, pools, personalCtx, currentTemp, c
   const promptLines = [
     `You are Step 2 of a 3-step master fashion stylist consultation for WhaToWear.`,
     `STEP 2 GOAL: The Top (and any upper layers) is ALREADY LOCKED below (and shown on the LEFT of the attached visual board when available). Compare ALL eligible rested pants/bottoms and choose the single BEST matching pair that creates the sharpest, most harmonious outfit.`,
-    `Context: Date=${pools.refDateKey}, ${currentTemp}°C, ${cond}, Season: ${sInfo.name}, Target Formality: ${targetFormality}, Mood: ${currentMood || 'balanced'}.`,
+    `Context: Date=${pools.refDateKey}, ${currentTemp}°C, ${cond}, Season: ${sInfo.name}, Target Formality: ${targetFormality}, Mood: ${targetMood || currentMood || 'balanced'}.`,
     `LOCKED TOP STACK: ${JSON.stringify(lockedSummary)}`,
     `Matching & Rotation Rules:`,
     `1. Create crisp, intentional tonal contrast between top and pants (avoid washed-out near-identical tones unless intentionally monochrome dark).`,
@@ -13752,7 +13863,7 @@ async function runAIStage2Bottom({ geminiKey, pools, personalCtx, currentTemp, c
   };
 }
 
-async function runAIStage3ShoesAndBelt({ geminiKey, pools, personalCtx, currentTemp, cond, wearContext, lockedTopStack, lockedBottom, avoidIds }) {
+async function runAIStage3ShoesAndBelt({ geminiKey, pools, personalCtx, currentTemp, cond, wearContext, lockedTopStack, lockedBottom, avoidIds, targetMood }) {
   const { targetFormality, sInfo, shoes, allShoesAllowed, belts, allEligibleBelts, nonBeltAccessories, cooldownInfo, refDateKey } = pools;
   const avoidSet = new Set(Array.isArray(avoidIds) ? avoidIds : []);
 
@@ -13830,7 +13941,7 @@ async function runAIStage3ShoesAndBelt({ geminiKey, pools, personalCtx, currentT
   const promptLines = [
     `You are Step 3 (Expert Footwear & Belt Stylist) in a 3-step master stylist consultation for WhaToWear.`,
     `STEP 3 GOAL: The Top and Pants are ALREADY LOCKED (shown on the LEFT of the attached comparison board). Visually compare EVERY candidate shoe [S1..SN] head-to-head against the exact Top + Pants — exactly as if the user stood in front of a mirror asking which pair of shoes looks sharpest with this outfit — then choose the #1 BEST SHOES and BEST MATCHING BELT.`,
-    `Context: Date=${refDateKey}, ${currentTemp}°C, ${cond}, Season: ${sInfo.name}, Target Formality: ${targetFormality}, Mood: ${currentMood || 'balanced'}.`,
+    `Context: Date=${refDateKey}, ${currentTemp}°C, ${cond}, Season: ${sInfo.name}, Target Formality: ${targetFormality}, Mood: ${targetMood || currentMood || 'balanced'}.`,
     `LOCKED OUTFIT (Top + Pants): ${JSON.stringify(lockedSummary)}`,
     `MASTER STYLING CRITERIA (APPLY RIGOROUSLY — THINK LIKE A REAL HUMAN STYLIST):`,
     `1. PANT-TO-SHOE VISUAL SEPARATION (CRITICAL): Inspect how each shoe separates from the locked pants. AVOID / rank LOW shoes whose color is too close to the pants (for example, tan, camel, or light-to-mid brown sneakers with tan/khaki chinos make legs and feet blend together instead of creating clean visual separation — SKIP those!).`,
@@ -14230,6 +14341,8 @@ async function aiTagWardrobeSmartAttributes() {
     saveData();
     try { localStorage.removeItem('wtw_daily_main_lock'); } catch {}
     try { localStorage.removeItem('wtw_exercise_outfit_today'); } catch {}
+    try { localStorage.removeItem('wtw_next_day_lock'); } catch {}
+    try { localStorage.removeItem('wtw_next_day_exercise_lock'); } catch {}
     activeAIDailyOutfit = null;
     aiSanityCheckSig = '';
     aiExSanityCheckSig = '';
@@ -14478,11 +14591,929 @@ function shuffleOutfit() {
     void icon.offsetWidth; // force reflow
     icon.classList.add('shuffle-spin');
   }
-  // Generate an instant fresh local outfit explicitly avoiding the previous outfit pieces
+  // Generate an instant fresh local outfit explicitly avoiding the previous outfit pieces (fixed immediately without AI delay)
   const freshLocal = generateOutfit({ avoidIds: prevAvoid });
   if (freshLocal && typeof window !== 'undefined') window.lastRenderedMainOutfit = freshLocal;
-  maybeTriggerAIDailyOutfit(true, prevAvoid);
   renderOutfit();
+  if (typeof scheduleBackgroundNextDayVerification === 'function') {
+    scheduleBackgroundNextDayVerification({ delayMs: 1400 });
+  }
+}
+
+/* ============================================================================================
+   BACKGROUND NEXT-DAY AI STYLIST & SANITY VERIFICATION ENGINE
+   Today's outfit stays fixed & presented with 0ms delay while Tomorrow's outfit is AI-verified
+   in the background (3-Step Visual Stylist + Top Photo/Sanity Critic + Exercise Sanity Critic).
+   ============================================================================================ */
+let nextDayAIInFlight = false;
+let nextDayAIProgressStep = '';
+let nextDayAILastError = '';
+let nextDayAIRunToken = 0;
+let nextDayAIDebounceTimer = null;
+let lastNextDayAttemptSig = null;
+let showManualTomorrowPreview = false;
+
+function getNextDayMainLock() {
+  return safeJSON('wtw_next_day_lock', null);
+}
+
+function getNextDayExerciseLock() {
+  return safeJSON('wtw_next_day_exercise_lock', null);
+}
+
+function setNextDayAIProgressStatus(msg) {
+  nextDayAIProgressStep = msg || '';
+  const pill = document.getElementById('next-day-ai-status-pill');
+  if (pill && nextDayAIInFlight && msg) {
+    pill.textContent = `⏳ 🌙 ${msg}`;
+  }
+  if (typeof isEveningPreviewWindow === 'function' && (isEveningPreviewWindow() || showManualTomorrowPreview)) {
+    renderTomorrowPreview();
+  }
+}
+
+function toggleManualTomorrowPreview(forceState) {
+  showManualTomorrowPreview = typeof forceState === 'boolean' ? forceState : !showManualTomorrowPreview;
+  renderTomorrowPreview();
+  const pill = document.getElementById('next-day-ai-status-pill');
+  if (pill && !nextDayAIInFlight) {
+    const outer = document.createElement('div');
+    outer.innerHTML = buildNextDayAIStatusPillHtml();
+    if (outer.firstElementChild) pill.replaceWith(outer.firstElementChild);
+  }
+  if (showManualTomorrowPreview) {
+    const sec = document.getElementById('tomorrow-preview-section');
+    if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function collectTodayActiveWornEntries(todayKey = getOutfitDayKey()) {
+  const entries = [];
+  const curMain = (typeof window !== 'undefined' && window.lastRenderedMainOutfit) || null;
+  if (curMain && curMain.top && curMain.bottom) {
+    entries.push({
+      date: todayKey,
+      context: 'main',
+      source: 'auto-shown',
+      topId: curMain.top.id,
+      midLayerId: curMain.midLayer?.id || null,
+      outerId: curMain.outerwear?.id || null,
+      bottomId: curMain.bottom.id,
+      shoeId: curMain.shoe?.id || null,
+      beltId: curMain.beltRec?.beltItem?.id || null,
+      accessoryId: curMain.accessory?.id || null
+    });
+  } else {
+    const savedMain = getDailyMainLock();
+    if (savedMain && savedMain.date === todayKey) {
+      entries.push({ ...savedMain, context: 'main', source: 'auto-shown', outerId: savedMain.outerwearId || null });
+    }
+  }
+
+  const curEx = (typeof activeExerciseOutfit === 'object' && activeExerciseOutfit && activeExerciseOutfit.date === todayKey)
+    ? activeExerciseOutfit
+    : null;
+  if (curEx && curEx.top && curEx.bottom) {
+    entries.push({
+      date: todayKey,
+      context: 'exercise',
+      source: 'auto-shown',
+      topId: curEx.top.id,
+      secondLayerId: curEx.secondLayer?.id || null,
+      bottomId: curEx.bottom.id,
+      shoeId: curEx.shoe?.id || null
+    });
+  } else {
+    const savedEx = safeJSON('wtw_exercise_outfit_today', null);
+    if (savedEx && savedEx.date === todayKey) {
+      entries.push({ ...savedEx, context: 'exercise', source: 'auto-shown' });
+    }
+  }
+  return entries;
+}
+
+function getTodayCorePieceIdSet(todayKey = getOutfitDayKey()) {
+  const ids = new Set();
+  collectTodayActiveWornEntries(todayKey).forEach(e => {
+    [e.topId, e.midLayerId, e.secondLayerId, e.outerId, e.outerwearId, e.bottomId, e.shoeId]
+      .filter(Boolean)
+      .forEach(id => ids.add(id));
+  });
+  (getWearLog() || []).forEach(e => {
+    if (e && e.date === todayKey) {
+      [e.topId, e.midLayerId, e.secondLayerId, e.outerId, e.bottomId, e.shoeId]
+        .filter(Boolean)
+        .forEach(id => ids.add(id));
+    }
+  });
+  return ids;
+}
+
+function hasDistinctAlternativeInWardrobe(item, predicate) {
+  if (!item) return false;
+  return (wardrobe || []).some(w => w && w.id !== item.id && !isItemDisliked(w) && predicate(w));
+}
+
+function isPreparedNextDayOutfitValid(todayKey = getOutfitDayKey()) {
+  if (!wardrobe || wardrobe.length < 3) return false;
+  const tomorrowKey = addDays(todayKey, 1);
+  const tomorrowDate = parseISO(tomorrowKey);
+  if (typeof getActiveTripContext === 'function' && getActiveTripContext(false, tomorrowDate)) {
+    return true; // Trip Mode already governs tomorrow's packed plan
+  }
+
+  const nextMain = getNextDayMainLock();
+  if (!nextMain || nextMain.date !== tomorrowKey || nextMain.engineVersion < 3) return false;
+
+  const hasGemini = Boolean((localStorage.getItem('wtw_gemini_apikey') || '').trim());
+  if (hasGemini && !nextMain.aiVerified) return false;
+
+  const tomorrowWx = getTomorrowWeatherContext();
+  const tomorrowSeason = getLocationSeasonInfo(tomorrowDate, tomorrowWx);
+  const tomorrowFormality = getDayFormality(tomorrowDate);
+  if (nextMain.seasonId && nextMain.seasonId !== tomorrowSeason.id) return false;
+  if (nextMain.formality && nextMain.formality !== tomorrowFormality) return false;
+  if ((nextMain.layerOverride || 'auto') !== (layerOverride || 'auto')) return false;
+  if (localStorage.getItem('wtw_mood_user_locked') && nextMain.mood && nextMain.mood !== currentMood) return false;
+
+  const findById = (id) => id ? wardrobe.find(w => w.id === id) || null : null;
+  const top = findById(nextMain.topId);
+  const bottom = findById(nextMain.bottomId);
+  const shoe = findById(nextMain.shoeId);
+  const mid = findById(nextMain.midLayerId);
+  const outer = findById(nextMain.outerwearId);
+  if (!top || !bottom || !shoe) return false;
+  if ([top, bottom, shoe, mid, outer].some(it => it && isItemDisliked(it))) return false;
+
+  // Ensure Tomorrow's prepared outfit never repeats Today's active pieces whenever an alternative exists
+  const todayUsed = getTodayCorePieceIdSet(todayKey);
+  if (todayUsed.has(top.id) && hasDistinctAlternativeInWardrobe(top, w => w.category === 'tops' && isBaseTop(w))) return false;
+  if (todayUsed.has(bottom.id) && hasDistinctAlternativeInWardrobe(bottom, w => w.category === 'bottoms')) return false;
+  if (todayUsed.has(shoe.id) && hasDistinctAlternativeInWardrobe(shoe, w => isShoeCategoryItem(w))) return false;
+  if (mid && todayUsed.has(mid.id) && hasDistinctAlternativeInWardrobe(mid, w => isMidLayerCandidate(w))) return false;
+  if (outer && todayUsed.has(outer.id) && hasDistinctAlternativeInWardrobe(outer, w => isOuterShellCandidate(w))) return false;
+
+  return true;
+}
+
+function getHydratedPreparedTomorrowBundle(todayKey = getOutfitDayKey()) {
+  if (!wardrobe || wardrobe.length < 3) return null;
+  const tomorrowKey = addDays(todayKey, 1);
+  const tomorrowDate = parseISO(tomorrowKey);
+  const tomorrowWx = getTomorrowWeatherContext();
+  const tomorrowFormality = getDayFormality(tomorrowDate);
+  const extraWornEntries = collectTodayActiveWornEntries(todayKey);
+  const nextMain = getNextDayMainLock();
+  if (!nextMain || nextMain.date !== tomorrowKey || !isPreparedNextDayOutfitValid(todayKey)) {
+    return null;
+  }
+
+  let mainOutfit = null;
+  if (nextMain.picked) {
+    mainOutfit = hydrateAIDailyOutfitFromPicked(nextMain.picked, tomorrowWx.temp ?? 21, {
+      targetDate: tomorrowDate,
+      wxOverride: tomorrowWx,
+      targetFormality: tomorrowFormality,
+      targetLayerOverride: layerOverride,
+      referenceDateKey: tomorrowKey,
+      extraWornEntries
+    });
+  }
+  if (!mainOutfit) {
+    const findById = (id) => id ? wardrobe.find(w => w.id === id) || null : null;
+    const top = findById(nextMain.topId);
+    const bottom = findById(nextMain.bottomId);
+    const shoe = findById(nextMain.shoeId);
+    if (top && bottom && shoe) {
+      const midLayer = findById(nextMain.midLayerId);
+      const outerwear = findById(nextMain.outerwearId);
+      const accessory = findById(nextMain.accessoryId);
+      const allBelts = wardrobe.filter(a => isBeltItem(a) && !isItemDisliked(a));
+      const beltItem = isDrawstringOrAthleticBottom(bottom) ? null : findById(nextMain.beltId);
+      const baseBelt = proposeBeltForOutfit(shoe, bottom, top, outerwear || midLayer, allBelts);
+      const beltRec = beltItem ? { ...baseBelt, beltItem, status: 'matched' } : baseBelt;
+      const bp = buildPersonalStyleBlueprint();
+      mainOutfit = {
+        top,
+        midLayer,
+        outerwear,
+        proposedMidLayer: null,
+        bottom,
+        shoe,
+        beltRec,
+        accessory,
+        targetLayers: nextMain.targetLayers || (1 + (midLayer ? 1 : 0) + (outerwear ? 1 : 0)),
+        aiDailyMeta: nextMain.aiDailyMeta || null,
+        blueprint: bp
+      };
+    }
+  }
+
+  let exerciseOutfit = null;
+  const nextEx = getNextDayExerciseLock();
+  if (nextEx && nextEx.date === tomorrowKey) {
+    const exTop = wardrobe.find(w => w.id === nextEx.topId);
+    const exSecond = nextEx.secondLayerId ? wardrobe.find(w => w.id === nextEx.secondLayerId) : null;
+    const exBottom = wardrobe.find(w => w.id === nextEx.bottomId);
+    const exShoe = wardrobe.find(w => w.id === nextEx.shoeId);
+    if (exTop && exBottom && exShoe && ![exTop, exSecond, exBottom, exShoe].some(it => it && isItemDisliked(it))) {
+      exerciseOutfit = {
+        date: tomorrowKey,
+        top: exTop,
+        secondLayer: exSecond,
+        bottom: exBottom,
+        shoe: exShoe,
+        morningTemp: nextEx.morningTemp ?? 18,
+        aiVerified: !!nextEx.aiVerified
+      };
+    }
+  }
+
+  return mainOutfit ? { mainOutfit, exerciseOutfit, aiVerified: Boolean(nextMain.aiVerified) } : null;
+}
+
+function promotePreparedNextDayOutfitsIfReady(todayStr = getOutfitDayKey()) {
+  if (typeof archiveStaleDailyLocksIfNeeded === 'function') {
+    archiveStaleDailyLocksIfNeeded(todayStr);
+  }
+  let promotedAny = false;
+
+  const nextMain = getNextDayMainLock();
+  if (nextMain && nextMain.date) {
+    if (nextMain.date < todayStr) {
+      try { localStorage.removeItem('wtw_next_day_lock'); } catch {}
+    } else if (nextMain.date === todayStr && wardrobe && wardrobe.length >= 3) {
+      const existingMain = getDailyMainLock();
+      const canPromoteMain = !existingMain
+        || existingMain.date !== todayStr
+        || (existingMain.source === 'local' && !existingMain.precomputed && nextMain.aiVerified);
+
+      if (canPromoteMain) {
+        const findById = (id) => id ? wardrobe.find(w => w.id === id) || null : null;
+        const top = findById(nextMain.topId);
+        const bottom = findById(nextMain.bottomId);
+        const shoe = findById(nextMain.shoeId);
+        const midLayer = findById(nextMain.midLayerId);
+        const outerwear = findById(nextMain.outerwearId);
+        if (top && bottom && shoe && ![top, bottom, shoe, midLayer, outerwear].some(it => it && isItemDisliked(it))) {
+          const sInfo = getLocationSeasonInfo();
+          const targetF = typeof getDayFormality === 'function' ? getDayFormality() : 'casual';
+          const aiMeta = nextMain.aiDailyMeta
+            ? { ...nextMain.aiDailyMeta, precomputed: true, preparedOnDate: nextMain.preparedOnDate || null }
+            : null;
+          const promotedLock = {
+            engineVersion: 3,
+            date: todayStr,
+            updatedAt: Date.now(),
+            source: aiMeta ? 'ai' : 'local',
+            precomputed: true,
+            preparedOnDate: nextMain.preparedOnDate || null,
+            weatherReady: true,
+            seasonId: sInfo.id,
+            targetLayers: nextMain.targetLayers || (1 + (midLayer ? 1 : 0) + (outerwear ? 1 : 0)),
+            formality: targetF,
+            layerOverride,
+            mood: currentMood,
+            topId: top.id,
+            midLayerId: midLayer?.id || null,
+            outerwearId: outerwear?.id || null,
+            bottomId: bottom.id,
+            shoeId: shoe.id,
+            beltId: nextMain.beltId || null,
+            accessoryId: nextMain.accessoryId || null,
+            aiDailyMeta: aiMeta
+          };
+          try { localStorage.setItem('wtw_daily_main_lock', JSON.stringify(promotedLock)); } catch {}
+          if (nextMain.picked) {
+            try {
+              const cacheKey = getAIDailyOutfitCacheKey();
+              localStorage.setItem('wtw_ai_daily_outfit', JSON.stringify({
+                cacheKey,
+                picked: { ...nextMain.picked, precomputed: true, preparedOnDate: nextMain.preparedOnDate || null },
+                savedAt: Date.now()
+              }));
+            } catch {}
+          }
+          activeAIDailyOutfit = null;
+          try { localStorage.removeItem('wtw_next_day_lock'); } catch {}
+          promotedAny = true;
+        }
+      } else if (existingMain && existingMain.date === todayStr) {
+        try { localStorage.removeItem('wtw_next_day_lock'); } catch {}
+      }
+    }
+  }
+
+  const nextEx = getNextDayExerciseLock();
+  if (nextEx && nextEx.date) {
+    if (nextEx.date < todayStr) {
+      try { localStorage.removeItem('wtw_next_day_exercise_lock'); } catch {}
+    } else if (nextEx.date === todayStr && wardrobe && wardrobe.length >= 3) {
+      const existingEx = safeJSON('wtw_exercise_outfit_today', null);
+      const canPromoteEx = !existingEx
+        || existingEx.date !== todayStr
+        || (!existingEx.logged && !existingEx.aiVerified && nextEx.aiVerified);
+      if (canPromoteEx) {
+        const exTop = wardrobe.find(w => w.id === nextEx.topId);
+        const exSecond = nextEx.secondLayerId ? wardrobe.find(w => w.id === nextEx.secondLayerId) : null;
+        const exBottom = wardrobe.find(w => w.id === nextEx.bottomId);
+        const exShoe = wardrobe.find(w => w.id === nextEx.shoeId);
+        if (exTop && exBottom && exShoe && ![exTop, exSecond, exBottom, exShoe].some(it => it && isItemDisliked(it))) {
+          try {
+            localStorage.setItem('wtw_exercise_outfit_today', JSON.stringify({
+              engineVersion: 3,
+              date: todayStr,
+              updatedAt: Date.now(),
+              topId: exTop.id,
+              secondLayerId: exSecond?.id || null,
+              bottomId: exBottom.id,
+              shoeId: exShoe.id,
+              morningTemp: nextEx.morningTemp ?? 18,
+              aiVerified: !!nextEx.aiVerified,
+              precomputed: true,
+              logged: false
+            }));
+          } catch {}
+          activeExerciseOutfit = null;
+          try { localStorage.removeItem('wtw_next_day_exercise_lock'); } catch {}
+          promotedAny = true;
+        }
+      } else if (existingEx && existingEx.date === todayStr) {
+        try { localStorage.removeItem('wtw_next_day_exercise_lock'); } catch {}
+      }
+    }
+  }
+
+  if (promotedAny && !isApplyingRemoteCloudData && typeof syncDailyOutfitsToCloud === 'function') {
+    syncDailyOutfitsToCloud();
+  }
+  return promotedAny;
+}
+
+function buildNextDayAIStatusPillHtml() {
+  if (!wardrobe || wardrobe.length < 3) return '';
+  const todayKey = getOutfitDayKey();
+  const tomorrowKey = addDays(todayKey, 1);
+  const tomorrowDate = parseISO(tomorrowKey);
+  if (typeof getActiveTripContext === 'function' && getActiveTripContext(false, tomorrowDate)) return '';
+
+  const shortDay = tomorrowDate.toLocaleDateString('en-US', { weekday: 'short' });
+  const hasGemini = Boolean((localStorage.getItem('wtw_gemini_apikey') || '').trim());
+  if (!hasGemini) return '';
+
+  if (nextDayAIInFlight) {
+    const label = nextDayAIProgressStep || `Preparing ${shortDay} in background...`;
+    return `<button type="button" id="next-day-ai-status-pill" class="badge" onclick="toggleManualTomorrowPreview()" style="background:rgba(99,102,241,0.16); color:#a5b4fc; border:1px solid rgba(99,102,241,0.42); font-size:0.73rem; padding:4px 10px; cursor:pointer;" title="Today stays fixed while AI prepares and verifies tomorrow's outfit in the background">⏳ 🌙 ${escapeHtml(label)}</button>`;
+  }
+  if (isPreparedNextDayOutfitValid(todayKey)) {
+    return `<button type="button" id="next-day-ai-status-pill" class="badge" onclick="toggleManualTomorrowPreview()" style="background:rgba(16,185,129,0.14); color:#6ee7b7; border:1px solid rgba(16,185,129,0.38); font-size:0.73rem; padding:4px 10px; cursor:pointer;" title="Tomorrow's outfit is already AI-verified and will appear with zero delay! Tap to peek or hide.">✅ 🌙 ${escapeHtml(shortDay)} AI-Ready${showManualTomorrowPreview ? ' (Hide)' : ' (Peek)'}</button>`;
+  }
+  if (nextDayAILastError) {
+    return `<button type="button" id="next-day-ai-status-pill" class="badge" onclick="forceRebuildNextDayAIOutfit(true)" style="background:rgba(248,113,113,0.14); color:#fca5a5; border:1px solid rgba(248,113,113,0.38); font-size:0.73rem; padding:4px 10px; cursor:pointer;" title="${escapeHtml(nextDayAILastError)}">⚠️ ${escapeHtml(shortDay)} AI Prep · Retry</button>`;
+  }
+  return `<button type="button" id="next-day-ai-status-pill" class="badge" onclick="forceRebuildNextDayAIOutfit(true)" style="background:rgba(99,102,241,0.12); color:#c7d2fe; border:1px solid rgba(99,102,241,0.3); font-size:0.73rem; padding:4px 10px; cursor:pointer;" title="Queued to verify tomorrow's outfit in the background">🌙 Queued: ${escapeHtml(shortDay)} AI Prep</button>`;
+}
+
+async function verifyCandidateExerciseOutfitWithAI(exOutfit, { geminiKey, morningTemp }) {
+  if (!exOutfit || !exOutfit.top || !exOutfit.bottom || !exOutfit.shoe || !geminiKey) {
+    return { ok: true, badIds: [], reason: '' };
+  }
+  try {
+    const temp = typeof morningTemp === 'number' ? Math.round(morningTemp) : 18;
+    const summary = {
+      top: `${exOutfit.top.name} (${exOutfit.top.subType})`,
+      secondLayer: exOutfit.secondLayer ? `${exOutfit.secondLayer.name} (${exOutfit.secondLayer.subType})` : null,
+      bottom: `${exOutfit.bottom.name} (${exOutfit.bottom.subType})`,
+      shoe: `${exOutfit.shoe.name} (${exOutfit.shoe.subType})`
+    };
+    const prompt = [
+      `You are a strict fitness outfit sanity-check critic. Check if ANY piece in this Morning Exercise Outfit is absurd.`,
+      `Rules: NEVER allow mid-layers, knitwear, or pullovers (sweatshirts, hoodies, quarter-zip/half-zip pullovers, sweaters, cardigans, fleeces, jackets) as the Layer 1 "top" (Layer 1 must be a breathable tee, tank, jersey, or athletic base top; hoodies/windbreakers/sweatshirts only belong in "secondLayer" over a base top, and casual knit pullovers/sweaters do not belong in exercise at all); NEVER allow dress shirts, button-downs, oxfords, polos, or blouses for exercise; NEVER allow swimwear (swim jammers, swim trunks, boardshorts) for dry-land exercise; NEVER allow boots, loafers, dress shoes, or sandals for exercise; NEVER allow jeans, chinos, cargo/hiking shorts, or dress pants.`,
+      `Morning temp: ${temp}°C. Outfit: ${JSON.stringify(summary)}`,
+      `Return ONLY valid JSON: {"ok": boolean, "badSlots": array from ["top","secondLayer","bottom","shoe"], "reason": "short reason"}`
+    ].join('\n');
+    const data = await callGeminiGenerateContent(geminiKey, {
+      parts: [{ text: prompt }],
+      temperature: 0.1,
+      responseMimeType: 'application/json'
+    });
+    const verdict = parseGeminiJsonObject(data);
+    if (verdict && verdict.ok === false && Array.isArray(verdict.badSlots) && verdict.badSlots.length > 0) {
+      const badIds = verdict.badSlots.map(s => exOutfit[s]?.id).filter(Boolean);
+      return { ok: badIds.length === 0, badIds, reason: verdict.reason || 'unsuitable exercise gear' };
+    }
+  } catch (e) {
+    console.warn('Background tomorrow exercise sanity check skipped:', e);
+  }
+  return { ok: true, badIds: [], reason: '' };
+}
+
+async function verifyCandidateMainOutfitWithAI(outfit, { geminiKey, targetDate, temp, formality }) {
+  if (!outfit || !outfit.top || !outfit.bottom || !outfit.shoe || !geminiKey) {
+    return { ok: true, badIds: [], reason: '' };
+  }
+  try {
+    const d = targetDate instanceof Date ? targetDate : new Date();
+    const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+    const sInfo = getLocationSeasonInfo(d);
+    const bp = buildPersonalStyleBlueprint();
+    const describeForCritic = (it) => it
+      ? `${it.name} (${it.subType}, ${it.formality}, pattern=${it.pattern || 'solid'}${it.season ? `, ${it.season}` : ''}${it.aiDescription ? `, notes="${String(it.aiDescription).slice(0, 160)}"` : ''})`
+      : null;
+    const summary = {
+      top: describeForCritic(outfit.top),
+      midLayer: describeForCritic(outfit.midLayer),
+      outerwear: describeForCritic(outfit.outerwear),
+      bottom: describeForCritic(outfit.bottom),
+      shoe: describeForCritic(outfit.shoe)
+    };
+    const topPhotoSrc = outfit.top.image || outfit.top.imageUrl || null;
+    const shouldInspectTopPhoto = Boolean(
+      topPhotoSrc &&
+      (!outfit.top.aiPatternVerified || !outfit.top.aiDescription) &&
+      !aiSanityVerifiedTopIds.has(outfit.top.id)
+    );
+    const topImgPart = shouldInspectTopPhoto
+      ? await loadSafePhotoPart(outfit.top, 512, 6000)
+      : null;
+
+    const isWorkCtx = formalityScore(formality) >= 2;
+    const personaNote = [
+      bp.archRule?.name ? `Archetype="${bp.archRule.name}"` : '',
+      Array.isArray(bp.impressions) && bp.impressions.length ? `Impressions=${JSON.stringify(bp.impressions)}` : '',
+      bp.statement ? `Statement="${bp.statement}"` : ''
+    ].filter(Boolean).join(', ');
+
+    const prompt = [
+      `You are a strict fashion & personal-image sanity-check critic verifying tomorrow's outfit ahead of time.`,
+      `Context: ${dayName}, ${Math.round(temp)}°C, ${sInfo.name}, target formality="${formality}".${personaNote ? ` Desired Image: ${personaNote}.` : ''}`,
+      `Rules:`,
+      `- NEVER allow a sweater/hoodie/heavy knit in "top" (Layer 1) or in >24°C weather; NEVER allow winter boots in >25°C; NEVER allow sandals/slides Mon-Fri work; NEVER allow swimwear in daily outfits.`,
+      isWorkCtx
+        ? `- WORKDAY / SMART-CASUAL+ RULE: Tomorrow is a ${formality} workday (${dayName}). NEVER allow T-shirts or tops with large logos, visible branding, printed wording/text, slogans, or chest graphics, nor athletic jerseys. If the attached photo of the Layer 1 top shows ANY prominent branding, wording, text, or graphic print on the front/chest, flag "top" in badSlots!`
+        : `- If the user's desired image is Quiet Luxury, Executive, Minimalist, or Polished, flag any top with loud front branding/wording/graphics if it clashes with that image.`,
+      topImgPart ? `Attached image is the Layer 1 "top" (${outfit.top.name}). Inspect it visually for any branding, wording, text, logo, or front graphic!` : '',
+      `Outfit: ${JSON.stringify(summary)}`,
+      `Return ONLY valid JSON: {"ok": boolean, "badSlots": array of slot keys from ["top","midLayer","outerwear","bottom","shoe"], "reason": "short reason", "topDetectedPattern": ${topImgPart ? '"solid"|"stripes"|"check"|"dots"|"graphic"|"logo"|"colorblock"|"textured"' : 'null'}, "topVisualNote": ${topImgPart ? '"concise 1-sentence visual summary explicitly noting any front branding/wording/logo/graphic or plain unprinted fabric"' : 'null'}}`
+    ].filter(Boolean).join('\n');
+
+    const parts = topImgPart ? [topImgPart, { text: prompt }] : [{ text: prompt }];
+    const data = await callGeminiGenerateContent(geminiKey, {
+      parts,
+      temperature: 0.1,
+      responseMimeType: 'application/json'
+    });
+    const verdict = parseGeminiJsonObject(data);
+    if (!verdict) return { ok: true, badIds: [], reason: '' };
+
+    if (topImgPart) {
+      aiSanityVerifiedTopIds.add(outfit.top.id);
+      const validPats = ['solid', 'stripes', 'check', 'dots', 'graphic', 'logo', 'colorblock', 'textured'];
+      const detPat = String(verdict.topDetectedPattern || '').toLowerCase().trim();
+      let itemChanged = false;
+      if (validPats.includes(detPat) && outfit.top.pattern !== detPat) {
+        outfit.top.pattern = detPat;
+        itemChanged = true;
+      }
+      if (!outfit.top.aiDescription && typeof verdict.topVisualNote === 'string' && verdict.topVisualNote.trim()) {
+        outfit.top.aiDescription = verdict.topVisualNote.trim();
+        itemChanged = true;
+      }
+      if (!outfit.top.aiPatternVerified) {
+        outfit.top.aiPatternVerified = true;
+        itemChanged = true;
+      }
+      if (itemChanged) {
+        saveLocalDataOnly();
+        if (typeof syncWardrobeItemsToCloud === 'function') {
+          syncWardrobeItemsToCloud([outfit.top]).catch(() => {});
+        }
+      }
+    }
+
+    const badSlotsSet = new Set(Array.isArray(verdict.badSlots) ? verdict.badSlots : []);
+    if (isWorkCtx && isWorkDisallowedItem(outfit.top, formality)) {
+      badSlotsSet.add('top');
+    }
+    const badIds = Array.from(badSlotsSet).map(s => outfit[s]?.id).filter(Boolean);
+    if ((verdict.ok === false || badIds.length > 0) && badIds.length > 0) {
+      return { ok: false, badIds, reason: verdict.reason || 'critic flagged unsuitable piece' };
+    }
+  } catch (e) {
+    console.warn('Background tomorrow sanity check skipped:', e);
+  }
+  return { ok: true, badIds: [], reason: '' };
+}
+
+function scheduleBackgroundNextDayVerification({ force = false, avoidIds = [], delayMs = 1200 } = {}) {
+  if (!wardrobe || wardrobe.length < 3) return;
+  if (nextDayAIDebounceTimer) clearTimeout(nextDayAIDebounceTimer);
+  nextDayAIDebounceTimer = setTimeout(() => {
+    nextDayAIDebounceTimer = null;
+    runBackgroundNextDayVerification({ force, avoidIds });
+  }, Math.max(150, delayMs));
+}
+
+function forceRebuildNextDayAIOutfit(showToast = false) {
+  const geminiKey = (localStorage.getItem('wtw_gemini_apikey') || '').trim();
+  if (!geminiKey) {
+    if (showToast) {
+      toast('🔑 Add your Gemini API key in Settings first so tomorrow’s outfit can be AI-verified.');
+      switchTab('settings');
+    }
+    return;
+  }
+  const curNext = getNextDayMainLock();
+  const prevAvoid = curNext
+    ? [curNext.topId, curNext.midLayerId, curNext.outerwearId, curNext.bottomId, curNext.shoeId].filter(Boolean)
+    : [];
+  lastNextDayAttemptSig = null;
+  nextDayAILastError = '';
+  try { localStorage.removeItem('wtw_next_day_lock'); } catch {}
+  try { localStorage.removeItem('wtw_next_day_exercise_lock'); } catch {}
+  if (showToast) {
+    const tLabel = fmtDate(addDays(getOutfitDayKey(), 1));
+    toast(`🌙 Verifying a fresh outfit for ${tLabel} in the background...`);
+  }
+  runBackgroundNextDayVerification({ force: true, avoidIds: prevAvoid });
+}
+
+async function runBackgroundNextDayVerification({ force = false, avoidIds = [] } = {}) {
+  if (!wardrobe || wardrobe.length < 3) return;
+  if (!force && typeof weatherFetchInFlight !== 'undefined' && weatherFetchInFlight && getSettings().city) {
+    return; // fetchWeather() will call scheduleBackgroundNextDayVerification once tomorrow's forecast arrives
+  }
+  const todayKey = getOutfitDayKey();
+  const tomorrowKey = addDays(todayKey, 1);
+  const tomorrowDate = parseISO(tomorrowKey);
+  if (typeof getActiveTripContext === 'function' && getActiveTripContext(false, tomorrowDate)) {
+    return;
+  }
+
+  if (!force && isPreparedNextDayOutfitValid(todayKey)) {
+    const pill = document.getElementById('next-day-ai-status-pill');
+    if (pill) {
+      const outer = document.createElement('div');
+      outer.innerHTML = buildNextDayAIStatusPillHtml();
+      if (outer.firstElementChild) pill.replaceWith(outer.firstElementChild);
+    }
+    return;
+  }
+
+  const geminiKey = (localStorage.getItem('wtw_gemini_apikey') || '').trim();
+  const tomorrowWx = getTomorrowWeatherContext();
+  const tomorrowTemp = typeof tomorrowWx.temp === 'number' ? tomorrowWx.temp : 21;
+  const tomorrowCond = tomorrowWx.desc || tomorrowWx.description || tomorrowWx.main || 'clear';
+  const tomorrowFormality = getDayFormality(tomorrowDate);
+  const tomorrowSeason = getLocationSeasonInfo(tomorrowDate, tomorrowWx);
+  const tomorrowMood = typeof getEffectiveMoodForDate === 'function' ? getEffectiveMoodForDate(tomorrowDate) : currentMood;
+  const shortDay = tomorrowDate.toLocaleDateString('en-US', { weekday: 'short' });
+
+  const todayUsedArr = Array.from(getTodayCorePieceIdSet(todayKey)).sort();
+  const attemptSig = `${tomorrowKey}|${tomorrowSeason.id}|${tomorrowFormality}|${layerOverride}|${Math.round(tomorrowTemp / 3) * 3}|${tomorrowWx.main || 'clear'}|${Boolean(geminiKey)}|${todayUsedArr.join(',')}`;
+  if (!force && nextDayAIInFlight) return;
+  if (!force && lastNextDayAttemptSig === attemptSig && isPreparedNextDayOutfitValid(todayKey)) return;
+
+  const runToken = ++nextDayAIRunToken;
+  lastNextDayAttemptSig = attemptSig;
+  nextDayAIInFlight = true;
+  nextDayAILastError = '';
+
+  const refreshNextDayPillOnly = () => {
+    const pill = document.getElementById('next-day-ai-status-pill');
+    if (pill) {
+      const outer = document.createElement('div');
+      outer.innerHTML = buildNextDayAIStatusPillHtml();
+      if (outer.firstElementChild) pill.replaceWith(outer.firstElementChild);
+    }
+    if (typeof isEveningPreviewWindow === 'function' && (isEveningPreviewWindow() || showManualTomorrowPreview)) {
+      renderTomorrowPreview();
+    }
+  };
+
+  try {
+    const baseExtraEntries = collectTodayActiveWornEntries(todayKey);
+
+    // STEP A: Pre-compute & AI-verify Tomorrow's Morning Exercise Outfit first so Tomorrow's Main Outfit also avoids Tomorrow's workout gear
+    setNextDayAIProgressStatus(`${shortDay} Prep 1/4: Verifying workout gear...`);
+    let exAvoid = [];
+    let chosenTomorrowEx = withWeather(tomorrowWx, () => generateExerciseOutfit(exAvoid, {
+      previewOnly: true,
+      targetDate: tomorrowDate,
+      referenceDateKey: tomorrowKey,
+      extraWornEntries: baseExtraEntries
+    }));
+    if (runToken !== nextDayAIRunToken) return;
+
+    if (chosenTomorrowEx && geminiKey) {
+      const exCheck = await verifyCandidateExerciseOutfitWithAI(chosenTomorrowEx, {
+        geminiKey,
+        morningTemp: chosenTomorrowEx.morningTemp
+      });
+      if (runToken !== nextDayAIRunToken) return;
+      if (!exCheck.ok && exCheck.badIds.length > 0) {
+        exAvoid = [...exCheck.badIds];
+        const fixedEx = withWeather(tomorrowWx, () => generateExerciseOutfit(exAvoid, {
+          previewOnly: true,
+          targetDate: tomorrowDate,
+          referenceDateKey: tomorrowKey,
+          extraWornEntries: baseExtraEntries
+        }));
+        if (fixedEx) chosenTomorrowEx = fixedEx;
+      }
+    }
+
+    const extraEntriesForMain = [...baseExtraEntries];
+    if (chosenTomorrowEx && chosenTomorrowEx.top && chosenTomorrowEx.bottom) {
+      extraEntriesForMain.push({
+        date: tomorrowKey,
+        context: 'exercise',
+        source: 'auto-shown',
+        topId: chosenTomorrowEx.top.id,
+        secondLayerId: chosenTomorrowEx.secondLayer?.id || null,
+        bottomId: chosenTomorrowEx.bottom.id,
+        shoeId: chosenTomorrowEx.shoe?.id || null
+      });
+    }
+
+    // If no Gemini key is configured, store clean local pre-computed locks for Tomorrow and return without error
+    if (!geminiKey) {
+      const localTomorrow = withWeather(tomorrowWx, () => generateOutfit({
+        previewOnly: true,
+        targetDate: tomorrowDate,
+        referenceDateKey: tomorrowKey,
+        extraWornEntries: extraEntriesForMain,
+        avoidIds
+      }));
+      if (localTomorrow && localTomorrow.top && localTomorrow.bottom && localTomorrow.shoe) {
+        try {
+          localStorage.setItem('wtw_next_day_lock', JSON.stringify({
+            engineVersion: 3,
+            date: tomorrowKey,
+            preparedOnDate: todayKey,
+            updatedAt: Date.now(),
+            source: 'local',
+            aiVerified: false,
+            weatherReady: Boolean(weather),
+            seasonId: tomorrowSeason.id,
+            targetLayers: localTomorrow.targetLayers || 2,
+            formality: tomorrowFormality,
+            layerOverride,
+            mood: tomorrowMood,
+            topId: localTomorrow.top.id,
+            midLayerId: localTomorrow.midLayer?.id || null,
+            outerwearId: localTomorrow.outerwear?.id || null,
+            bottomId: localTomorrow.bottom.id,
+            shoeId: localTomorrow.shoe.id,
+            beltId: localTomorrow.beltRec?.beltItem?.id || null,
+            accessoryId: localTomorrow.accessory?.id || null,
+            picked: null,
+            aiDailyMeta: null
+          }));
+        } catch {}
+      }
+      if (chosenTomorrowEx && chosenTomorrowEx.top && chosenTomorrowEx.bottom && chosenTomorrowEx.shoe) {
+        try {
+          localStorage.setItem('wtw_next_day_exercise_lock', JSON.stringify({
+            engineVersion: 3,
+            date: tomorrowKey,
+            preparedOnDate: todayKey,
+            updatedAt: Date.now(),
+            topId: chosenTomorrowEx.top.id,
+            secondLayerId: chosenTomorrowEx.secondLayer?.id || null,
+            bottomId: chosenTomorrowEx.bottom.id,
+            shoeId: chosenTomorrowEx.shoe.id,
+            morningTemp: chosenTomorrowEx.morningTemp ?? 18,
+            aiVerified: false
+          }));
+        } catch {}
+      }
+      nextDayAIInFlight = false;
+      nextDayAIProgressStep = '';
+      refreshNextDayPillOnly();
+      return;
+    }
+
+    // STEP B: Run Full 3-Step Visual AI Stylist + Step C: AI Sanity & Front-Branding Verification for Tomorrow
+    const bp = buildPersonalStyleBlueprint();
+    const personalCtx = typeof buildMasterPersonalContextForAI === 'function'
+      ? buildMasterPersonalContextForAI()
+      : `User Personal Image: Palette="${bp.palette.name}", Contrast="${bp.contrastLabel}", Face="${bp.faceRule?.label || ''}", Body="${bp.bodyRule?.label || ''}", Archetype="${bp.archRule?.name || ''}".`;
+
+    const runningAvoid = new Set(Array.isArray(avoidIds) ? avoidIds : []);
+    let finalPicked = null;
+    let finalOutfit = null;
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const avoidArr = Array.from(runningAvoid);
+      const pools = withWeather(tomorrowWx, () => buildDailyOutfitCandidatePools({
+        previewOnly: true,
+        targetDate: tomorrowDate,
+        referenceDateKey: tomorrowKey,
+        targetFormality: tomorrowFormality,
+        extraWornEntries: extraEntriesForMain,
+        avoidIds: avoidArr
+      }));
+      if (!pools.baseTops.length || !pools.bottoms.length || (!pools.shoes.length && !pools.allShoesAllowed.length)) {
+        break;
+      }
+
+      const cd = pools.cooldownInfo;
+      const allHistory = [...(getWearLog() || []), ...extraEntriesForMain];
+      const recentEntries7d = allHistory.filter(e => {
+        if (!e || !e.date) return false;
+        const d = calendarDaysBetween(e.date, tomorrowKey);
+        return d != null && d >= 1 && d < ROTATION_COOLDOWN_DAYS;
+      });
+      const wearContext = {
+        yesterdayIds: cd ? Array.from(cd.yesterdayIds) : [],
+        recent7DayIds: cd ? Array.from(cd.cooldownIds) : [],
+        recentTopIds: [...new Set(recentEntries7d.map(e => e?.topId).filter(Boolean))],
+        recentBottomIds: [...new Set(recentEntries7d.map(e => e?.bottomId).filter(Boolean))],
+        recentShoeIds: [...new Set(recentEntries7d.map(e => e?.shoeId).filter(Boolean))],
+        recentLayerIds: [...new Set(recentEntries7d.flatMap(e => [e?.midLayerId, e?.outerId]).filter(Boolean))],
+        recentBeltIds: [...new Set(recentEntries7d.map(e => e?.beltId).filter(Boolean))]
+      };
+
+      setNextDayAIProgressStatus(`${shortDay} Prep 2/4: AI picking rested Top...`);
+      const stage1 = await runAIStage1Top({
+        geminiKey,
+        pools,
+        personalCtx,
+        currentTemp: tomorrowTemp,
+        cond: tomorrowCond,
+        wearContext,
+        avoidIds: avoidArr,
+        targetMood: tomorrowMood
+      });
+      if (runToken !== nextDayAIRunToken) return;
+
+      setNextDayAIProgressStatus(`${shortDay} Prep 3/4: AI matching Pants...`);
+      const stage2 = await runAIStage2Bottom({
+        geminiKey,
+        pools,
+        personalCtx,
+        currentTemp: tomorrowTemp,
+        cond: tomorrowCond,
+        wearContext,
+        lockedTopStack: stage1,
+        avoidIds: avoidArr,
+        targetMood: tomorrowMood
+      });
+      if (runToken !== nextDayAIRunToken) return;
+
+      setNextDayAIProgressStatus(`${shortDay} Prep 4/4: AI comparing Shoes & Belt...`);
+      const stage3 = await runAIStage3ShoesAndBelt({
+        geminiKey,
+        pools,
+        personalCtx,
+        currentTemp: tomorrowTemp,
+        cond: tomorrowCond,
+        wearContext,
+        lockedTopStack: stage1,
+        lockedBottom: stage2.bottom,
+        avoidIds: avoidArr,
+        targetMood: tomorrowMood
+      });
+      if (runToken !== nextDayAIRunToken) return;
+
+      const candidatePicked = {
+        topId: stage1.top.id,
+        midLayerId: stage1.midLayer?.id || null,
+        outerwearId: stage1.outerwear?.id || null,
+        bottomId: stage2.bottom.id,
+        shoeId: stage3.shoe.id,
+        beltId: stage3.belt?.id || null,
+        accessoryId: stage3.accessory?.id || null,
+        topReason: stage1.topReason,
+        bottomReason: stage2.bottomReason,
+        shoeReason: stage3.shoeReason,
+        beltReason: stage3.beltReason,
+        shoeRanking: stage3.shoeRanking,
+        image_alignment_score: stage3.alignmentScore,
+        image_alignment_note: stage3.alignmentNote,
+        decision_reason: stage3.decisionReason,
+        modelUsed: stage3.usedModel || stage2.usedModel || stage1.usedModel || '',
+        usedPhotos: !!stage3.usedPhotos,
+        usedComparisonBoard: !!stage3.usedComparisonBoard,
+        usedThinking: Boolean(stage3.usedThinking || stage2.usedThinking || stage1.usedThinking),
+        photosUsedCount: stage3.photosUsedCount || 0,
+        mode: '3-step'
+      };
+
+      const candidateOutfit = hydrateAIDailyOutfitFromPicked(candidatePicked, tomorrowTemp, {
+        targetDate: tomorrowDate,
+        wxOverride: tomorrowWx,
+        targetFormality: tomorrowFormality,
+        targetLayerOverride: layerOverride,
+        referenceDateKey: tomorrowKey,
+        extraWornEntries: extraEntriesForMain,
+        cooldownInfo: cd
+      });
+      if (!candidateOutfit) {
+        runningAvoid.add(stage1.top.id);
+        continue;
+      }
+
+      setNextDayAIProgressStatus(`${shortDay} Prep: Final AI Sanity & Visual Check...`);
+      const sanityRes = await verifyCandidateMainOutfitWithAI(candidateOutfit, {
+        geminiKey,
+        targetDate: tomorrowDate,
+        temp: tomorrowTemp,
+        formality: tomorrowFormality
+      });
+      if (runToken !== nextDayAIRunToken) return;
+
+      if (!sanityRes.ok && sanityRes.badIds.length > 0 && attempt === 0) {
+        sanityRes.badIds.forEach(id => runningAvoid.add(id));
+        continue;
+      }
+
+      finalPicked = candidatePicked;
+      finalOutfit = candidateOutfit;
+      break;
+    }
+
+    if (runToken !== nextDayAIRunToken) return;
+    if (!finalOutfit || !finalPicked) {
+      nextDayAILastError = 'AI could not finalize tomorrow’s outfit';
+      lastNextDayAttemptSig = null;
+      return;
+    }
+
+    // Save Tomorrow's verified exercise lock
+    if (chosenTomorrowEx && chosenTomorrowEx.top && chosenTomorrowEx.bottom && chosenTomorrowEx.shoe) {
+      try {
+        localStorage.setItem('wtw_next_day_exercise_lock', JSON.stringify({
+          engineVersion: 3,
+          date: tomorrowKey,
+          preparedOnDate: todayKey,
+          updatedAt: Date.now(),
+          topId: chosenTomorrowEx.top.id,
+          secondLayerId: chosenTomorrowEx.secondLayer?.id || null,
+          bottomId: chosenTomorrowEx.bottom.id,
+          shoeId: chosenTomorrowEx.shoe.id,
+          morningTemp: chosenTomorrowEx.morningTemp ?? 18,
+          aiVerified: true
+        }));
+      } catch {}
+    }
+
+    // Save Tomorrow's verified main lock
+    const nextMainLock = {
+      engineVersion: 3,
+      date: tomorrowKey,
+      preparedOnDate: todayKey,
+      updatedAt: Date.now(),
+      source: 'ai',
+      aiVerified: true,
+      weatherReady: Boolean(weather),
+      seasonId: tomorrowSeason.id,
+      targetLayers: finalOutfit.targetLayers || 2,
+      formality: tomorrowFormality,
+      layerOverride,
+      mood: tomorrowMood,
+      topId: finalOutfit.top.id,
+      midLayerId: finalOutfit.midLayer?.id || null,
+      outerwearId: finalOutfit.outerwear?.id || null,
+      bottomId: finalOutfit.bottom.id,
+      shoeId: finalOutfit.shoe.id,
+      beltId: finalOutfit.beltRec?.beltItem?.id || null,
+      accessoryId: finalOutfit.accessory?.id || null,
+      picked: finalPicked,
+      aiDailyMeta: {
+        ...finalOutfit.aiDailyMeta,
+        precomputed: true,
+        preparedOnDate: todayKey
+      }
+    };
+    try {
+      localStorage.setItem('wtw_next_day_lock', JSON.stringify(nextMainLock));
+    } catch {}
+
+    // If the user changed Today's outfit while this background job was running and caused a consecutive-day overlap, queue one clean refresh
+    if (!isPreparedNextDayOutfitValid(todayKey)) {
+      nextDayAIInFlight = false;
+      nextDayAIProgressStep = '';
+      lastNextDayAttemptSig = null;
+      scheduleBackgroundNextDayVerification({ delayMs: 900 });
+      return;
+    }
+
+    if (!isApplyingRemoteCloudData && typeof syncDailyOutfitsToCloud === 'function') {
+      syncDailyOutfitsToCloud();
+    }
+  } catch (err) {
+    console.warn('Background Next-Day AI verification error:', err);
+    nextDayAILastError = String(err?.message || 'Tomorrow AI verification failed').slice(0, 140);
+    if (lastNextDayAttemptSig === attemptSig) lastNextDayAttemptSig = null;
+  } finally {
+    if (runToken === nextDayAIRunToken) {
+      nextDayAIInFlight = false;
+      nextDayAIProgressStep = '';
+      refreshNextDayPillOnly();
+    }
+  }
 }
 
 /* ===== Special Occasion AI Outfit Reassignment ===== */
@@ -25200,6 +26231,9 @@ function checkDailyRollover() {
     if (typeof activeExerciseOutfit !== 'undefined') activeExerciseOutfit = null;
     try {
       applyPlanetaryPreselectedMood();
+      if (typeof promotePreparedNextDayOutfitsIfReady === 'function') {
+        promotePreparedNextDayOutfitsIfReady(currentDayKey);
+      }
       renderAstralSection();
       renderMoodSection();
       renderDayContext();
@@ -25341,6 +26375,7 @@ function init() {
   safeStep('updateFormalityDropdown', updateFormalityDropdown);
   safeStep('renderPersonaUI', renderPersonaUI);
   safeStep('applyPlanetaryPreselectedMood', applyPlanetaryPreselectedMood);
+  safeStep('promotePreparedNextDayOutfits', promotePreparedNextDayOutfitsIfReady);
   safeStep('updateSubTypes', updateSubTypes);
   safeStep('setupDragAndDrop', setupDragAndDrop);
   safeStep('updateHeaderSeasonPill', updateHeaderSeasonPill);
@@ -25406,6 +26441,10 @@ function buildAntigravityContextSnapshot() {
       bottom: describeItem(ex.bottom),
       shoe: describeItem(ex.shoe)
     } : null,
+    nextDayPrepared: (() => {
+      const nm = typeof getNextDayMainLock === 'function' ? getNextDayMainLock() : null;
+      return nm ? { date: nm.date, aiVerified: !!nm.aiVerified, preparedOnDate: nm.preparedOnDate || null } : null;
+    })(),
     recentErrors: wtwRuntimeErrors.slice()
   };
 }
@@ -25466,6 +26505,36 @@ async function pullFeedbackLogFromCloud() {
           activeExerciseOutfit = null;
         }
       }
+    }
+    const tomorrowStr = addDays(todayStr, 1);
+    if (data.nextDayMainLock && data.nextDayMainLock.date) {
+      if (data.nextDayMainLock.date === todayStr) {
+        const localNext = safeJSON('wtw_next_day_lock', null);
+        if (!localNext || localNext.date !== todayStr || Number(data.nextDayMainLock.updatedAt || 0) >= Number(localNext.updatedAt || 0)) {
+          try { localStorage.setItem('wtw_next_day_lock', JSON.stringify(data.nextDayMainLock)); } catch {}
+        }
+      } else if (data.nextDayMainLock.date === tomorrowStr) {
+        const localNext = safeJSON('wtw_next_day_lock', null);
+        if (!localNext || localNext.date !== tomorrowStr || Number(data.nextDayMainLock.updatedAt || 0) > Number(localNext.updatedAt || 0)) {
+          try { localStorage.setItem('wtw_next_day_lock', JSON.stringify(data.nextDayMainLock)); } catch {}
+        }
+      }
+    }
+    if (data.nextDayExerciseLock && data.nextDayExerciseLock.date) {
+      if (data.nextDayExerciseLock.date === todayStr) {
+        const localNextEx = safeJSON('wtw_next_day_exercise_lock', null);
+        if (!localNextEx || localNextEx.date !== todayStr || Number(data.nextDayExerciseLock.updatedAt || 0) >= Number(localNextEx.updatedAt || 0)) {
+          try { localStorage.setItem('wtw_next_day_exercise_lock', JSON.stringify(data.nextDayExerciseLock)); } catch {}
+        }
+      } else if (data.nextDayExerciseLock.date === tomorrowStr) {
+        const localNextEx = safeJSON('wtw_next_day_exercise_lock', null);
+        if (!localNextEx || localNextEx.date !== tomorrowStr || Number(data.nextDayExerciseLock.updatedAt || 0) > Number(localNextEx.updatedAt || 0)) {
+          try { localStorage.setItem('wtw_next_day_exercise_lock', JSON.stringify(data.nextDayExerciseLock)); } catch {}
+        }
+      }
+    }
+    if (typeof promotePreparedNextDayOutfitsIfReady === 'function') {
+      promotePreparedNextDayOutfitsIfReady(todayStr);
     }
 
     if (Array.isArray(data.feedbackLog)) {
